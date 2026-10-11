@@ -326,12 +326,13 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { API_BASE_URL } from '../../api/firebaseApi.js';
 
 const props = defineProps({
   adminId: { type: String, default: 'admin-root' }
 });
 
-const API_BASE = 'http://localhost:3001/api/v1/admin';
+const API_BASE = `${API_BASE_URL}/admin`;
 const REQUEST_TIMEOUT_MS = 20000;
 const PAGE_LIMIT = 25;
 

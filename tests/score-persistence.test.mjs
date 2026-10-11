@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { API_BASE_URL } from '../src/api/firebaseApi.js';
 import { recordMissionSession, getLatestMissionResult, restoreSavedMissionResults } from '../src/helpers/progressStore.js';
 
 const source = readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 function actualFunction(name, nextMarker, dependencies) {
+  dependencies = { API_BASE_URL, ...dependencies };
   const start = source.indexOf(`async function ${name}(`);
   const end = source.indexOf(nextMarker, start);
   assert.ok(start >= 0 && end > start);

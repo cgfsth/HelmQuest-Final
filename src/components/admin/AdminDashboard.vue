@@ -83,6 +83,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { API_BASE_URL } from '../../api/firebaseApi.js';
 import SystemOverview from './SystemOverview.vue';
 import InstructorManagement from './InstructorManagement.vue';
 import GlobalStudentView from './GlobalStudentView.vue';
@@ -139,7 +140,7 @@ async function loadStats() {
   const timeout = window.setTimeout(() => controller.abort(), 20_000);
 
   try {
-    const response = await fetch('http://localhost:3001/api/v1/admin/stats', {
+    const response = await fetch(`${API_BASE_URL}/admin/stats`, {
       headers: { 'x-user-id': adminId.value },
       signal: controller.signal
     });

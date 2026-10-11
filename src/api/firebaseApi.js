@@ -18,11 +18,12 @@
  * - Console logging for debugging API issues
  * 
  * Base URL Configuration:
- * - Development: http://localhost:3000/api/v1
- * - Production: Should be updated for production deployment
+ * - Development: http://localhost:3001/api/v1
+ * - Production: VITE_API_BASE_URL set on the frontend host
  */
 
-const API_BASE_URL = 'http://localhost:3001/api/v1';
+export const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL || 'http://localhost:3001/api/v1')
+  .trim().replace(/\/+$/, '');
 let sessionToken = null;
 
 export function clearSession() {

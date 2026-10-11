@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { API_BASE_URL } from '../src/api/firebaseApi.js';
 import * as THREE from 'three';
 import { crossTrackDistance } from '../src/helpers/navigationMetrics.js';
 import { IntegratedPerformanceManager } from '../src/helpers/performanceManager.js';
@@ -13,6 +14,7 @@ import { evaluateTrainingStep } from '../src/helpers/trainingValidation.js';
 const source = readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const ref = value => ({ value });
 function appFunction(name, context) {
+  context.API_BASE_URL = API_BASE_URL;
   let start = source.indexOf(`function ${name}(`);
   assert.ok(start >= 0);
   if (source.slice(start - 6, start) === 'async ') start -= 6;

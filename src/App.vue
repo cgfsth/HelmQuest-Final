@@ -3652,6 +3652,7 @@ import { addBigBoatLights, disposeBigBoatLights, updateBigBoatLightPools, syncBi
 import { loadHarborDocks, disposeHarborDockGroup, resolveDockCollision, getActiveDockColliders, getActiveHarborDockBerth } from './helpers/harborDocks.js';
 import { setHarborPoleLightsVisible } from './helpers/harborPoleLights.js';
 import * as firebaseApi from './api/firebaseApi.js';
+import { API_BASE_URL } from './api/firebaseApi.js';
 import { canViewMission, canManageMission, missionOwner } from '../shared/missionAccess.js';
 
 // Expose firebaseApi to window for global access
@@ -4600,7 +4601,7 @@ async function loadStudentTrainingSummaries() {
   // Fetch summaries in parallel
   const promises = students.map(async (student) => {
     try {
-      const response = await fetch(`http://localhost:3001/api/v1/students/${student.id}/training-summary`);
+      const response = await fetch(`${API_BASE_URL}/students/${student.id}/training-summary`);
       if (response.ok) {
         const summary = await response.json();
         summariesMap.set(student.id, summary);
@@ -5349,7 +5350,7 @@ const instructorRecentActivities = ref([]); // Recent activities for instructor'
 async function saveMissionScoreToFirestore({ studentId, missionId, missionTitle, score, passed, completedAt }) {
   const reportingRun = trainingRunMetrics.value;
   try {
-    const response = await fetch('http://localhost:3001/api/v1/mission-scores', {
+    const response = await fetch(`${API_BASE_URL}/mission-scores`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -5399,7 +5400,7 @@ async function refreshCurrentUser() {
   try {
     if (!currentUser.value?.id) return;
     
-    const response = await fetch(`http://localhost:3001/api/v1/students/${currentUser.value.id}`);
+    const response = await fetch(`${API_BASE_URL}/students/${currentUser.value.id}`);
     if (!response.ok) {
       console.error('Failed to refresh user data');
       return;
@@ -5431,7 +5432,7 @@ async function fetchLeaderboardData() {
     
     // Fetch students in my class (same instructor)
     if (currentStudentInstructorId) {
-      const myClassResponse = await fetch(`http://localhost:3001/api/v1/students?instructorId=${currentStudentInstructorId}`);
+      const myClassResponse = await fetch(`${API_BASE_URL}/students?instructorId=${currentStudentInstructorId}`);
       const myClassData = await myClassResponse.json();
       myClassStudents.value = myClassData.students || [];
       
@@ -5439,7 +5440,7 @@ async function fetchLeaderboardData() {
       for (const student of myClassStudents.value) {
         student.rankXp = studentTotalXp(student);
         try {
-          const xpResponse = await fetch(`http://localhost:3001/api/v1/mission-scores/student/${student.id}/total-xp`);
+          const xpResponse = await fetch(`${API_BASE_URL}/mission-scores/student/${student.id}/total-xp`);
           if (xpResponse.ok) {
             const xpData = await xpResponse.json();
             student.xp = xpData.totalXp || 0;
@@ -5454,7 +5455,7 @@ async function fetchLeaderboardData() {
     }
     
     // Fetch all students (global)
-    const globalResponse = await fetch('http://localhost:3001/api/v1/students');
+    const globalResponse = await fetch(`${API_BASE_URL}/students`);
     const globalData = await globalResponse.json();
     allStudentsGlobal.value = globalData.students || [];
     if (globalData.rankSettings) {
@@ -5465,7 +5466,7 @@ async function fetchLeaderboardData() {
     for (const student of allStudentsGlobal.value) {
       student.rankXp = studentTotalXp(student);
       try {
-        const xpResponse = await fetch(`http://localhost:3001/api/v1/mission-scores/student/${student.id}/total-xp`);
+        const xpResponse = await fetch(`${API_BASE_URL}/mission-scores/student/${student.id}/total-xp`);
         if (xpResponse.ok) {
           const xpData = await xpResponse.json();
           student.xp = xpData.totalXp || 0;
@@ -5477,7 +5478,7 @@ async function fetchLeaderboardData() {
     }
     
     // Fetch instructors to get their names
-    const instructorsResponse = await fetch('http://localhost:3001/api/v1/instructors');
+    const instructorsResponse = await fetch(`${API_BASE_URL}/instructors`);
     const instructorsData = await instructorsResponse.json();
     const instructorsList = instructorsData.instructors || [];
     
@@ -5506,7 +5507,7 @@ async function fetchInstructorRecentActivities() {
     
     console.log(`📊 Fetching recent activities for instructor: ${currentInstructorId}`);
     
-    const response = await fetch(`http://localhost:3001/api/v1/mission-scores/instructor/${currentInstructorId}/recent?limit=10`);
+    const response = await fetch(`${API_BASE_URL}/mission-scores/instructor/${currentInstructorId}/recent?limit=10`);
     
     if (!response.ok) {
       throw new Error(`Failed to fetch instructor activities: ${response.statusText}`);
@@ -5567,7 +5568,7 @@ function calculateStudentQuizAverage(studentId) {
 async function calculateAndUpdateMissionScores(studentId) {
   try {
     // Fetch mission scores from Firestore instead of localStorage
-    const response = await fetch(`http://localhost:3001/api/v1/mission-scores/student/${studentId}/average`);
+    const response = await fetch(`${API_BASE_URL}/mission-scores/student/${studentId}/average`);
     
     if (!response.ok) {
       throw new Error(`Failed to fetch mission scores: ${response.statusText}`);
@@ -5584,7 +5585,7 @@ async function calculateAndUpdateMissionScores(studentId) {
     });
     
     // Update Firestore student document with computed averages
-    const updateResponse = await fetch(`http://localhost:3001/api/v1/students/${studentId}/scores`, {
+    const updateResponse = await fetch(`${API_BASE_URL}/students/${studentId}/scores`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -7751,7 +7752,7 @@ async function startMissionSimulation(mission) {
   // Local storage alone must not decide whether a completed mission can save again.
   if (userRole.value === 'student' && currentUser.value?.id) {
     try {
-      const response = await fetch(`http://localhost:3001/api/v1/mission-scores/${currentUser.value.id}`);
+      const response = await fetch(`${API_BASE_URL}/mission-scores/${currentUser.value.id}`);
       if (!response.ok) throw new Error('Could not verify saved mission results');
       const { scores } = await response.json();
       if (!Array.isArray(scores)) throw new Error('Invalid saved mission results');
@@ -9112,7 +9113,7 @@ async function submitQuizSession() {
     
     console.log('📤 Sending quiz score to Firestore:', quizScoreData);
     
-    const response = await fetch('http://localhost:3001/api/v1/quiz-scores', {
+    const response = await fetch(`${API_BASE_URL}/quiz-scores`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -9945,7 +9946,7 @@ async function syncStudentMotivation() {
   // Fetch XP from Firestore API
   let xpData = { totalXp: 0, missionsCompleted: 0 };
   try {
-    const response = await fetch(`http://localhost:3001/api/v1/mission-scores/student/${studentId}/total-xp`);
+    const response = await fetch(`${API_BASE_URL}/mission-scores/student/${studentId}/total-xp`);
     if (response.ok) {
       xpData = await response.json();
     }
