@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HelmQuest DBMS Architecture</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: #fff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      color: #1e293b;
+    }
+
+    h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 2rem;
+      color: #475569;
+      letter-spacing: 0.02em;
+    }
+
+    .diagram {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      width: 100%;
+      max-width: 920px;
+    }
+
+    .node {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      color: #fff;
+      text-align: center;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .node .icon {
+      width: 42%;
+      height: auto;
+      margin-bottom: 6%;
+    }
+
+    .node .label {
+      font-size: clamp(0.75rem, 1.4vw, 1rem);
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    /* Database — purple */
+    .database {
+      width: 130px;
+      height: 130px;
+      background: #7b5ea7;
+    }
+
+    /* DBMS — large dark blue */
+    .dbms {
+      width: 200px;
+      height: 200px;
+      background: #1a2744;
+      font-size: clamp(1.6rem, 3vw, 2.25rem);
+      font-weight: 800;
+      letter-spacing: 0.06em;
+    }
+
+    /* Clients — light blue */
+    .client {
+      width: 110px;
+      height: 110px;
+      background: #4ebfe8;
+    }
+
+    .clients {
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      align-items: center;
+    }
+
+    /* Connectors */
+    .connector {
+      display: flex;
+      align-items: center;
+      position: relative;
+    }
+
+    .connector-db {
+      width: 72px;
+    }
+
+    .connector-api {
+      flex-direction: column;
+      width: 88px;
+      height: 110px;
+      justify-content: center;
+    }
+
+    .connector-api .line-h {
+      width: 100%;
+      height: 2px;
+      background: #111;
+    }
+
+    .connector-api .api-label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #111;
+      padding: 4px 0;
+      letter-spacing: 0.04em;
+    }
+
+    .arrow-line {
+      height: 2px;
+      background: #111;
+      flex: 1;
+      position: relative;
+    }
+
+    .arrow-line::after {
+      content: "";
+      position: absolute;
+      right: -1px;
+      top: 50%;
+      transform: translateY(-50%);
+      border: 6px solid transparent;
+      border-left: 9px solid #111;
+    }
+
+    .api-group {
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      align-items: stretch;
+    }
+
+    .api-row {
+      display: flex;
+      align-items: center;
+      width: 100px;
+    }
+
+    .api-row .line {
+      flex: 1;
+      height: 2px;
+      background: #111;
+    }
+
+    .api-row .tag {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #111;
+      padding: 0 6px;
+      white-space: nowrap;
+    }
+
+    .caption {
+      margin-top: 2.5rem;
+      max-width: 640px;
+      text-align: center;
+      font-size: 0.9rem;
+      color: #64748b;
+      line-height: 1.6;
+    }
+
+    .caption strong { color: #334155; }
+  </style>
+</head>
+<body>
+  <h1>HelmQuest — Database Management System</h1>
+
+  <div class="diagram" role="img" aria-label="Database flows into DBMS, which connects via API to App, User, and App">
+    <!-- Database -->
+    <div class="node database">
+      <svg class="icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="8" y="10" width="48" height="12" rx="2" stroke="#fff" stroke-width="2.5" fill="none"/>
+        <rect x="8" y="26" width="48" height="12" rx="2" stroke="#fff" stroke-width="2.5" fill="none"/>
+        <rect x="8" y="42" width="48" height="12" rx="2" stroke="#fff" stroke-width="2.5" fill="none"/>
+        <circle cx="52" cy="16" r="2" fill="#fff"/>
+        <circle cx="52" cy="32" r="2" fill="#fff"/>
+        <circle cx="52" cy="48" r="2" fill="#fff"/>
+      </svg>
+      <span class="label">Database</span>
+    </div>
+
+    <!-- Arrow Database → DBMS -->
+    <div class="connector connector-db">
+      <div class="arrow-line"></div>
+    </div>
+
+    <!-- DBMS -->
+    <div class="node dbms">DBMS</div>
+
+    <!-- API connectors → clients -->
+    <div class="api-group">
+      <div class="api-row">
+        <div class="line"></div>
+        <span class="tag">API</span>
+      </div>
+      <div class="api-row">
+        <div class="line"></div>
+        <span class="tag">API</span>
+      </div>
+      <div class="api-row">
+        <div class="line"></div>
+        <span class="tag">API</span>
+      </div>
+    </div>
+
+    <!-- Clients -->
+    <div class="clients">
+      <div class="node client">
+        <svg class="icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect x="6" y="14" width="36" height="28" rx="3" stroke="#fff" stroke-width="2.5" fill="none"/>
+          <rect x="22" y="22" width="36" height="28" rx="3" stroke="#fff" stroke-width="2.5" fill="none"/>
+          <line x1="14" y1="38" x2="34" y2="38" stroke="#fff" stroke-width="2"/>
+          <line x1="30" y1="46" x2="50" y2="46" stroke="#fff" stroke-width="2"/>
+        </svg>
+        <span class="label">App</span>
+      </div>
+      <div class="node client">
+        <svg class="icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <circle cx="32" cy="22" r="10" stroke="#fff" stroke-width="2.5" fill="none"/>
+          <path d="M14 52c0-10 8-16 18-16s18 6 18 16" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        </svg>
+        <span class="label">User</span>
+      </div>
+      <div class="node client">
+        <svg class="icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect x="6" y="14" width="36" height="28" rx="3" stroke="#fff" stroke-width="2.5" fill="none"/>
+          <rect x="22" y="22" width="36" height="28" rx="3" stroke="#fff" stroke-width="2.5" fill="none"/>
+          <line x1="14" y1="38" x2="34" y2="38" stroke="#fff" stroke-width="2"/>
+          <line x1="30" y1="46" x2="50" y2="46" stroke="#fff" stroke-width="2"/>
+        </svg>
+        <span class="label">App</span>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption">
+    <strong>Database</strong> stores HelmQuest tables (users, missions, attempts).
+    <strong>DBMS</strong> manages queries, security, and integrity.
+    <strong>App</strong> nodes are the student training client and instructor review dashboard;
+    <strong>User</strong> interacts through both via the <strong>API</strong>.
+  </p>
+</body>
+</html>

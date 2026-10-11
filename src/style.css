@@ -1,0 +1,520 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Training Modules Screen */
+.training-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 1000;
+}
+
+.training-shell {
+  max-width: 1200px;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 2rem;
+}
+
+.training-subtitle {
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 2rem;
+  font-size: 1.1rem;
+}
+
+.training-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.training-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.training-card:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+.training-card.completed {
+  border-color: rgba(76, 175, 80, 0.5);
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.training-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.training-category {
+  background: rgba(33, 150, 243, 0.2);
+  color: #64b5f6;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.training-difficulty {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.training-card h3 {
+  color: white;
+  margin-bottom: 0.75rem;
+  font-size: 1.25rem;
+}
+
+.training-card p {
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 1rem;
+  line-height: 1.5;
+}
+
+.training-meta {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.training-objectives {
+  margin-bottom: 1.5rem;
+}
+
+.training-objectives h4 {
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.training-objectives ul {
+  list-style: none;
+  padding: 0;
+}
+
+.training-objectives li {
+  color: rgba(255, 255, 255, 0.7);
+  padding: 0.25rem 0;
+  padding-left: 1.25rem;
+  position: relative;
+  font-size: 0.9rem;
+}
+
+.training-objectives li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: #64b5f6;
+}
+
+/* Training HUD */
+.training-hud {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  width: 320px;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  padding: 1.25rem;
+  z-index: 2000;
+  backdrop-filter: blur(15px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.training-hud-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.training-hud-header h3 {
+  color: white;
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.training-close-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  transition: color 0.2s;
+}
+
+.training-close-btn:hover {
+  color: white;
+}
+
+.training-progress {
+  margin-bottom: 1.5rem;
+}
+
+.training-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.training-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4caf50, #8bc34a);
+  transition: width 0.3s ease;
+}
+
+/* Responsive adjustments for small and large screens */
+@media (max-width: 768px) {
+  .training-hud {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: 100%;
+    max-height: 40vh;
+    border-radius: 12px 12px 0 0;
+    padding: 0.75rem;
+    z-index: 2000;
+  }
+
+  .training-hud-header h3 {
+    font-size: 1rem;
+  }
+
+  .quiz-editor-card, .quiz-manager-card, .menu-settings-card {
+    width: calc(100% - 32px);
+    max-height: 85vh;
+    padding: 16px;
+    border-radius: 12px;
+  }
+
+  .quiz-editor-content .quiz-editor-section {
+    display: block;
+    width: 100%;
+  }
+
+  .boat-type-radios, .difficulty-radios, .controls-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .boat-type-option, .difficulty-option, .control-item {
+    flex: 1 1 45%;
+    min-width: 140px;
+  }
+
+  .training-grid {
+    grid-template-columns: 1fr;
+  }
+
+  html, body, #app {
+    height: auto;
+  }
+}
+
+@media (min-width: 1200px) {
+  /* Larger screens — allow more breathing room */
+  .training-shell {
+    max-width: 1400px;
+  }
+
+  .quiz-editor-card {
+    width: min(1000px, 85vw);
+  }
+
+  .canvas-container {
+    height: calc(100vh - 0px);
+  }
+}
+
+.training-step-counter {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
+}
+
+.training-instruction {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: rgba(33, 150, 243, 0.1);
+  border-left: 3px solid #2196f3;
+  border-radius: 0 8px 8px 0;
+}
+
+.training-instruction-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.training-instruction p {
+  color: white;
+  margin: 0;
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+
+.training-objectives-mini {
+  margin-bottom: 1rem;
+}
+
+.training-objectives-toggle {
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.2s;
+}
+
+.training-objectives-toggle:hover {
+  color: white;
+}
+
+.training-objectives-content {
+  padding-top: 0.5rem;
+}
+
+.training-objectives-mini ul {
+  list-style: none;
+  padding: 0;
+}
+
+.training-objectives-mini li {
+  color: rgba(255, 255, 255, 0.6);
+  padding: 0.25rem 0;
+  padding-left: 1.25rem;
+  position: relative;
+  font-size: 0.85rem;
+  transition: color 0.3s;
+}
+
+.training-objectives-mini li.completed {
+  color: #4caf50;
+}
+
+.training-objectives-mini li::before {
+  content: "○";
+  position: absolute;
+  left: 0;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.training-objectives-mini li.completed::before {
+  content: "✓";
+  color: #4caf50;
+}
+
+.training-feedback {
+  padding: 0.75rem;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 0.9rem;
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.training-feedback p {
+  margin: 0;
+}
+
+.training-feedback.success {
+  background: rgba(76, 175, 80, 0.2);
+  color: #4caf50;
+  border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.training-feedback.error {
+  background: rgba(244, 67, 54, 0.2);
+  color: #f44336;
+  border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+/* Mission Cards (using training module structure) */
+.mission-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.mission-card:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+.mission-card.completed {
+  border-color: rgba(76, 175, 80, 0.5);
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.mission-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.mission-category {
+  background: rgba(33, 150, 243, 0.2);
+  color: #64b5f6;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.mission-difficulty {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.mission-card h3 {
+  color: white;
+  margin-bottom: 0.75rem;
+  font-size: 1.25rem;
+}
+
+.mission-card p {
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 1rem;
+  line-height: 1.5;
+}
+
+.mission-meta {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Training elements in mission objective box */
+.training-progress-mini {
+  margin-bottom: 0.75rem;
+}
+
+.training-progress-bar-mini {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 0.25rem;
+}
+
+.training-progress-fill-mini {
+  height: 100%;
+  background: linear-gradient(90deg, #4caf50, #8bc34a);
+  transition: width 0.3s ease;
+}
+
+.training-step-counter-mini {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.training-instruction-text {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 0.5rem;
+}
+
+.training-objectives-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+}
+
+.training-objectives-list li {
+  color: rgba(255, 255, 255, 0.6);
+  padding: 0.2rem 0;
+  padding-left: 1rem;
+  position: relative;
+  font-size: 0.8rem;
+  transition: color 0.3s;
+}
+
+.training-objectives-list li.completed {
+  color: #4caf50;
+}
+
+.training-objectives-list li::before {
+  content: "○";
+  position: absolute;
+  left: 0;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 0.7rem;
+}
+
+.training-objectives-list li.completed::before {
+  content: "✓";
+  color: #4caf50;
+}
+
+.training-feedback-mini {
+  padding: 0.5rem;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+}
+
+.training-feedback-mini p {
+  margin: 0;
+}
+
+.training-feedback-mini.success {
+  background: rgba(76, 175, 80, 0.2);
+  color: #4caf50;
+  border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.training-feedback-mini.error {
+  background: rgba(244, 67, 54, 0.2);
+  color: #f44336;
+  border: 1px solid rgba(244, 67, 54, 0.3);
+}

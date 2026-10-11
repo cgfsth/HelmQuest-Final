@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmquest.local/schemas/helmquest-entities.json",
+  "title": "HelmQuest Entity Catalog",
+  "version": "1.0.0",
+  "generatedAt": "2026-05-30",
+  "storageModel": "in-memory-client-only",
+  "entities": [
+    {
+      "name": "User",
+      "table": null,
+      "implementation": "App.vue refs: isAuthenticated, authForm, dashboardRole",
+      "primaryKey": "id",
+      "attributes": [
+        { "name": "id", "type": "uuid", "required": false, "note": "Future backend" },
+        { "name": "email", "type": "string", "required": true },
+        { "name": "password", "type": "string", "required": false, "note": "Mock only; not persisted" },
+        { "name": "role", "type": "enum", "values": ["student", "instructor"] },
+        { "name": "authenticated", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "StudentProfile",
+      "table": null,
+      "implementation": "demoStudent ref",
+      "primaryKey": "userId",
+      "attributes": [
+        { "name": "userId", "type": "uuid", "foreignKey": "User.id" },
+        { "name": "xp", "type": "number" },
+        { "name": "rank", "type": "string" },
+        { "name": "missionsCompleted", "type": "integer" },
+        { "name": "accuracyPercent", "type": "number" },
+        { "name": "xpProgressPercent", "type": "number" }
+      ]
+    },
+    {
+      "name": "TrainingModule",
+      "table": null,
+      "implementation": "trainingModules ref array",
+      "primaryKey": "id",
+      "attributes": [
+        { "name": "id", "type": "string" },
+        { "name": "title", "type": "string" },
+        { "name": "category", "type": "string" },
+        { "name": "description", "type": "string" },
+        { "name": "duration", "type": "string" },
+        { "name": "difficulty", "type": "enum", "values": ["Beginner", "Easy", "Intermediate", "Medium", "Hard"] },
+        { "name": "reward", "type": "string" },
+        { "name": "completed", "type": "boolean" }
+      ]
+    },
+    {
+      "name": "LearningObjective",
+      "table": null,
+      "implementation": "TrainingModule.objectives[]",
+      "primaryKey": "id",
+      "attributes": [
+        { "name": "id", "type": "uuid", "required": false },
+        { "name": "moduleId", "type": "string", "foreignKey": "TrainingModule.id" },
+        { "name": "text", "type": "string" },
+        { "name": "sortOrder", "type": "integer" }
+      ]
+    },
+    {
+      "name": "TrainingStep",
+      "table": null,
+      "implementation": "TrainingModule.steps[]",
+      "primaryKey": "id",
+      "attributes": [
+        { "name": "id", "type": "uuid", "required": false },
+        { "name": "moduleId", "type": "string", "foreignKey": "TrainingModule.id" },
+        { "name": "stepIndex", "type": "integer" },
+        { "name": "instruction", "type": "string" },
+        { "name": "validatorType", "type": "enum", "values": ["speed", "heading", "anchor", "position", "composite"] },
+        { "name": "validatorConfig", "type": "object" }
+      ]
+    },
+    {
+      "name": "TrainingSession",
+      "table": null,
+      "implementation": "activeTrainingModule + currentTrainingStep",
+      "primaryKey": "id",
+      "attributes": [
+        { "name": "id", "type": "uuid", "required": false },
+        { "name": "userId", "type": "uuid", "foreignKey": "User.id" },
+        { "name": "moduleId", "type": "string", "foreignKey": "TrainingModule.id" },
+        { "name": "currentStepIndex", "type": "integer" },
+        { "name": "startedAt", "type": "datetime" },
+        { "name": "completedAt", "type": "datetime", "nullable": true }
+      ]
+    },
+    {
+      "name": "StepCompletion",
+      "table": null,
+      "implementation": "Not persisted",
+      "primaryKey": "id",
+      "attributes": [
+        { "name": "sessionId", "type": "uuid", "foreignKey": "TrainingSession.id" },
+        { "name": "stepIndex", "type": "integer" },
+        { "name": "completedAt", "type": "datetime" },
+        { "name": "telemetrySnapshot", "type": "BoatTelemetry", "nullable": true }
+      ]
+    },
+    {
+      "name": "BoatInstance",
+      "table": null,
+      "implementation": "boatObject THREE.Group BoatPivot",
+      "primaryKey": "id",
+      "attributes": [
+        { "name": "id", "type": "string", "default": "BoatPivot" },
+        { "name": "modelPath", "type": "string" },
+        { "name": "lengthMeters", "type": "number" },
+        { "name": "position", "type": "Vector3" },
+        { "name": "rotationY", "type": "number" },
+        { "name": "waterlineY", "type": "number" }
+      ]
+    },
+    {
+      "name": "PhysicsState",
+      "table": null,
+      "implementation": "physics ref + speedVel speedRot module vars",
+      "primaryKey": "boatInstanceId",
+      "attributes": [
+        { "name": "thrustForce", "type": "number" },
+        { "name": "dragCoefficient", "type": "number" },
+        { "name": "waterReactionForce", "type": "number" },
+        { "name": "mass", "type": "number" },
+        { "name": "decelerationRate", "type": "number" },
+        { "name": "waveAmplitude", "type": "number" },
+        { "name": "waveFrequency", "type": "number" },
+        { "name": "windForce", "type": "number" },
+        { "name": "sinkingThreshold", "type": "number" },
+        { "name": "waterlineOffset", "type": "number" },
+        { "name": "speedVel", "type": "number" },
+        { "name": "speedRot", "type": "number" }
+      ]
+    },
+    {
+      "name": "BoatTelemetry",
+      "table": null,
+      "implementation": "stats ref",
+      "primaryKey": "boatInstanceId",
+      "attributes": [
+        { "name": "speedKnots", "type": "number" },
+        { "name": "rotationDeg", "type": "number" },
+        { "name": "yPos", "type": "number" },
+        { "name": "rollDeg", "type": "number" },
+        { "name": "pitchDeg", "type": "number" },
+        { "name": "state", "type": "enum", "values": ["NORMAL", "SINKING!"] }
+      ]
+    },
+    {
+      "name": "AnchorState",
+      "table": null,
+      "implementation": "anchor ref",
+      "primaryKey": "boatInstanceId",
+      "attributes": [
+        { "name": "deployed", "type": "boolean" },
+        { "name": "deploying", "type": "boolean" },
+        { "name": "retracting", "type": "boolean" },
+        { "name": "chainLength", "type": "number" },
+        { "name": "maxChainLength", "type": "number" },
+        { "name": "position", "type": "Vector3" }
+      ]
+    },
+    {
+      "name": "WindState",
+      "table": null,
+      "implementation": "wind ref",
+      "primaryKey": null,
+      "attributes": [
+        { "name": "speed", "type": "number" },
+        { "name": "directionAngle", "type": "number" }
+      ]
+    },
+    {
+      "name": "IslandCollider",
+      "table": null,
+      "implementation": "worldIslands AABB array",
+      "primaryKey": "meshName",
+      "attributes": [
+        { "name": "meshName", "type": "string" },
+        { "name": "min", "type": "Vector3" },
+        { "name": "max", "type": "Vector3" }
+      ]
+    },
+    {
+      "name": "EnvironmentPreset",
+      "table": null,
+      "implementation": "App.vue day/sunset presets",
+      "primaryKey": "name",
+      "attributes": [
+        { "name": "name", "type": "enum", "values": ["day", "sunset"] }
+      ]
+    },
+    {
+      "name": "HelmCockpit",
+      "table": null,
+      "implementation": "helmCockpit group",
+      "primaryKey": "boatInstanceId",
+      "attributes": [
+        { "name": "cameraPosition", "type": "Vector3" },
+        { "name": "cameraLookAt", "type": "Vector3" },
+        { "name": "wheelAngle", "type": "number" }
+      ]
+    },
+    {
+      "name": "Mission",
+      "table": null,
+      "implementation": "stub — dashboard references count only",
+      "primaryKey": "id",
+      "attributes": [
+        { "name": "id", "type": "string" },
+        { "name": "title", "type": "string" },
+        { "name": "moduleId", "type": "string", "foreignKey": "TrainingModule.id", "nullable": true }
+      ]
+    }
+  ],
+  "relationships": [
+    { "from": "User", "to": "StudentProfile", "type": "one-to-one", "optional": true },
+    { "from": "User", "to": "TrainingSession", "type": "one-to-many" },
+    { "from": "TrainingModule", "to": "LearningObjective", "type": "one-to-many" },
+    { "from": "TrainingModule", "to": "TrainingStep", "type": "one-to-many" },
+    { "from": "TrainingModule", "to": "TrainingSession", "type": "one-to-many" },
+    { "from": "TrainingSession", "to": "StepCompletion", "type": "one-to-many" },
+    { "from": "TrainingStep", "to": "StepCompletion", "type": "one-to-many" },
+    { "from": "BoatInstance", "to": "PhysicsState", "type": "one-to-one" },
+    { "from": "BoatInstance", "to": "BoatTelemetry", "type": "one-to-one" },
+    { "from": "BoatInstance", "to": "AnchorState", "type": "one-to-zero-or-one" },
+    { "from": "BoatInstance", "to": "HelmCockpit", "type": "one-to-one" },
+    { "from": "Mission", "to": "TrainingModule", "type": "many-to-one", "optional": true }
+  ]
+}

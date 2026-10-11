@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmquest.local/schemas/helmquest-design-schema",
+  "title": "HelmQuest JSON Design Schema",
+  "description": "Visual design model for HelmQuest. Import helmquest-design-schema.json into JSON Crack or similar tools. Root is an array of 2 exemplar documents.",
+  "version": "1.0.0",
+  "generatedAt": "2026-05-31",
+  "type": "array",
+  "minItems": 2,
+  "maxItems": 2,
+  "items": [
+    {
+      "title": "MissionAttemptRecord",
+      "description": "Single graded simulation run (maps to progress.sessions[] and mission_attempt table)",
+      "type": "object",
+      "required": [
+        "attempt_id",
+        "student_id",
+        "mission_id",
+        "module_id",
+        "score",
+        "pass_score",
+        "passed",
+        "completed_at",
+        "metadata"
+      ],
+      "properties": {
+        "attempt_id": { "type": "string" },
+        "student_id": { "type": "string" },
+        "student_name": { "type": "string" },
+        "mission_id": { "type": "string" },
+        "mission_title": { "type": "string" },
+        "module_id": { "type": "string" },
+        "score": { "type": "number", "minimum": 0, "maximum": 100 },
+        "pass_score": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "passed": { "type": "boolean" },
+        "completed_at": { "type": "string", "format": "date-time" },
+        "metadata": {
+          "type": "object",
+          "description": "Scoring breakdown shown in result popup",
+          "properties": {
+            "elapsed_seconds": { "type": "number" },
+            "elapsed_label": { "type": "string" },
+            "max_speed_knots": { "type": "number" },
+            "steps_completed": { "type": "integer" },
+            "steps_total": { "type": "integer" },
+            "pass_score_required": { "type": "integer" },
+            "review_mode": { "type": "boolean" },
+            "result_label": { "type": "string", "enum": ["PASS", "FAIL"] }
+          }
+        }
+      }
+    },
+    {
+      "title": "StudentProgressBundle",
+      "description": "Full student state (maps to localStorage helmquest-progress-v1 + App.vue runtime)",
+      "type": "object",
+      "required": ["student_id", "user_id", "name", "email", "profile", "settings"],
+      "properties": {
+        "student_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "profile": {
+          "type": "object",
+          "properties": {
+            "xp": { "type": "integer" },
+            "rank": { "type": "string" },
+            "missions_completed": { "type": "integer" },
+            "accuracy_percent": { "type": "number" },
+            "xp_progress_percent": { "type": "number" }
+          }
+        },
+        "settings": {
+          "type": "object",
+          "description": "User preferences from settings modal",
+          "properties": {
+            "remember_login": { "type": "boolean" },
+            "start_camera": { "type": "string", "enum": ["chase", "orbit", "helm"] },
+            "graphics_quality": { "type": "string" },
+            "water_quality": { "type": "string" },
+            "shadow_quality": { "type": "string" },
+            "ui_scale": { "type": "string" },
+            "show_fps": { "type": "boolean" },
+            "sound_volume": { "type": "number" }
+          }
+        },
+        "simulation_runtime": {
+          "type": "object",
+          "description": "In-memory 3D simulation state (not persisted)",
+          "properties": {
+            "physics": { "type": "object" },
+            "wind": { "type": "object" },
+            "anchor": { "type": "object" },
+            "telemetry": { "type": "object" }
+          }
+        },
+        "active_training": {
+          "type": "object",
+          "description": "Current training run while in simulation",
+          "properties": {
+            "module_id": { "type": ["string", "null"] },
+            "mission_id": { "type": ["string", "null"] },
+            "current_step_index": { "type": "integer" },
+            "is_review_mode": { "type": "boolean" },
+            "training_feedback": { "type": "string" }
+          }
+        },
+        "mission_attempts": {
+          "type": "array",
+          "description": "Persisted in progress.sessions",
+          "items": { "$ref": "#/items/0" }
+        },
+        "module_passes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pass_id": { "type": "string" },
+              "module_id": { "type": "string" },
+              "passed_at": { "type": "string", "format": "date-time" }
+            }
+          }
+        },
+        "instructor_feedback": {
+          "type": "array",
+          "description": "Planned — instructor review comments",
+          "items": {
+            "type": "object",
+            "properties": {
+              "feedback_id": { "type": "string" },
+              "attempt_id": { "type": "string" },
+              "instructor_id": { "type": "string" },
+              "comment": { "type": "string" },
+              "created_at": { "type": "string", "format": "date-time" }
+            }
+          }
+        },
+        "navigation_missions": {
+          "type": "array",
+          "description": "Mission catalog with nested training_module",
+          "items": {
+            "type": "object",
+            "properties": {
+              "mission_id": { "type": "string" },
+              "title": { "type": "string" },
+              "difficulty": { "type": "string" },
+              "description": { "type": "string" },
+              "pass_score": { "type": "integer" },
+              "training_module": { "type": "object" }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

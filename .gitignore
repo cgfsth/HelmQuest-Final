@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+.env
+.env.local
+.env.*
+!.env.example
+!.env.*.example
+
+# Firebase Admin private credentials stay on the backend host.
+serviceAccountKey.json
+*firebase-adminsdk*.json
+
+.git_disabled/

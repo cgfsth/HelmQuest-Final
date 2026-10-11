@@ -1,0 +1,731 @@
+/* Professional Landing Page Styles */
+
+/* Remove default margins and padding */
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+
+/* Landing Navigation Bar */
+.landing-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 48px;
+  z-index: 100;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0) 100%);
+}
+
+.landing-nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo-icon {
+  font-size: 32px;
+  filter: drop-shadow(0 2px 8px rgba(59, 130, 246, 0.5));
+}
+
+.logo-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.logo-text strong {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 2px;
+}
+
+.logo-text span {
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  color: #3b82f6;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.landing-nav-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+  font-family: 'Outfit', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+}
+
+.nav-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.nav-btn-instructor {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.nav-btn-instructor:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+.btn-icon {
+  font-size: 16px;
+}
+
+/* Hero Section */
+.landing-hero {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  transform: translateY(-50%);
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  z-index: 10;
+}
+
+.hero-eyebrow {
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  color: #3b82f6;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+}
+
+.hero-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(80px, 12vw, 140px);
+  font-weight: 400;
+  line-height: 0.9;
+  margin: 0 0 20px 0;
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+  text-align: center;
+  width: 100%;
+}
+
+.title-helm {
+  color: #ffffff;
+  letter-spacing: 8px;
+}
+
+.title-quest {
+  color: #3b82f6;
+  letter-spacing: 8px;
+}
+
+.hero-divider {
+  width: 200px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, #3b82f6 50%, transparent 100%);
+  margin: 0 auto 20px;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.6);
+}
+
+.hero-tagline {
+  font-family: 'Outfit', sans-serif;
+  font-size: 18px;
+  font-weight: 300;
+  letter-spacing: 4px;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 32px;
+  text-transform: uppercase;
+}
+
+.hero-features {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 48px;
+  list-style: none;
+  padding: 0;
+  margin: 0 auto 0;
+  width: 100%;
+}
+
+.hero-features li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: rgba(255, 255, 255, 0.8);
+  text-transform: uppercase;
+}
+
+.feature-icon {
+  font-size: 20px;
+}
+
+/* Login Cards Section */
+.landing-cards {
+  position: relative;
+  padding: 60px 24px 120px;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  gap: 32px;
+  z-index: 10;
+  max-width: 1100px;
+  width: 90%;
+  margin: 0 auto;
+  min-height: 100vh;
+}
+
+.login-card {
+  flex: 1;
+  max-width: 500px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  padding: 36px;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  transition: all 0.4s ease;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.login-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.student-card {
+  border-top: 3px solid #3b82f6;
+}
+
+.instructor-card {
+  border-top: 3px solid #3b82f6;
+}
+
+.card-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  filter: drop-shadow(0 2px 8px rgba(59, 130, 246, 0.3));
+  text-align: center;
+}
+
+.card-title {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0 0 12px 0;
+  letter-spacing: 1px;
+  text-align: center;
+}
+
+.card-description {
+  font-family: 'Outfit', sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0 0 24px 0;
+  text-align: center;
+}
+
+.card-btn {
+  width: 100%;
+  padding: 14px 24px;
+  border: none;
+  border-radius: 8px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.student-btn {
+  background: #3b82f6;
+  color: #ffffff;
+}
+
+.student-btn:hover {
+  background: #2563eb;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4);
+  transform: translateY(-2px);
+}
+
+.instructor-btn {
+  background: #3b82f6;
+  color: #ffffff;
+}
+
+.instructor-btn:hover {
+  background: #2563eb;
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4);
+  transform: translateY(-2px);
+}
+
+/* Footer Status Bar */
+.landing-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 48px;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0) 100%);
+  z-index: 100;
+  pointer-events: none;
+}
+
+.footer-text {
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 1px;
+  margin: 0;
+}
+
+.footer-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.status-indicator {
+  color: #22c55e;
+  font-size: 8px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.status-text {
+  color: #22c55e;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.status-coords {
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.5px;
+}
+
+/* Landing Reveal Animations */
+.landing-reveal {
+  opacity: 0;
+  animation: revealFade 0.8s ease forwards;
+}
+
+.landing-reveal--1 { animation-delay: 0.2s; }
+.landing-reveal--2 { animation-delay: 0.4s; }
+.landing-reveal--3 { animation-delay: 0.6s; }
+.landing-reveal--4 { animation-delay: 0.8s; }
+.landing-reveal--5 { animation-delay: 1s; }
+.landing-reveal--6 { animation-delay: 1.2s; }
+
+@keyframes revealFade {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .landing-cards {
+    flex-direction: column;
+    bottom: 80px;
+    max-width: 600px;
+  }
+}
+
+/* Set Sail Button */
+/* Wrapper that guarantees horizontal centering below hero-features */
+.hero-set-sail-wrap {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 100% !important;
+  margin: 20px 0 0 0 !important;
+  padding: 0 !important;
+  position: relative !important;
+  left: auto !important;
+  right: auto !important;
+  transform: none !important;
+}
+
+.hero-set-sail-btn {
+  margin: 0 !important;
+  padding: 10px 28px;
+  border: 2px solid rgba(59, 130, 246, 0.4);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.15));
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex !important;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+}
+
+.hero-set-sail-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  transition: left 0.5s ease;
+}
+
+.hero-set-sail-btn:hover::before {
+  left: 100%;
+}
+
+.hero-set-sail-btn:hover {
+  transform: translateY(-4px) scale(1.05);
+  border-color: rgba(59, 130, 246, 0.8);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(37, 99, 235, 0.25));
+  box-shadow: 0 8px 32px rgba(59, 130, 246, 0.4), 0 0 60px rgba(59, 130, 246, 0.2);
+}
+
+.hero-set-sail-btn:active {
+  transform: translateY(-2px) scale(1.02);
+}
+
+.set-sail-icon {
+  font-size: 20px;
+  filter: drop-shadow(0 2px 8px rgba(59, 130, 246, 0.6));
+  animation: sailBob 3s ease-in-out infinite;
+}
+
+@keyframes sailBob {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+.set-sail-text {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #ffffff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+
+.set-sail-subtitle {
+  font-family: 'Outfit', sans-serif;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+}
+
+/* Keep the title screen inside its viewport; scroll this overlay on short screens.
+   These rules are scoped to landing so the other portals and simulator keep their layout. */
+.scene-overlay.game-landing.professional-landing {
+  display: grid;
+  grid-template-rows: auto minmax(min-content, 1fr) auto;
+  align-items: stretch;
+  justify-content: stretch;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior-y: contain;
+  cursor: default;
+}
+
+.professional-landing,
+.professional-landing * {
+  box-sizing: border-box;
+}
+
+.professional-landing > .game-landing-bg,
+.professional-landing > .game-landing-vignette,
+.professional-landing > .game-landing-grain {
+  position: fixed;
+}
+
+.professional-landing .landing-nav,
+.professional-landing .landing-footer {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  min-width: 0;
+}
+
+.professional-landing .landing-nav {
+  gap: 16px;
+  padding-top: max(24px, env(safe-area-inset-top));
+}
+
+.professional-landing .landing-nav-logo,
+.professional-landing .landing-nav-buttons {
+  flex-shrink: 0;
+}
+
+.professional-landing .nav-btn,
+.professional-landing .hero-set-sail-btn {
+  min-height: 44px;
+}
+
+/* The legacy CTA animation translates by half its width; this button is flex-centered. */
+.professional-landing .hero-set-sail-btn.landing-reveal--6 {
+  animation-name: landingButtonReveal;
+}
+
+@keyframes landingButtonReveal {
+  from { opacity: 0; filter: blur(6px); }
+  to { opacity: 1; filter: blur(0); }
+}
+
+.professional-landing .nav-btn {
+  white-space: nowrap;
+}
+
+.professional-landing .landing-hero {
+  position: relative;
+  inset: auto;
+  transform: none;
+  min-width: 0;
+  padding: clamp(24px, 5vh, 56px) 24px;
+}
+
+.professional-landing .hero-title {
+  white-space: nowrap;
+}
+
+.professional-landing .hero-eyebrow {
+  margin-top: 0;
+}
+
+.professional-landing .landing-footer {
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+}
+
+.professional-landing .footer-text,
+.professional-landing .footer-status {
+  max-width: 100%;
+  line-height: 1.6;
+}
+
+.professional-landing .footer-status {
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+/* Phones and tablets: hidden portals occupy no space and retain their routes. */
+@media (width < 1024px) {
+  .professional-landing .nav-btn-instructor,
+  .professional-landing .nav-btn-admin {
+    display: none;
+  }
+
+  .professional-landing .landing-nav {
+    padding-inline: 32px;
+  }
+
+  .professional-landing .landing-hero {
+    padding: clamp(24px, 5vh, 48px) 32px;
+  }
+
+  .professional-landing .hero-title {
+    font-size: clamp(80px, 10vw, 110px);
+  }
+
+  .professional-landing .title-helm,
+  .professional-landing .title-quest {
+    letter-spacing: 5px;
+  }
+
+  .professional-landing .hero-features {
+    flex-wrap: wrap;
+    gap: 16px 32px;
+  }
+
+  .professional-landing .landing-footer {
+    flex-direction: column;
+    padding-inline: 32px;
+    text-align: center;
+  }
+
+  .professional-landing .footer-status {
+    justify-content: center;
+  }
+
+  .professional-landing .game-landing-bg {
+    background-position: center;
+  }
+
+  .professional-landing .game-landing-vignette {
+    background: radial-gradient(ellipse 100% 65% at 50% 45%, rgba(4, 4, 14, 0.5), transparent 85%),
+      linear-gradient(180deg, rgba(6, 4, 16, 0.32), transparent 40%, rgba(6, 4, 16, 0.35));
+  }
+}
+
+@media (width < 768px) {
+  .professional-landing .landing-nav {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: max(16px, env(safe-area-inset-top)) 16px 16px;
+  }
+
+  .professional-landing .landing-nav-logo {
+    gap: 8px;
+  }
+
+  .professional-landing .logo-icon {
+    font-size: 26px;
+  }
+
+  .professional-landing .logo-text strong {
+    font-size: 19px;
+    letter-spacing: 1.5px;
+  }
+
+  .professional-landing .logo-text span {
+    font-size: 8px;
+    letter-spacing: 1px;
+  }
+
+  .professional-landing .nav-btn-student {
+    gap: 6px;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .professional-landing .landing-hero {
+    padding: 28px 16px;
+  }
+
+  .professional-landing .hero-title {
+    font-size: clamp(36px, 11vw, 80px);
+    line-height: 1.05;
+    margin-bottom: 16px;
+  }
+
+  .professional-landing .title-helm,
+  .professional-landing .title-quest {
+    letter-spacing: clamp(1px, 0.5vw, 3px);
+  }
+
+  .professional-landing .hero-eyebrow {
+    font-size: 11px;
+    letter-spacing: 2px;
+  }
+
+  .professional-landing .hero-divider {
+    width: min(160px, 60%);
+    margin-bottom: 16px;
+  }
+
+  .professional-landing .hero-tagline {
+    font-size: clamp(13px, 3.5vw, 18px);
+    letter-spacing: 2px;
+    line-height: 1.5;
+    margin: 0 0 24px;
+  }
+
+  .professional-landing .hero-features {
+    gap: 12px 16px;
+  }
+
+  .professional-landing .hero-features li {
+    gap: 5px;
+    font-size: 12px;
+    letter-spacing: 1px;
+  }
+
+  .professional-landing .feature-icon {
+    font-size: 17px;
+  }
+
+  .professional-landing .hero-set-sail-btn {
+    max-width: 100%;
+    padding: 12px 24px;
+  }
+
+  .professional-landing .landing-footer {
+    padding: 16px 16px max(16px, env(safe-area-inset-bottom));
+  }
+
+  .professional-landing .footer-text,
+  .professional-landing .footer-status {
+    font-size: 10px;
+  }
+
+  .professional-landing .status-coords {
+    flex-basis: 100%;
+  }
+}
+
+@media (width < 360px) {
+  .professional-landing .landing-nav {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
+@media (max-height: 500px) {
+  .professional-landing .landing-hero {
+    padding-block: 24px;
+  }
+}

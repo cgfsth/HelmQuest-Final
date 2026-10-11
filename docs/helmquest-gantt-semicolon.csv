@@ -1,0 +1,18 @@
+WBS ID;Task Name;Start Date;End Date;Duration (Weeks);Phase
+1;Planning Phase;01/04/2026;30/04/2026;4;Planning
+1.1;Project Initiation and Requirements Scoping;01/04/2026;15/04/2026;2;Planning
+1.2;Technology Selection and 3D Asset Planning;16/04/2026;30/04/2026;2;Planning
+2;Analysis and Design Phase;01/05/2026;30/06/2026;8;Analysis and Design
+2.1;Literature Review and Navigation Training Standards;01/05/2026;31/05/2026;4;Analysis and Design
+2.2;System Architecture ERD JSON Schema and UI Wireframes;01/06/2026;30/06/2026;4;Analysis and Design
+3;Implementation Phase (Agile Sprints);01/07/2026;30/11/2026;18;Implementation
+3.1;3D Environment and Vessel Assets;01/07/2026;15/08/2026;6;Implementation
+3.2;Simulation Engine and Training Modules;01/08/2026;31/10/2026;13;Implementation
+3.3;Student Instructor Dashboards and Progress Persistence;15/10/2026;30/11/2026;6;Implementation
+3.4;Helm Bridge Cameras and Navigation HUD;01/09/2026;31/10/2026;8;Implementation
+4;Testing and Evaluation Phase;01/12/2026;31/01/2027;7;Testing
+4.1;Unit and Integration Testing;01/12/2026;24/12/2026;3;Testing
+4.2;User Acceptance Testing;01/01/2027;31/01/2027;4;Testing
+5;Documentation and Project Closure;01/02/2027;31/03/2027;8;Documentation
+5.1;Bug Fixing Performance Tuning and Polish;01/02/2027;28/02/2027;4;Documentation
+5.2;Final Report ERD JSON Schema and Submission;01/03/2027;31/03/2027;4;Documentation

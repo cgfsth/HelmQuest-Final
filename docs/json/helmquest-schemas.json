@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmquest.local/schemas/helmquest-schemas.json",
+  "title": "HelmQuest JSON Schemas",
+  "version": "1.0.0",
+  "generatedAt": "2026-05-30",
+  "definitions": {
+    "Vector3": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" }
+      }
+    },
+    "ScreenId": {
+      "type": "string",
+      "enum": ["landing", "mainmenu", "play-options", "training", "auth", "dashboard", "simulation", "missions"]
+    },
+    "CameraMode": {
+      "type": "string",
+      "enum": ["chase", "orbit", "helm"]
+    },
+    "HullState": {
+      "type": "string",
+      "enum": ["NORMAL", "SINKING!"]
+    },
+    "Difficulty": {
+      "type": "string",
+      "enum": ["Beginner", "Easy", "Intermediate", "Medium", "Hard"]
+    },
+    "ValidatorType": {
+      "type": "string",
+      "enum": ["speed", "heading", "anchor", "position", "composite", "stub"]
+    },
+    "User": {
+      "type": "object",
+      "required": ["email", "role", "authenticated"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["student", "instructor"] },
+        "authenticated": { "type": "boolean" }
+      }
+    },
+    "StudentProfile": {
+      "type": "object",
+      "required": ["xp", "rank", "missionsCompleted", "accuracyPercent", "xpProgressPercent"],
+      "properties": {
+        "userId": { "type": "string", "format": "uuid" },
+        "xp": { "type": "number", "minimum": 0 },
+        "rank": { "type": "string" },
+        "missionsCompleted": { "type": "integer", "minimum": 0 },
+        "accuracyPercent": { "type": "number", "minimum": 0, "maximum": 100 },
+        "xpProgressPercent": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "StepValidator": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "$ref": "#/definitions/ValidatorType" },
+        "minSpeedKnots": { "type": "number" },
+        "maxSpeedKnots": { "type": "number" },
+        "targetHeadingDeg": { "type": "number" },
+        "headingToleranceDeg": { "type": "number" },
+        "anchorDeployed": { "type": "boolean" },
+        "zoneId": { "type": "string" },
+        "position": { "$ref": "#/definitions/Vector3" },
+        "radiusMeters": { "type": "number" }
+      }
+    },
+    "TrainingStep": {
+      "type": "object",
+      "required": ["instruction", "validator"],
+      "properties": {
+        "stepIndex": { "type": "integer", "minimum": 0 },
+        "instruction": { "type": "string" },
+        "validator": { "$ref": "#/definitions/StepValidator" }
+      }
+    },
+    "TrainingModule": {
+      "type": "object",
+      "required": ["id", "title", "category", "description", "objectives", "steps", "duration", "difficulty", "reward", "completed"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "objectives": { "type": "array", "items": { "type": "string" } },
+        "steps": { "type": "array", "items": { "$ref": "#/definitions/TrainingStep" } },
+        "duration": { "type": "string" },
+        "difficulty": { "$ref": "#/definitions/Difficulty" },
+        "reward": { "type": "string" },
+        "completed": { "type": "boolean" }
+      }
+    },
+    "PhysicsConfig": {
+      "type": "object",
+      "properties": {
+        "thrustForce": { "type": "number", "default": 0.7 },
+        "dragCoefficient": { "type": "number", "default": 0.24 },
+        "waterReactionForce": { "type": "number", "default": 0.015 },
+        "mass": { "type": "number", "default": 100 },
+        "decelerationRate": { "type": "number", "default": 0.96 },
+        "waveAmplitude": { "type": "number", "default": 0.85 },
+        "waveFrequency": { "type": "number", "default": 1.0 },
+        "windForce": { "type": "number", "default": 0.05 },
+        "sinkingThreshold": { "type": "number", "default": 250 },
+        "waterlineOffset": { "type": "number", "default": 0 }
+      }
+    },
+    "WindConfig": {
+      "type": "object",
+      "properties": {
+        "speed": { "type": "number" },
+        "directionAngle": { "type": "number", "description": "Degrees" }
+      }
+    },
+    "BoatTelemetry": {
+      "type": "object",
+      "required": ["speedKnots", "rotationDeg", "yPos", "rollDeg", "pitchDeg", "state"],
+      "properties": {
+        "speedKnots": { "type": "number" },
+        "rotationDeg": { "type": "number" },
+        "yPos": { "type": "number" },
+        "rollDeg": { "type": "number" },
+        "pitchDeg": { "type": "number" },
+        "state": { "$ref": "#/definitions/HullState" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    },
+    "AnchorState": {
+      "type": "object",
+      "properties": {
+        "deployed": { "type": "boolean" },
+        "deploying": { "type": "boolean" },
+        "retracting": { "type": "boolean" },
+        "chainLength": { "type": "number" },
+        "maxChainLength": { "type": "number" },
+        "position": { "$ref": "#/definitions/Vector3" }
+      }
+    },
+    "SimulationConfig": {
+      "type": "object",
+      "properties": {
+        "boatModelUrl": { "type": "string" },
+        "targetLoaMeters": { "type": "number" },
+        "spawn": {
+          "type": "object",
+          "properties": {
+            "x": { "type": "number" },
+            "z": { "type": "number" }
+          }
+        },
+        "waterlineY": { "type": "number" },
+        "physics": { "$ref": "#/definitions/PhysicsConfig" },
+        "wind": { "$ref": "#/definitions/WindConfig" },
+        "camera": { "$ref": "#/definitions/CameraMode" }
+      }
+    },
+    "TrainingSession": {
+      "type": "object",
+      "required": ["moduleId", "currentStepIndex"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "userId": { "type": "string", "format": "uuid" },
+        "moduleId": { "type": "string" },
+        "currentStepIndex": { "type": "integer", "minimum": 0 },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "TelemetryExport": {
+      "type": "object",
+      "description": "Future LMS export payload",
+      "properties": {
+        "sessionId": { "type": "string", "format": "uuid" },
+        "moduleId": { "type": "string" },
+        "samples": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/BoatTelemetry" }
+        }
+      }
+    },
+    "AppState": {
+      "type": "object",
+      "description": "Snapshot of key Vue runtime state",
+      "properties": {
+        "activeScreen": { "$ref": "#/definitions/ScreenId" },
+        "activeCamera": { "$ref": "#/definitions/CameraMode" },
+        "simulationRunning": { "type": "boolean" },
+        "stats": { "$ref": "#/definitions/BoatTelemetry" },
+        "physics": { "$ref": "#/definitions/PhysicsConfig" },
+        "anchor": { "$ref": "#/definitions/AnchorState" },
+        "activeTrainingModuleId": { "type": ["string", "null"] },
+        "currentTrainingStep": { "type": "integer" }
+      }
+    }
+  }
+}

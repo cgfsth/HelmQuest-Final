@@ -1,0 +1,30 @@
+{
+  "name": "threejs-ocean",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test:progression": "node --test tests/progression.test.mjs tests/progression-dashboard.test.mjs"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.7",
+    "vite": "^5.2.0"
+  },
+  "dependencies": {
+    "@tweenjs/tween.js": "^23.1.2",
+    "ammo.js": "^0.0.10",
+    "cannon": "github:schteppe/cannon.js",
+    "chart.js": "^4.5.1",
+    "dat.gui": "^0.7.9",
+    "firebase": "^12.16.0",
+    "geotiff": "^3.0.5",
+    "mersenne-twister": "^1.1.0",
+    "node-fetch": "^3.3.2",
+    "pngjs": "^7.0.0",
+    "three": "^0.163.0",
+    "vue": "^3.5.35"
+  }
+}

@@ -1,0 +1,154 @@
+[
+  {
+    "attempt_id": "session-steering-seed",
+    "student_id": "student-alex",
+    "student_name": "Alex Rivera",
+    "mission_id": "HQ-M01",
+    "mission_title": "Basic Steering",
+    "module_id": "steering-speed",
+    "score": 85.75,
+    "pass_score": 65,
+    "passed": true,
+    "completed_at": "2025-01-14T14:00:00.000Z",
+    "metadata": {
+      "elapsed_seconds": 312,
+      "elapsed_label": "5m 12s",
+      "max_speed_knots": 4.8,
+      "steps_completed": 6,
+      "steps_total": 6,
+      "pass_score_required": 65,
+      "review_mode": false,
+      "result_label": "PASS"
+    }
+  },
+  {
+    "student_id": "student-alex",
+    "user_id": "student-alex",
+    "name": "Alex Rivera",
+    "email": "student@helmquest.local",
+    "profile": {
+      "xp": 294,
+      "rank": "Deck Hand",
+      "missions_completed": 1,
+      "accuracy_percent": 82,
+      "xp_progress_percent": 68
+    },
+    "settings": {
+      "remember_login": true,
+      "start_camera": "chase",
+      "graphics_quality": "high",
+      "water_quality": "high",
+      "shadow_quality": "medium",
+      "ui_scale": "1.0",
+      "show_fps": false,
+      "sound_volume": 0.5
+    },
+    "simulation_runtime": {
+      "physics": {
+        "thrust_force": 0.7,
+        "drag_coefficient": 0.24,
+        "water_reaction_force": 0.015,
+        "mass": 100,
+        "deceleration_rate": 0.96,
+        "wave_amplitude": 0.85,
+        "wave_frequency": 1.0,
+        "wind_force": 0.05,
+        "sinking_threshold": 250,
+        "waterline_offset": 0
+      },
+      "wind": {
+        "speed": 0.1,
+        "direction_angle": 90,
+        "updated_at": "2026-05-31T10:00:00.000Z"
+      },
+      "anchor": {
+        "deployed": false,
+        "deploying": false,
+        "retracting": false,
+        "chain_length": 0,
+        "max_chain_length": 50,
+        "position": { "x": 0, "y": 0, "z": 0 }
+      },
+      "telemetry": {
+        "speed_knots": 0,
+        "rotation_deg": 0,
+        "y_pos": 0,
+        "roll_deg": 0,
+        "pitch_deg": 0,
+        "state": "NORMAL"
+      }
+    },
+    "active_training": {
+      "module_id": null,
+      "mission_id": null,
+      "current_step_index": 0,
+      "is_review_mode": false,
+      "training_feedback": ""
+    },
+    "mission_attempts": [
+      {
+        "attempt_id": "session-docking-seed",
+        "mission_id": "HQ-M04",
+        "mission_title": "Docking Practice",
+        "module_id": "docking-anchoring",
+        "score": 52.5,
+        "pass_score": 80,
+        "passed": false,
+        "completed_at": "2025-01-15T10:30:00.000Z"
+      },
+      {
+        "attempt_id": "session-steering-seed",
+        "mission_id": "HQ-M01",
+        "mission_title": "Basic Steering",
+        "module_id": "steering-speed",
+        "score": 85.75,
+        "pass_score": 65,
+        "passed": true,
+        "completed_at": "2025-01-14T14:00:00.000Z"
+      }
+    ],
+    "module_passes": [
+      {
+        "pass_id": "pass-steering-alex",
+        "module_id": "steering-speed",
+        "passed_at": "2025-01-14T14:00:00.000Z"
+      }
+    ],
+    "instructor_feedback": [],
+    "navigation_missions": [
+      {
+        "mission_id": "HQ-M01",
+        "title": "Basic Steering",
+        "difficulty": "BEGINNER",
+        "description": "Maintain heading and execute controlled turns in open water.",
+        "pass_score": 65,
+        "training_module": {
+          "module_id": "steering-speed",
+          "title": "Basic Steering & Speed Control",
+          "category": "Fundamentals",
+          "duration": "5-10 minutes",
+          "difficulty": "Beginner",
+          "reward": "+100 XP",
+          "steps": [
+            {
+              "step_index": 0,
+              "instruction": "Press W to accelerate to 3 knots",
+              "validator_type": "speed_min",
+              "placeholder": false
+            },
+            {
+              "step_index": 1,
+              "instruction": "Press A to turn left 90 degrees",
+              "validator_type": "heading",
+              "requires_turn": true
+            }
+          ],
+          "objectives": [
+            "Accelerate smoothly to cruising speed",
+            "Execute controlled turns while maintaining speed"
+          ]
+        }
+      }
+    ]
+  }
+]

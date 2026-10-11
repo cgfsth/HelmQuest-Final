@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quiz System Test Executor</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #fff;
+    }
+    .test-case {
+      background: #2a2a2a;
+      padding: 15px;
+      margin: 15px 0;
+      border-radius: 8px;
+      border-left: 4px solid #3b82f6;
+    }
+    .test-case.pass {
+      border-left-color: #22c55e;
+    }
+    .test-case.fail {
+      border-left-color: #ef4444;
+    }
+    .test-case.pending {
+      border-left-color: #eab308;
+    }
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover {
+      background: #2563eb;
+    }
+    .status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .status.pass { background: #22c55e; }
+    .status.fail { background: #ef4444; }
+    .status.pending { background: #eab308; }
+    .log {
+      background: #1a1a1a;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    h1 { color: #3b82f6; }
+    h2 { color: #60a5fa; }
+    pre {
+      background: #1a1a1a;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Post-Docking Quiz System - Test Executor</h1>
+  
+  <div style="background: #2a2a2a; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+    <h2>Setup</h2>
+    <button onclick="setupTestData()">1. Setup Test Data</button>
+    <button onclick="checkTestData()">2. Verify Test Data</button>
+    <button onclick="inspectQuizData()">3. Inspect Quiz Data</button>
+    <button onclick="clearTestData()">Clear Test Data</button>
+    <div id="setup-log" class="log"></div>
+  </div>
+
+  <div style="background: #2a2a2a; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+    <h2>Test Execution</h2>
+    <button onclick="runAllTests()">Run All Tests</button>
+    <button onclick="exportResults()">Export Results</button>
+    <div id="test-results"></div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'helmquest-progress-v3';
+    
+    const testQuiz = {
+      id: 'quiz-test-001',
+      title: 'Module 1 Mission 1 Quiz',
+      description: 'Test your knowledge of basic boat operation and safety',
+      questions: [
+        {
+          id: 'q1',
+          prompt: 'What is the primary purpose of dropping an anchor?',
+          type: 'multiple-choice',
+          options: ['To stop the boat', 'To secure the boat in position', 'To catch fish', 'To add weight to the boat'],
+          correctAnswer: 'To secure the boat in position',
+          order: 0
+        },
+        {
+          id: 'q2',
+          prompt: 'The anchor should be dropped slowly to avoid damaging the boat.',
+          type: 'true-false',
+          correctAnswer: 'True',
+          order: 1
+        },
+        {
+          id: 'q3',
+          prompt: 'What key do you press to deploy the anchor?',
+          type: 'fill-in-the-blank',
+          correctAnswer: 'H',
+          order: 2
+        },
+        {
+          id: 'q4',
+          prompt: 'Which of the following is NOT a safety consideration when anchoring?',
+          type: 'multiple-choice',
+          options: ['Water depth', 'Wind direction', 'Time of day', 'Bottom type'],
+          correctAnswer: 'Time of day',
+          order: 3
+        },
+        {
+          id: 'q5',
+          prompt: 'You should always check the anchor is secure before leaving the helm.',
+          type: 'true-false',
+          correctAnswer: 'True',
+          order: 4
+        }
+      ],
+      buoyCount: 0,
+      createdAt: new Date().toISOString(),
+      createdBy: 'instructor-helen',
+      updatedAt: new Date().toISOString()
+    };
+
+    const testAssignment = {
+      id: 'assignment-test-001',
+      quizId: 'quiz-test-001',
+      targetType: 'module',
+      targetId: 'm1-mission1',
+      createdAt: new Date().toISOString(),
+      createdBy: 'instructor-helen'
+    };
+
+    function log(message, isError = false) {
+      const logDiv = document.getElementById('setup-log');
+      const timestamp = new Date().toLocaleTimeString();
+      const color = isError ? '#ef4444' : '#22c55e';
+      logDiv.innerHTML += `<div style="color: ${color}">[${timestamp}] ${message}</div>`;
+      logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    function setupTestData() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        let progressData;
+        
+        if (raw) {
+          progressData = JSON.parse(raw);
+          log('✓ Loaded existing progress data');
+        } else {
+          log('✗ No progress data found - Please login to the application first!', true);
+          return;
+        }
+        
+        // Initialize quiz arrays
+        if (!progressData.quizzes) progressData.quizzes = [];
+        if (!progressData.quizAssignments) progressData.quizAssignments = [];
+        if (!progressData.quizSubmissions) progressData.quizSubmissions = [];
+        if (!progressData.quizResults) progressData.quizResults = [];
+        
+        // Add or update quiz
+        const existingQuizIndex = progressData.quizzes.findIndex(q => q.id === testQuiz.id);
+        if (existingQuizIndex >= 0) {
+          progressData.quizzes[existingQuizIndex] = testQuiz;
+          log('✓ Updated existing test quiz');
+        } else {
+          progressData.quizzes.push(testQuiz);
+          log('✓ Added new test quiz');
+        }
+        
+        // Add or update assignment
+        const existingAssignmentIndex = progressData.quizAssignments.findIndex(a => a.id === testAssignment.id);
+        if (existingAssignmentIndex >= 0) {
+          progressData.quizAssignments[existingAssignmentIndex] = testAssignment;
+          log('✓ Updated existing test assignment');
+        } else {
+          progressData.quizAssignments.push(testAssignment);
+          log('✓ Added new test assignment');
+        }
+        
+        // Save back
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(progressData));
+        log('✓ Test data saved successfully!');
+        log(`Quiz ID: ${testQuiz.id}`);
+        log(`Assignment: ${testAssignment.targetId} (${testAssignment.targetType})`);
+        
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, true);
+      }
+    }
+
+    function checkTestData() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+          log('✗ No progress data in localStorage', true);
+          return;
+        }
+        
+        const progressData = JSON.parse(raw);
+        const quiz = progressData.quizzes?.find(q => q.id === 'quiz-test-001');
+        const assignment = progressData.quizAssignments?.find(a => a.id === 'assignment-test-001');
+        
+        if (quiz) {
+          log(`✓ Test quiz found: "${quiz.title}"`);
+          log(`  Questions: ${quiz.questions.length}`);
+        } else {
+          log('✗ Test quiz NOT found', true);
+        }
+        
+        if (assignment) {
+          log(`✓ Test assignment found: ${assignment.targetId}`);
+        } else {
+          log('✗ Test assignment NOT found', true);
+        }
+        
+        log(`Total quizzes: ${progressData.quizzes?.length || 0}`);
+        log(`Total assignments: ${progressData.quizAssignments?.length || 0}`);
+        log(`Total submissions: ${progressData.quizSubmissions?.length || 0}`);
+        
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, true);
+      }
+    }
+
+    function inspectQuizData() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+          log('✗ No progress data', true);
+          return;
+        }
+        
+        const progressData = JSON.parse(raw);
+        const quiz = progressData.quizzes?.find(q => q.id === 'quiz-test-001');
+        
+        if (quiz) {
+          log('Quiz Data:');
+          console.log('Full Quiz Object:', quiz);
+          log(JSON.stringify(quiz, null, 2));
+        } else {
+          log('✗ Test quiz not found', true);
+        }
+        
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, true);
+      }
+    }
+
+    function clearTestData() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+          log('✗ No progress data to clear', true);
+          return;
+        }
+        
+        const progressData = JSON.parse(raw);
+        
+        // Remove test quiz
+        if (progressData.quizzes) {
+          progressData.quizzes = progressData.quizzes.filter(q => q.id !== 'quiz-test-001');
+          log('✓ Removed test quiz');
+        }
+        
+        // Remove test assignment
+        if (progressData.quizAssignments) {
+          progressData.quizAssignments = progressData.quizAssignments.filter(a => a.id !== 'assignment-test-001');
+          log('✓ Removed test assignment');
+        }
+        
+        // Remove test submissions
+        if (progressData.quizSubmissions) {
+          const before = progressData.quizSubmissions.length;
+          progressData.quizSubmissions = progressData.quizSubmissions.filter(s => s.quizId !== 'quiz-test-001');
+          const after = progressData.quizSubmissions.length;
+          log(`✓ Removed ${before - after} test submissions`);
+        }
+        
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(progressData));
+        log('✓ Test data cleared successfully!');
+        
+      } catch (error) {
+        log(`✗ Error: ${error.message}`, true);
+      }
+    }
+
+    function runAllTests() {
+      const resultsDiv = document.getElementById('test-results');
+      resultsDiv.innerHTML = '<h3>Running Tests...</h3>';
+      
+      const tests = [
+        { name: 'TC-1: Test Data Present', fn: testDataPresent },
+        { name: 'TC-2: Quiz Structure Valid', fn: testQuizStructure },
+        { name: 'TC-3: Assignment Linked', fn: testAssignmentLinked },
+        { name: 'TC-4: Question Types', fn: testQuestionTypes },
+        { name: 'TC-5: Correct Answers Present', fn: testCorrectAnswers },
+      ];
+      
+      let results = '';
+      let passed = 0;
+      let failed = 0;
+      
+      tests.forEach(test => {
+        try {
+          const result = test.fn();
+          if (result.success) {
+            passed++;
+            results += createTestCaseHTML(test.name, 'pass', result.message);
+          } else {
+            failed++;
+            results += createTestCaseHTML(test.name, 'fail', result.message);
+          }
+        } catch (error) {
+          failed++;
+          results += createTestCaseHTML(test.name, 'fail', `Error: ${error.message}`);
+        }
+      });
+      
+      resultsDiv.innerHTML = `
+        <h3>Test Results</h3>
+        <p>Passed: ${passed} | Failed: ${failed} | Total: ${tests.length}</p>
+        ${results}
+      `;
+    }
+
+    function createTestCaseHTML(name, status, message) {
+      const statusBadge = `<span class="status ${status}">${status.toUpperCase()}</span>`;
+      return `
+        <div class="test-case ${status}">
+          <h4>${name} ${statusBadge}</h4>
+          <p>${message}</p>
+        </div>
+      `;
+    }
+
+    // Test Functions
+    function testDataPresent() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return { success: false, message: 'No progress data in localStorage' };
+      
+      const data = JSON.parse(raw);
+      const quiz = data.quizzes?.find(q => q.id === 'quiz-test-001');
+      
+      if (!quiz) return { success: false, message: 'Test quiz not found' };
+      return { success: true, message: 'Test quiz present in localStorage' };
+    }
+
+    function testQuizStructure() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const data = JSON.parse(raw);
+      const quiz = data.quizzes?.find(q => q.id === 'quiz-test-001');
+      
+      if (!quiz) return { success: false, message: 'Quiz not found' };
+      if (!quiz.title) return { success: false, message: 'Missing title' };
+      if (!quiz.description) return { success: false, message: 'Missing description' };
+      if (!quiz.questions || quiz.questions.length === 0) {
+        return { success: false, message: 'Missing questions array' };
+      }
+      if (quiz.questions.length !== 5) {
+        return { success: false, message: `Expected 5 questions, found ${quiz.questions.length}` };
+      }
+      
+      return { success: true, message: `Quiz structure valid with ${quiz.questions.length} questions` };
+    }
+
+    function testAssignmentLinked() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const data = JSON.parse(raw);
+      const assignment = data.quizAssignments?.find(a => a.id === 'assignment-test-001');
+      
+      if (!assignment) return { success: false, message: 'Assignment not found' };
+      if (assignment.quizId !== 'quiz-test-001') {
+        return { success: false, message: 'Assignment not linked to test quiz' };
+      }
+      if (assignment.targetId !== 'm1-mission1') {
+        return { success: false, message: `Wrong target: ${assignment.targetId}` };
+      }
+      if (assignment.targetType !== 'module') {
+        return { success: false, message: `Wrong type: ${assignment.targetType}` };
+      }
+      
+      return { success: true, message: 'Assignment correctly linked to m1-mission1' };
+    }
+
+    function testQuestionTypes() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const data = JSON.parse(raw);
+      const quiz = data.quizzes?.find(q => q.id === 'quiz-test-001');
+      
+      if (!quiz) return { success: false, message: 'Quiz not found' };
+      
+      const types = quiz.questions.map(q => q.type);
+      const hasMultipleChoice = types.includes('multiple-choice');
+      const hasTrueFalse = types.includes('true-false');
+      const hasFillInBlank = types.includes('fill-in-the-blank');
+      
+      if (!hasMultipleChoice) return { success: false, message: 'Missing multiple-choice questions' };
+      if (!hasTrueFalse) return { success: false, message: 'Missing true-false questions' };
+      if (!hasFillInBlank) return { success: false, message: 'Missing fill-in-blank questions' };
+      
+      return { success: true, message: 'All question types present: multiple-choice (2), true-false (2), fill-in-blank (1)' };
+    }
+
+    function testCorrectAnswers() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const data = JSON.parse(raw);
+      const quiz = data.quizzes?.find(q => q.id === 'quiz-test-001');
+      
+      if (!quiz) return { success: false, message: 'Quiz not found' };
+      
+      const missing = quiz.questions.filter(q => !q.correctAnswer);
+      if (missing.length > 0) {
+        return { success: false, message: `${missing.length} questions missing correctAnswer field` };
+      }
+      
+      return { success: true, message: 'All questions have correctAnswer field defined' };
+    }
+
+    function exportResults() {
+      const resultsDiv = document.getElementById('test-results');
+      const text = resultsDiv.innerText;
+      const blob = new Blob([text], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'quiz-test-results.txt';
+      a.click();
+      URL.revokeObjectURL(url);
+      log('✓ Results exported');
+    }
+  </script>
+</body>
+</html>

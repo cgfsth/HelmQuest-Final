@@ -1,0 +1,72 @@
+// HelmQuest database schema (DBML)
+// Paste into https://dbdiagram.io to export PNG/PDF like a classic ERD
+
+Table user {
+  user_id varchar [pk, note: 'e.g. student-alex, instructor-helen']
+  name varchar
+  username varchar
+  email varchar [unique]
+  password varchar
+  role varchar [note: 'student | instructor']
+}
+
+Table student {
+  student_id varchar [pk]
+  user_id varchar [ref: > user.user_id]
+  name varchar
+  email varchar
+  xp int
+  rank varchar
+  missions_completed int
+}
+
+Table training_module {
+  module_id varchar [pk, note: 'e.g. steering-speed']
+  title varchar
+  category varchar
+  description text
+  duration varchar
+  difficulty varchar
+  reward varchar
+}
+
+Table navigation_mission {
+  mission_id varchar [pk, note: 'e.g. HQ-M01']
+  module_id varchar [ref: > training_module.module_id]
+  title varchar
+  difficulty varchar
+  description text
+  pass_score int
+}
+
+Table mission_attempt {
+  attempt_id varchar [pk]
+  student_id varchar [ref: > student.student_id]
+  mission_id varchar [ref: > navigation_mission.mission_id]
+  module_id varchar [ref: > training_module.module_id]
+  score float
+  pass_score int
+  passed boolean
+  completed_at datetime
+}
+
+Table student_module_pass {
+  pass_id varchar [pk]
+  student_id varchar [ref: > student.student_id]
+  module_id varchar [ref: > training_module.module_id]
+  passed_at datetime
+}
+
+Table instructor_feedback {
+  feedback_id varchar [pk]
+  attempt_id varchar [ref: > mission_attempt.attempt_id]
+  instructor_id varchar [ref: > user.user_id]
+  comment text
+  created_at datetime
+}
+
+// Relationship notes (shown on dbdiagram.io)
+// user has student (1:1 for student role)
+// student submits mission_attempt
+// training_module includes navigation_mission
+// navigation_mission records mission_attempt

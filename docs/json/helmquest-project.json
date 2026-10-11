@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmquest.local/schemas/helmquest-project.json",
+  "title": "HelmQuest Project Manifest",
+  "version": "1.0.0",
+  "generatedAt": "2026-05-30",
+  "project": {
+    "name": "HelmQuest",
+    "packageName": "threejs-ocean",
+    "description": "Browser-based 3D marine navigation trainer for fisheries students",
+    "repository": "d:/tabang",
+    "deployment": "static-spa",
+    "entryPoint": "main.js",
+    "primaryComponent": "App.vue"
+  },
+  "techStack": {
+    "frontend": ["Vue 3", "Vite 5"],
+    "rendering": ["Three.js 0.163", "WebGL"],
+    "loaders": ["GLTFLoader", "OBJLoader", "STLLoader"],
+    "animation": ["requestAnimationFrame", "@tweenjs/tween.js"],
+    "backend": null,
+    "database": null
+  },
+  "screens": [
+    { "id": "landing", "label": "Landing cinematic", "requiresAuth": false },
+    { "id": "mainmenu", "label": "Main menu", "requiresAuth": false },
+    { "id": "play-options", "label": "Play options", "requiresAuth": false },
+    { "id": "training", "label": "Training module picker", "requiresAuth": true },
+    { "id": "auth", "label": "Login", "requiresAuth": false },
+    { "id": "dashboard", "label": "Student/instructor dashboard", "requiresAuth": true },
+    { "id": "simulation", "label": "3D simulation", "requiresAuth": false },
+    { "id": "missions", "label": "Mission select", "requiresAuth": true, "status": "stub" }
+  ],
+  "cameraModes": [
+    { "id": "chase", "description": "Follow camera with mouse look offset" },
+    { "id": "orbit", "description": "OrbitControls around boat" },
+    { "id": "helm", "description": "Fixed bridge POV with MFD overlay" }
+  ],
+  "controls": [
+    { "key": "W", "action": "forward_thrust" },
+    { "key": "S", "action": "reverse_thrust" },
+    { "key": "A", "action": "turn_port" },
+    { "key": "D", "action": "turn_starboard" },
+    { "key": "C", "action": "cycle_camera" },
+    { "key": "H", "action": "toggle_anchor" },
+    { "key": "Mouse", "action": "look_yaw_pitch" },
+    { "key": "Backtick", "action": "hold_exit_to_dashboard" }
+  ],
+  "modules": [
+    {
+      "path": "helpers/oceanSimulation.js",
+      "exports": ["createOceanSimulation", "update", "setSunDirection"],
+      "role": "Water shader plane"
+    },
+    {
+      "path": "helpers/sceneEnvironment.js",
+      "exports": ["SCENE_WATERLINE_Y", "SIMULATION_SPAWN", "updateSimulationSpawn"],
+      "role": "Spawn and waterline constants"
+    },
+    {
+      "path": "helpers/worldIslands.js",
+      "exports": ["loadArchipelago", "clampToOceanBounds"],
+      "role": "Island GLTF and collision"
+    },
+    {
+      "path": "helpers/loadBoatModel.js",
+      "exports": ["loadBoatModel"],
+      "role": "Vessel asset loading"
+    },
+    {
+      "path": "helpers/normalizeBoatScale.js",
+      "exports": ["normalizeBoatToScene"],
+      "role": "LOA scaling and BoatPivot"
+    },
+    {
+      "path": "helpers/helmCockpit.js",
+      "exports": ["createHelmCockpit", "HELM_CAMERA_POS", "HELM_CAMERA_LOOK"],
+      "role": "Helm wheel and camera constants"
+    },
+    {
+      "path": "helpers/helmInterior.js",
+      "exports": ["buildHelmInterior", "syncHelmInteriorVisibility"],
+      "role": "Procedural wheelhouse"
+    },
+    {
+      "path": "helpers/helmDeckRails.js",
+      "exports": ["syncHelmDeckRailsVisibility", "tagHelmDeckRailMeshes"],
+      "role": "Deck rail visibility"
+    },
+    {
+      "path": "helpers/helmInstrumentsHud.js",
+      "exports": ["initHelmInstrumentsHud", "updateHelmInstrumentsHud"],
+      "role": "Radar and nav chart canvases"
+    }
+  ],
+  "assets": [
+    { "url": "/assets/trawler (1).glb", "type": "model", "role": "default_vessel" },
+    { "url": "/assets/ship_wheel.glb", "type": "model", "role": "helm_wheel" },
+    { "url": "helpers/tropical_island/scene.gltf", "type": "model", "role": "archipelago" },
+    { "url": "/music.m4a", "type": "audio", "role": "ambient_loop" },
+    { "url": "/seafarer_logo.png", "type": "image", "role": "branding" }
+  ],
+  "simulationDefaults": {
+    "boatModelUrl": "/assets/trawler (1).glb",
+    "targetLoaMeters": 16,
+    "spawn": { "x": 120, "z": 180 },
+    "waterlineY": 0,
+    "defaultHeadingRadians": 1.5707963267948966,
+    "physics": {
+      "thrustForce": 0.7,
+      "dragCoefficient": 0.24,
+      "waterReactionForce": 0.015,
+      "mass": 100,
+      "decelerationRate": 0.96,
+      "waveAmplitude": 0.85,
+      "waveFrequency": 1.0,
+      "windForce": 0.05,
+      "sinkingThreshold": 250,
+      "waterlineOffset": 0
+    },
+    "wind": { "speed": 0.1, "directionAngle": 90 },
+    "helmCamera": {
+      "position": { "x": 6.88, "y": 5.35, "z": 0.05 },
+      "lookAt": { "x": 120, "y": 5.05, "z": 0.02 }
+    }
+  },
+  "trainingModuleCount": 6,
+  "documentation": {
+    "systemPlanning": "docs/system-planning.md",
+    "gantt": "docs/gantt.md",
+    "dataFlow": "docs/data-flow.md",
+    "erd": "docs/erd.md",
+    "jsonDesignSchema": "docs/json/helmquest-design-schema.json",
+    "jsonDesignSchemaDoc": "docs/json-design-schema.md",
+    "entities": "docs/json/helmquest-entities.json",
+    "schemas": "docs/json/helmquest-schemas.json",
+    "trainingModules": "docs/json/helmquest-training-modules.json"
+  }
+}

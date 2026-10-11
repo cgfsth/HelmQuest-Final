@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HelmQuest Firebase Setup</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 800px;
+      width: 100%;
+      padding: 40px;
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 32px;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 16px;
+    }
+
+    .status-box {
+      background: #f8f9fa;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-left: 4px solid #667eea;
+    }
+
+    .status-box h3 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 18px;
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      padding: 8px 0;
+      font-size: 14px;
+    }
+
+    .status-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      margin-right: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+    }
+
+    .status-pending {
+      background: #ffc107;
+      color: white;
+    }
+
+    .status-success {
+      background: #28a745;
+      color: white;
+    }
+
+    .status-error {
+      background: #dc3545;
+      color: white;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 15px;
+      margin-top: 30px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 15px 30px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-secondary {
+      background: #6c757d;
+      color: white;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: #5a6268;
+    }
+
+    .console-output {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      border-radius: 10px;
+      padding: 20px;
+      margin-top: 20px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      max-height: 400px;
+      overflow-y: auto;
+      display: none;
+    }
+
+    .console-output.active {
+      display: block;
+    }
+
+    .console-line {
+      margin-bottom: 5px;
+      line-height: 1.5;
+    }
+
+    .console-success {
+      color: #4ec9b0;
+    }
+
+    .console-error {
+      color: #f48771;
+    }
+
+    .console-info {
+      color: #9cdcfe;
+    }
+
+    .console-warn {
+      color: #dcdcaa;
+    }
+
+    .spinner {
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .checklist {
+      background: #f8f9fa;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .checklist-item {
+      display: flex;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid #e9ecef;
+    }
+
+    .checklist-item:last-child {
+      border-bottom: none;
+    }
+
+    .checklist-checkbox {
+      width: 24px;
+      height: 24px;
+      border: 2px solid #667eea;
+      border-radius: 6px;
+      margin-right: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 16px;
+    }
+
+    .checklist-checkbox.checked {
+      background: #667eea;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔥 HelmQuest Firebase Setup</h1>
+    <p class="subtitle">Automatic database initialization and data migration</p>
+
+    <div class="checklist">
+      <h3 style="margin-bottom: 15px;">Setup Checklist:</h3>
+      <div class="checklist-item">
+        <div class="checklist-checkbox" id="check-firestore">
+          <span>✓</span>
+        </div>
+        <div>Firestore Database enabled</div>
+      </div>
+      <div class="checklist-item">
+        <div class="checklist-checkbox" id="check-auth">
+          <span>✓</span>
+        </div>
+        <div>Authentication enabled (Email/Password)</div>
+      </div>
+      <div class="checklist-item">
+        <div class="checklist-checkbox" id="check-rules">
+          <span>✓</span>
+        </div>
+        <div>Security rules published</div>
+      </div>
+    </div>
+
+    <div class="status-box">
+      <h3>Firebase Connection Status</h3>
+      <div class="status-item">
+        <div class="status-icon status-pending" id="status-icon">⏳</div>
+        <span id="status-text">Ready to setup...</span>
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button class="btn btn-primary" id="btn-setup">
+        <span>🚀 Start Automatic Setup</span>
+      </button>
+      <button class="btn btn-secondary" id="btn-test">
+        <span>🔗 Test Connection</span>
+      </button>
+      <button class="btn btn-secondary" id="btn-summary">
+        <span>📊 Show Data Summary</span>
+      </button>
+    </div>
+
+    <div class="console-output" id="console-output"></div>
+  </div>
+
+  <script type="module">
+    import { autoSetupFirebase, testFirebaseConnection, showFirebaseDataSummary } from './src/firebase/auto-setup.js';
+
+    const btnSetup = document.getElementById('btn-setup');
+    const btnTest = document.getElementById('btn-test');
+    const btnSummary = document.getElementById('btn-summary');
+    const statusIcon = document.getElementById('status-icon');
+    const statusText = document.getElementById('status-text');
+    const consoleOutput = document.getElementById('console-output');
+
+    // Override console methods to display in UI
+    const originalLog = console.log;
+    const originalError = console.error;
+    const originalWarn = console.warn;
+
+    function addConsoleLog(message, type = 'info') {
+      consoleOutput.classList.add('active');
+      const line = document.createElement('div');
+      line.className = `console-line console-${type}`;
+      line.textContent = message;
+      consoleOutput.appendChild(line);
+      consoleOutput.scrollTop = consoleOutput.scrollHeight;
+    }
+
+    console.log = (...args) => {
+      originalLog(...args);
+      addConsoleLog(args.join(' '), 'info');
+    };
+
+    console.error = (...args) => {
+      originalError(...args);
+      addConsoleLog(args.join(' '), 'error');
+    };
+
+    console.warn = (...args) => {
+      originalWarn(...args);
+      addConsoleLog(args.join(' '), 'warn');
+    };
+
+    // Setup button click handler
+    btnSetup.addEventListener('click', async () => {
+      btnSetup.disabled = true;
+      btnTest.disabled = true;
+      btnSummary.disabled = true;
+      
+      statusIcon.className = 'status-icon status-pending';
+      statusIcon.innerHTML = '<div class="spinner"></div>';
+      statusText.textContent = 'Setting up Firebase...';
+      
+      consoleOutput.innerHTML = '';
+      
+      try {
+        const results = await autoSetupFirebase();
+        
+        statusIcon.className = 'status-icon status-success';
+        statusIcon.textContent = '✓';
+        statusText.textContent = 'Setup completed successfully!';
+        
+        // Mark all checklist items as complete
+        document.getElementById('check-firestore').classList.add('checked');
+        document.getElementById('check-auth').classList.add('checked');
+        document.getElementById('check-rules').classList.add('checked');
+        
+      } catch (error) {
+        statusIcon.className = 'status-icon status-error';
+        statusIcon.textContent = '✗';
+        statusText.textContent = 'Setup failed. Check console for details.';
+      } finally {
+        btnSetup.disabled = false;
+        btnTest.disabled = false;
+        btnSummary.disabled = false;
+      }
+    });
+
+    // Test connection button
+    btnTest.addEventListener('click', async () => {
+      btnTest.disabled = true;
+      consoleOutput.innerHTML = '';
+      
+      const isConnected = await testFirebaseConnection();
+      
+      if (isConnected) {
+        statusIcon.className = 'status-icon status-success';
+        statusIcon.textContent = '✓';
+        statusText.textContent = 'Connected to Firebase!';
+      } else {
+        statusIcon.className = 'status-icon status-error';
+        statusIcon.textContent = '✗';
+        statusText.textContent = 'Connection failed. Check Firebase settings.';
+      }
+      
+      btnTest.disabled = false;
+    });
+
+    // Show data summary button
+    btnSummary.addEventListener('click', async () => {
+      btnSummary.disabled = true;
+      consoleOutput.innerHTML = '';
+      
+      await showFirebaseDataSummary();
+      
+      btnSummary.disabled = false;
+    });
+  </script>
+</body>
+</html>

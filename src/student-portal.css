@@ -1,0 +1,309 @@
+/* Student-only layout rules; instructor/admin consoles retain their own navigation. */
+.student-mobile-toolbar,
+.student-menu-close {
+  display: none;
+}
+
+.student-dashboard-overlay .student-hub-shell .missions-hub-intro {
+  min-width: 0;
+}
+
+.student-dashboard-overlay .student-hub-shell .missions-hub-welcome,
+.student-dashboard-overlay .student-hub-shell .missions-hub-note {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+@media (width < 1024px) {
+  .scene-overlay.student-dashboard-overlay {
+    padding: 0 20px 28px;
+    overflow-x: hidden;
+  }
+
+  .student-dashboard-overlay.student-dashboard-overlay--menu-open {
+    overflow-y: hidden;
+  }
+
+  .student-dashboard-overlay .student-hub-shell {
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .missions-main {
+    gap: 20px;
+  }
+
+  .student-dashboard-overlay .student-mobile-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: max(12px, env(safe-area-inset-top)) 0 12px;
+    background: #0d1b2a;
+    border-bottom: 1px solid rgba(56, 189, 248, 0.2);
+  }
+
+  .student-mobile-toolbar strong {
+    color: #e2e8f0;
+    font-family: 'Rajdhani', 'Outfit', sans-serif;
+    letter-spacing: 1px;
+  }
+
+  .student-menu-trigger,
+  .student-menu-close {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    border-radius: 8px;
+    background: #122e43;
+    color: #7dd3fc;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .student-menu-trigger > span:first-child {
+    font-size: 1.35rem;
+    line-height: 1;
+  }
+
+  .student-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    padding: 0;
+    border: 0;
+    background: rgba(2, 6, 23, 0.7);
+  }
+
+  .student-dashboard-overlay .student-hub-shell .hub-sidebar {
+    box-sizing: border-box;
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 101;
+    width: min(300px, calc(100vw - 32px));
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: max(16px, env(safe-area-inset-top)) 18px max(20px, env(safe-area-inset-bottom));
+    gap: 16px;
+    border-radius: 0 16px 16px 0;
+    background: linear-gradient(180deg, #0f1c30, #0a101c);
+    transform: translateX(-105%);
+    visibility: hidden;
+    pointer-events: none;
+    transition: transform 180ms ease;
+  }
+
+  .student-dashboard-overlay .student-hub--menu-open .hub-sidebar {
+    transform: translateX(0);
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .student-menu-close {
+    align-self: flex-end;
+    flex-shrink: 0;
+  }
+
+  .student-dashboard-overlay .hub-sidebar > * {
+    flex-shrink: 0;
+  }
+
+  .student-dashboard-overlay .hub-nav-item,
+  .student-dashboard-overlay .hub-sidebar-logout,
+  .student-dashboard-overlay .training-record-tab,
+  .student-dashboard-overlay .leaderboard-tab,
+  .student-dashboard-overlay .hub-mission-start {
+    min-height: 44px;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .student-profile-card--horizontal {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .student-dashboard-overlay .student-hub-shell .student-profile-left {
+    grid-column: 1 / -1;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .student-profile-rank-label,
+  .student-dashboard-overlay .student-hub-shell .student-profile-badge-title-large {
+    overflow-wrap: anywhere;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .training-records-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .training-record-tab {
+    flex: none;
+    min-width: 0;
+    box-sizing: border-box;
+    justify-content: center;
+    padding: 12px 16px;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .training-records-table-wrapper {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .leaderboard-item {
+    grid-template-columns: 44px minmax(0, 1fr) minmax(80px, 120px) 80px;
+    gap: 12px;
+    padding: 16px 12px;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .leaderboard-stat:nth-child(4) {
+    display: block;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .leaderboard-name {
+    min-width: 0;
+    flex-wrap: wrap;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (width < 768px) {
+  .student-dashboard-overlay .student-hub-shell .training-records-tabs > .training-record-tab {
+    min-height: 54px;
+    padding: 10px 8px;
+    gap: 6px;
+    font-size: 0.75rem;
+    line-height: 1.35;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .training-records-tabs .tab-icon {
+    flex-shrink: 0;
+    font-size: 1rem;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .training-records-tabs .tab-text {
+    min-width: 0;
+  }
+
+  .scene-overlay.student-dashboard-overlay {
+    padding-inline: 16px;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .motivation-panel,
+  .student-dashboard-overlay .student-hub-shell .leaderboard-card {
+    padding: 14px;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .leaderboards-section {
+    padding: 0;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .training-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .student-dashboard-overlay .student-hub-shell .training-card {
+    padding: 16px;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .hub-mission-row {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .hub-mission-info {
+    min-width: 0;
+    flex: 1 1 160px;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .hub-mission-code,
+  .student-dashboard-overlay .student-hub-shell .mission-title,
+  .student-dashboard-overlay .student-hub-shell .quiz-title {
+    overflow-wrap: anywhere;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .mission-title {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .leaderboard-item {
+    grid-template-columns: 32px minmax(0, 1fr) minmax(64px, 0.6fr) 48px;
+    gap: 6px;
+    padding: 12px 8px;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .leaderboard-header-row,
+  .student-dashboard-overlay .student-hub-shell .leaderboard-stat,
+  .student-dashboard-overlay .student-hub-shell .leaderboard-name {
+    font-size: 0.75rem;
+    line-height: 1.5;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .leaderboard-stat {
+    overflow-wrap: anywhere;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .leaderboard-tabs {
+    gap: 10px;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .global-rank-card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .global-rank-stats {
+    grid-column: 1;
+    grid-row: auto;
+    justify-content: flex-start;
+  }
+}
+
+@media (width < 480px) {
+  .student-dashboard-overlay .student-hub-shell .leaderboard-header-row > span {
+    font-size: 0.65rem;
+    overflow-wrap: normal;
+    letter-spacing: 0.02em;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .student-profile-card--horizontal {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 14px;
+    gap: 12px;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .student-profile-badge-large {
+    justify-content: center;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .badge-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .student-dashboard-overlay .student-hub-shell .rank-title {
+    font-size: 0.72rem;
+  }
+
+  .student-dashboard-overlay .student-hub-shell .rank-xp-required,
+  .student-dashboard-overlay .student-hub-shell .rank-status-badge {
+    font-size: 0.6rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .student-dashboard-overlay .student-hub-shell .hub-sidebar {
+    transition: none;
+  }
+}

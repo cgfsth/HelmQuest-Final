@@ -1,0 +1,319 @@
+{
+  "$schema": "./helmquest-schemas.json#/definitions/TrainingModule",
+  "title": "HelmQuest Training Module Catalog",
+  "version": "1.0.0",
+  "generatedAt": "2026-05-30",
+  "source": "App.vue trainingModules ref",
+  "modules": [
+    {
+      "id": "steering-speed",
+      "title": "Basic Steering & Speed Control",
+      "category": "Fundamentals",
+      "description": "Learn essential boat handling skills including throttle control, steering techniques, and speed management.",
+      "objectives": [
+        "Accelerate smoothly to cruising speed",
+        "Execute controlled turns while maintaining speed",
+        "Practice gradual deceleration and stopping",
+        "Understand the relationship between speed and turning radius"
+      ],
+      "duration": "5-10 minutes",
+      "difficulty": "Beginner",
+      "reward": "+100 XP",
+      "completed": false,
+      "steps": [
+        {
+          "stepIndex": 0,
+          "instruction": "Press W to accelerate to 3 knots",
+          "validator": { "type": "speed", "minSpeedKnots": 3 }
+        },
+        {
+          "stepIndex": 1,
+          "instruction": "Press A to turn left 90 degrees",
+          "validator": { "type": "heading", "targetHeadingDeg": 90, "headingToleranceDeg": 10 }
+        },
+        {
+          "stepIndex": 2,
+          "instruction": "Press D to turn right 90 degrees",
+          "validator": { "type": "heading", "targetHeadingDeg": 180, "headingToleranceDeg": 10 }
+        },
+        {
+          "stepIndex": 3,
+          "instruction": "Release W to decelerate to 1 knot",
+          "validator": { "type": "speed", "minSpeedKnots": 0.5, "maxSpeedKnots": 1.5 }
+        },
+        {
+          "stepIndex": 4,
+          "instruction": "Press S to reverse briefly",
+          "validator": { "type": "speed", "maxSpeedKnots": -0.5 }
+        },
+        {
+          "stepIndex": 5,
+          "instruction": "Return to neutral and stop",
+          "validator": { "type": "speed", "minSpeedKnots": -0.3, "maxSpeedKnots": 0.3 }
+        }
+      ]
+    },
+    {
+      "id": "harbor",
+      "title": "Harbor Training",
+      "category": "Operations",
+      "description": "Master slow-speed turns and docking basics in a controlled harbor environment.",
+      "objectives": [
+        "Navigate through harbor at safe speed",
+        "Execute precise turns around buoys",
+        "Maintain proper distance from other vessels",
+        "Practice emergency stopping procedures"
+      ],
+      "duration": "10-15 minutes",
+      "difficulty": "Easy",
+      "reward": "+120 XP",
+      "completed": false,
+      "steps": [
+        {
+          "stepIndex": 0,
+          "instruction": "Enter harbor at speed below 2 knots",
+          "validator": { "type": "speed", "maxSpeedKnots": 2 }
+        },
+        {
+          "stepIndex": 1,
+          "instruction": "Navigate around first buoy marker",
+          "validator": { "type": "stub", "zoneId": "harbor-buoy-1" }
+        },
+        {
+          "stepIndex": 2,
+          "instruction": "Execute 90-degree turn at buoy",
+          "validator": { "type": "heading", "targetHeadingDeg": 90, "headingToleranceDeg": 15 }
+        },
+        {
+          "stepIndex": 3,
+          "instruction": "Maintain speed between 1-2 knots",
+          "validator": { "type": "speed", "minSpeedKnots": 1, "maxSpeedKnots": 2 }
+        },
+        {
+          "stepIndex": 4,
+          "instruction": "Complete harbor circuit",
+          "validator": { "type": "stub", "zoneId": "harbor-circuit-complete" }
+        },
+        {
+          "stepIndex": 5,
+          "instruction": "Come to complete stop at dock",
+          "validator": { "type": "speed", "minSpeedKnots": -0.2, "maxSpeedKnots": 0.2 }
+        }
+      ]
+    },
+    {
+      "id": "docking-anchoring",
+      "title": "Docking & Anchoring Procedures",
+      "category": "Operations",
+      "description": "Master safe docking techniques and proper anchoring procedures for various conditions.",
+      "objectives": [
+        "Approach dock at appropriate speed and angle",
+        "Execute parallel parking alongside dock",
+        "Deploy anchor safely in open water",
+        "Retrieve anchor and prepare for departure"
+      ],
+      "duration": "10-15 minutes",
+      "difficulty": "Intermediate",
+      "reward": "+200 XP",
+      "completed": false,
+      "steps": [
+        {
+          "stepIndex": 0,
+          "instruction": "Enter dock approach lane at slow speed",
+          "validator": { "type": "speed", "maxSpeedKnots": 2 }
+        },
+        {
+          "stepIndex": 1,
+          "instruction": "Parallel park alongside the berth — come to a full stop",
+          "validator": { "type": "speed", "minSpeedKnots": -0.2, "maxSpeedKnots": 0.2 }
+        },
+        {
+          "stepIndex": 2,
+          "instruction": "Sail to open-water anchorage",
+          "validator": { "type": "stub", "zoneId": "anchorage-zone" }
+        },
+        {
+          "stepIndex": 3,
+          "instruction": "Press H to deploy anchor",
+          "validator": { "type": "anchor", "anchorDeployed": true }
+        },
+        {
+          "stepIndex": 4,
+          "instruction": "Wait for boat to settle (almost stopped)",
+          "validator": { "type": "speed", "minSpeedKnots": -0.25, "maxSpeedKnots": 0.25 }
+        },
+        {
+          "stepIndex": 5,
+          "instruction": "Press H to retract anchor and prepare for departure",
+          "validator": { "type": "anchor", "anchorDeployed": false }
+        }
+      ]
+    },
+    {
+      "id": "storm",
+      "title": "Storm Passage",
+      "category": "Advanced",
+      "description": "Navigate rough water with limited visibility and challenging conditions.",
+      "objectives": [
+        "Maintain boat control in high waves",
+        "Navigate through storm gates",
+        "Keep heading stable despite wind",
+        "Execute safe maneuvers in emergency"
+      ],
+      "duration": "15-20 minutes",
+      "difficulty": "Medium",
+      "reward": "+220 XP",
+      "completed": false,
+      "steps": [
+        {
+          "stepIndex": 0,
+          "instruction": "Enter storm zone at reduced speed",
+          "validator": { "type": "speed", "maxSpeedKnots": 3 }
+        },
+        {
+          "stepIndex": 1,
+          "instruction": "Navigate through first storm gate",
+          "validator": { "type": "stub", "zoneId": "storm-gate-1" }
+        },
+        {
+          "stepIndex": 2,
+          "instruction": "Maintain heading within 15 degrees",
+          "validator": { "type": "stub", "headingToleranceDeg": 15 }
+        },
+        {
+          "stepIndex": 3,
+          "instruction": "Pass second storm gate",
+          "validator": { "type": "stub", "zoneId": "storm-gate-2" }
+        },
+        {
+          "stepIndex": 4,
+          "instruction": "Navigate through rough waves",
+          "validator": { "type": "stub" }
+        },
+        {
+          "stepIndex": 5,
+          "instruction": "Exit storm zone safely",
+          "validator": { "type": "stub", "zoneId": "storm-exit" }
+        }
+      ]
+    },
+    {
+      "id": "map-compass",
+      "title": "Nautical Map & Compass Reading",
+      "category": "Navigation",
+      "description": "Develop essential navigation skills using compass headings and understanding nautical charts.",
+      "objectives": [
+        "Read and interpret compass headings",
+        "Navigate to specific waypoints using bearings",
+        "Understand cardinal and intercardinal directions",
+        "Plan and execute a basic navigation route"
+      ],
+      "duration": "10-15 minutes",
+      "difficulty": "Intermediate",
+      "reward": "+180 XP",
+      "completed": false,
+      "steps": [
+        {
+          "stepIndex": 0,
+          "instruction": "Face North (0°) and read the compass (hold steady)",
+          "validator": { "type": "heading", "targetHeadingDeg": 0, "headingToleranceDeg": 12 }
+        },
+        {
+          "stepIndex": 1,
+          "instruction": "Turn to East (90°) — cardinal direction (deliberate turn)",
+          "validator": { "type": "heading", "targetHeadingDeg": 90, "headingToleranceDeg": 12 }
+        },
+        {
+          "stepIndex": 2,
+          "instruction": "Turn to South (180°) — cardinal direction (deliberate turn)",
+          "validator": { "type": "heading", "targetHeadingDeg": 180, "headingToleranceDeg": 12 }
+        },
+        {
+          "stepIndex": 3,
+          "instruction": "Turn to West (270°) — cardinal direction (deliberate turn)",
+          "validator": { "type": "heading", "targetHeadingDeg": 270, "headingToleranceDeg": 12 }
+        },
+        {
+          "stepIndex": 4,
+          "instruction": "Steer Northeast (45°) — intercardinal direction (hold steady)",
+          "validator": { "type": "heading", "targetHeadingDeg": 45, "headingToleranceDeg": 15 }
+        },
+        {
+          "stepIndex": 5,
+          "instruction": "Navigate to Waypoint Alpha on bearing 045°",
+          "validator": {
+            "type": "composite",
+            "zoneId": "nav-waypoint-a",
+            "targetHeadingDeg": 45,
+            "headingToleranceDeg": 22,
+            "maxSpeedKnots": 4
+          }
+        },
+        {
+          "stepIndex": 6,
+          "instruction": "Proceed to Waypoint Bravo on bearing 135° (SE)",
+          "validator": {
+            "type": "composite",
+            "zoneId": "nav-waypoint-b",
+            "targetHeadingDeg": 135,
+            "headingToleranceDeg": 22,
+            "maxSpeedKnots": 4
+          }
+        },
+        {
+          "stepIndex": 7,
+          "instruction": "Return to the departure point — complete your route",
+          "validator": { "type": "stub", "zoneId": "nav-return", "radiusMeters": 26 }
+        }
+      ]
+    },
+    {
+      "id": "emergency-docking",
+      "title": "Emergency Docking",
+      "category": "Advanced",
+      "description": "Complete time-critical safe docking procedure under pressure.",
+      "objectives": [
+        "Rapidly assess docking situation",
+        "Execute quick approach maneuvers",
+        "Maintain control during emergency stop",
+        "Secure vessel safely under time pressure"
+      ],
+      "duration": "5-10 minutes",
+      "difficulty": "Hard",
+      "reward": "+300 XP",
+      "completed": false,
+      "steps": [
+        {
+          "stepIndex": 0,
+          "instruction": "Approach emergency dock zone",
+          "validator": { "type": "stub", "zoneId": "emergency-dock" }
+        },
+        {
+          "stepIndex": 1,
+          "instruction": "Reduce speed rapidly",
+          "validator": { "type": "speed", "maxSpeedKnots": 1.5 }
+        },
+        {
+          "stepIndex": 2,
+          "instruction": "Align for emergency approach",
+          "validator": { "type": "heading", "headingToleranceDeg": 20, "note": "rotationDeg mod 180" }
+        },
+        {
+          "stepIndex": 3,
+          "instruction": "Execute emergency stop",
+          "validator": { "type": "speed", "minSpeedKnots": -0.3, "maxSpeedKnots": 0.3 }
+        },
+        {
+          "stepIndex": 4,
+          "instruction": "Secure vessel position",
+          "validator": { "type": "stub", "zoneId": "emergency-secure" }
+        },
+        {
+          "stepIndex": 5,
+          "instruction": "Complete emergency docking",
+          "validator": { "type": "stub", "zoneId": "emergency-complete" }
+        }
+      ]
+    }
+  ]
+}
