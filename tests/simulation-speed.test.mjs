@@ -51,7 +51,7 @@ test('one knot converts to exactly 1852 metres per hour', () => {
   assert.equal(metersPerSecondToKnots(knotsToMetersPerSecond(16)), 16);
 });
 
-for (const [type, limit] of [['small', 60], ['medium', 40], ['large', 45]]) {
+for (const [type, limit] of [['small', 60], ['medium', 50], ['large', 55]]) {
   test(`${type} accelerates gradually to its ${limit}-knot limit in missions and Set Sail at 30, 60 and 144 FPS`, () => {
     const results = [];
     for (const mode of ['mission', 'Set Sail']) {
@@ -60,7 +60,7 @@ for (const [type, limit] of [['small', 60], ['medium', 40], ['large', 45]]) {
         const at90 = run(context, profile.accelerationTimeTo90, fps);
         assert.ok(Math.abs(at90.speed - limit * .9) < .001, `${mode}/${fps} FPS: ${at90.speed}`);
         results.push(at90);
-        const cruise = run(context, profile.accelerationTimeTo90 * 3, fps);
+        const cruise = run(context, profile.accelerationTimeTo90 * 4, fps);
         assert.ok(cruise.speed > limit * .999 && cruise.speed <= limit);
         const previousX = cruise.x;
         run(context, 1, fps);
@@ -88,12 +88,41 @@ for (const [type, limit] of [['small', 60], ['medium', 40], ['large', 45]]) {
     assert.ok(context.speedVel > 0 && context.speedVel < coastingSpeed, 'engine-off keeps hull momentum');
     context.engineRunning.value = true;
     context.keyStates.KeyS = true;
-    run(context, 1);
+    run(context, .1);
     assert.ok(context.speedVel > 0, 'astern command cannot instantly reverse a moving vessel');
-    const reverse = run(context, 120 + profile.reverseTimeTo90 * 4);
+    const reverse = run(context, 10 + profile.reverseTimeTo90 * 4);
     assert.ok(reverse.speed < -profile.maxReverseKnots * .99 && reverse.speed >= -profile.maxReverseKnots);
   });
 }
+
+test('full-speed boats enter reverse promptly and build astern speed consistently across frame rates and launch modes', () => {
+  const reverseOnsets = [];
+  for (const [type, latestReverse, latest90] of [['small', 2.6, 3.8], ['medium', 3.1, 4.7], ['large', 4.1, 6.3]]) {
+    const results = [];
+    for (const mode of ['mission', 'Set Sail']) {
+      for (const fps of [30, 60, 144]) {
+        const context = simulation(type, mode), profile = context.profiles[type];
+        context.speedVel = knotsToMetersPerSecond(profile.maxSpeedKnots);
+        context.keyStates.KeyW = false;
+        context.keyStates.KeyS = true;
+        let onset = null;
+        for (let frame = 1; frame <= Math.ceil(latest90 * fps); frame++) {
+          context.updateBoatPhysics(1 / fps);
+          if (onset === null && context.speedVel < 0) onset = frame / fps;
+        }
+        assert.ok(onset > 0 && onset <= latestReverse, `${type}/${mode}/${fps} FPS: reverse after ${onset} s`);
+        assert.ok(context.stats.value.speedKnots <= -profile.maxReverseKnots * .9,
+          `${type}/${mode}/${fps} FPS: astern speed ${context.stats.value.speedKnots} kn after ${latest90} s`);
+        assert.ok(context.stats.value.speedKnots >= -profile.maxReverseKnots, 'reverse speed remains capped');
+        results.push(onset);
+      }
+    }
+    assert.ok(Math.max(...results) - Math.min(...results) <= 1 / 30, `${type}: reversal timing varies with FPS`);
+    reverseOnsets.push(results[0]);
+  }
+  assert.ok(reverseOnsets[0] < reverseOnsets[1] && reverseOnsets[1] < reverseOnsets[2],
+    'larger hulls still take longer to stop before reversing');
+});
 
 test('boosted turning works in both directions across frame rates while larger vessels keep more momentum', () => {
   const turns = [], retainedSpeed = [];
