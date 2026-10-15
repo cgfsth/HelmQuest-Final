@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { createModelLoader } from './modelLoader.js';
 import { SIMULATION_SPAWN, HARBOR_CHANNEL_ORIGIN, HARBOR_COAST_TARGET } from './sceneEnvironment.js';
 import { buildHarborRoute } from './missionWaypoints.js';
 import { getCachedHeightmapSync, sampleHeightmapElevation } from './terrainHeightmap.js';
@@ -676,7 +676,7 @@ export function buildHarborDocks(islandGroup, waterlineY = 0, options = {}) {
  * @param {number} waterlineY
  */
 async function loadHarborDocksFromGlb(glbPath, islandGroup, waterlineY) {
-  const loader = new GLTFLoader();
+  const loader = createModelLoader();
   let gltf;
   try {
     gltf = await new Promise((resolve, reject) => loader.load(glbPath, resolve, undefined, reject));

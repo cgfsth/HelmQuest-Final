@@ -1,10 +1,10 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { createModelLoader } from './modelLoader.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
 
-const gltfLoader = new GLTFLoader();
+const gltfLoader = createModelLoader();
 const objLoader = new OBJLoader();
 const stlLoader = new STLLoader();
 const mtlLoader = new MTLLoader();
@@ -113,9 +113,10 @@ function isGeometryValid(geometry) {
   const position = geometry.attributes.position;
   if (position.count === 0) return false;
 
-  const posArray = position.array;
-  for (let i = 0, len = posArray.length; i < len; i += 1) {
-    if (!Number.isFinite(posArray[i])) return false;
+  // Meshopt may use interleaved attributes; read through the attribute API.
+  for (let i = 0; i < position.count; i += 1) {
+    if (!Number.isFinite(position.getX(i)) || !Number.isFinite(position.getY(i)) ||
+        !Number.isFinite(position.getZ(i))) return false;
   }
   return true;
 }
@@ -136,8 +137,8 @@ function repairGeometryAttributes(geometry) {
   }
 
   try {
-    geometry.computeBoundingBox();
-    geometry.computeBoundingSphere();
+    if (!geometry.boundingBox) geometry.computeBoundingBox();
+    if (!geometry.boundingSphere) geometry.computeBoundingSphere();
   } catch (err) {
     return false;
   }
@@ -156,6 +157,7 @@ function repairGeometryAttributes(geometry) {
 /** Remove curve lines and fix Blender OBJ groups with mismatched attribute counts. */
 function sanitizeBoatRoot(root) {
   const toRemove = [];
+  const checkedGeometry = new Map();
 
   root.traverse((node) => {
     if (node.isLine || node.isLineSegments) {
@@ -165,7 +167,10 @@ function sanitizeBoatRoot(root) {
 
     if (!node.isMesh || !node.geometry) return;
 
-    const ok = repairGeometryAttributes(node.geometry);
+    if (!checkedGeometry.has(node.geometry)) {
+      checkedGeometry.set(node.geometry, repairGeometryAttributes(node.geometry));
+    }
+    const ok = checkedGeometry.get(node.geometry);
     if (!ok) {
       console.warn('[loadBoatModel] Removing invalid mesh due to bad geometry:', node.name || node.type);
       toRemove.push(node);
@@ -187,6 +192,7 @@ function sanitizeBoatRoot(root) {
 }
 
 function prepareBoatMeshes(root, { preserveMaterials = false } = {}) {
+  const preparedMaterials = new Map();
   const fallbackMat = brightenBoatMaterial(new THREE.MeshStandardMaterial({
     color: 0x3a7ec8,
     roughness: 0.48,
@@ -207,7 +213,13 @@ function prepareBoatMeshes(root, { preserveMaterials = false } = {}) {
     }
 
     let mats = Array.isArray(node.material) ? node.material : [node.material];
-    mats = mats.map((mat) => brightenBoatMaterial(mat || fallbackMat));
+    mats = mats.map((mat) => {
+      const original = mat || fallbackMat;
+      if (!preparedMaterials.has(original)) {
+        preparedMaterials.set(original, brightenBoatMaterial(original));
+      }
+      return preparedMaterials.get(original);
+    });
     node.material = Array.isArray(node.material) ? mats : mats[0];
 
     mats.forEach((mat) => {
@@ -255,23 +267,12 @@ function loadGltf(path) {
     gltfLoader.load(
       path,
       (gltf) => {
-        console.log('[loadBoatModel] Loaded GLTF from:', path);
-        console.log('[loadBoatModel] Scene object:', gltf.scene);
-        console.log('[loadBoatModel] Scene children count:', gltf.scene.children.length);
-        
-        // Log all top-level objects in the GLB
-        gltf.scene.traverse((node) => {
-          if (node.isMesh) {
-            console.log('[loadBoatModel] Mesh:', node.name, 'Material:', node.material?.type);
-            if (node.material) {
-              console.log('  - color:', node.material.color?.getHexString?.());
-              console.log('  - transparent:', node.material.transparent);
-              console.log('  - opacity:', node.material.opacity);
-            }
-          }
-        });
-        
-        resolve(finalizeBoatRoot(gltf.scene));
+        try {
+          resolve(finalizeBoatRoot(gltf.scene));
+        } catch (error) {
+          disposeBoatModel(gltf.scene);
+          reject(error);
+        }
       },
       undefined,
       reject

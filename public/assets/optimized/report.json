@@ -1,0 +1,44 @@
+[
+  {
+    "model": "SmallBoat.glb",
+    "before": 11777568,
+    "after": 1635984,
+    "reduction": "86.1%"
+  },
+  {
+    "model": "trawler (1).glb",
+    "before": 100167248,
+    "after": 17397688,
+    "reduction": "82.6%"
+  },
+  {
+    "model": "BigBoat.glb",
+    "before": 3080588,
+    "after": 1293572,
+    "reduction": "58.0%"
+  },
+  {
+    "model": "seaside_wharf.glb",
+    "before": 69958392,
+    "after": 15630584,
+    "reduction": "77.7%"
+  },
+  {
+    "model": "ship_wheel.glb",
+    "before": 2199812,
+    "after": 396404,
+    "reduction": "82.0%"
+  },
+  {
+    "model": "helm/large_boat_bridge.glb",
+    "before": 11821828,
+    "after": 1523000,
+    "reduction": "87.1%"
+  },
+  {
+    "model": "wooden_planks_dock_set.glb",
+    "before": 4559360,
+    "after": 686348,
+    "reduction": "84.9%"
+  }
+]

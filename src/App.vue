@@ -3606,7 +3606,7 @@ import { deriveProgression, studentTotalXp } from '../shared/progression.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { createModelLoader } from './helpers/modelLoader.js';
 import InventoryModal from './components/InventoryModal.vue';
 import PostDockingQuizModal from './components/PostDockingQuizModal.vue';
 import QuizResultsModal from './components/QuizResultsModal.vue';
@@ -6136,11 +6136,10 @@ function startQuickSailWithBoat() {
   const enterSimulation = async () => {
     showCinematicLoading.value = false;
     goToScreen('simulation');
-    await syncWorldForSimulation();
-    // Reload the selected boat model now that the scene is active
-    if (scene && boatObject) {
-      await swapBoatModel(activeBoatModelFile.value);
-    }
+    // Download the selected hull while the harbor is preparing.
+    const boatReady = scene && boatObject ? swapBoatModel(activeBoatModelFile.value) : Promise.resolve();
+    await Promise.all([syncWorldForSimulation(), boatReady]);
+    if (boatObject) restoreBoatSimPose();
   };
 
   Promise.resolve(archipelagoLoadPromise)
@@ -6156,48 +6155,45 @@ function startQuickSailWithBoat() {
  * Falls back to the procedural trawler if the GLB fails to load.
  */
 let boatSwapVersion = 0;
+const pendingBoatModels = new Map();
 async function swapBoatModel(modelPath) {
   if (!scene || !modelPath) {
     console.error('[swapBoatModel] Cannot swap - scene:', !!scene, 'modelPath:', modelPath);
     return;
   }
   const version = ++boatSwapVersion;
+  if (boatObject?.userData.modelPath === modelPath) {
+    restoreBoatSimPose();
+    return;
+  }
 
   try {
-    console.log('[swapBoatModel] === STARTING BOAT SWAP ===');
-    console.log('[swapBoatModel] Target model path:', modelPath);
-    console.log('[swapBoatModel] Current boatObject exists:', !!boatObject);
-    console.log('[swapBoatModel] Scene fog before swap:', scene.fog);
-    console.log('[swapBoatModel] Camera position before swap:', camera?.position);
-    
-    const model = await loadBoatModel(modelPath);
+    // One parse per in-flight hull, even if Set Sail is clicked during startup.
+    if (!pendingBoatModels.has(modelPath)) {
+      pendingBoatModels.set(modelPath, { promise: loadBoatModel(modelPath), version });
+    }
+    const request = pendingBoatModels.get(modelPath);
+    request.version = version;
+    const model = await request.promise;
     if (version !== boatSwapVersion) {
-      disposeBoatModel(model);
+      // Keep it only when a newer waiter for the same hull will attach it.
+      if (request.version === version) {
+        pendingBoatModels.delete(modelPath);
+        disposeBoatModel(model);
+      }
       return;
     }
-    console.log('[swapBoatModel] Model loaded successfully:', !!model);
-    console.log('[swapBoatModel] Model position:', model?.position);
-    
     const previousBoat = boatObject;
-    // Remove existing boat from scene
     if (boatObject?.parent) {
-      console.log('[swapBoatModel] Removing old boat from scene');
       scene.remove(boatObject);
     }
     boatObject = model;
-    console.log('[swapBoatModel] New boatObject assigned');
-    
-    console.log('[swapBoatModel] Scene fog after swap:', scene.fog);
-    console.log('[swapBoatModel] Ocean object exists:', !!ocean);
-    console.log('[swapBoatModel] Sky object exists:', !!sky);
-    console.log('[swapBoatModel] Scene children count:', scene.children.length);
-    
+    pendingBoatModels.delete(modelPath);
     finalizeSpawnedBoat(modelPath);
     disposeBoatModel(previousBoat);
-    console.log('[swapBoatModel] === BOAT SWAP COMPLETE ===');
   } catch (err) {
+    pendingBoatModels.delete(modelPath);
     console.error(`[swapBoatModel] FAILED to load boat GLB (${modelPath}):`, err);
-    console.error('[swapBoatModel] Error stack:', err.stack);
     // Keep whatever is already in the scene
   }
 }
@@ -6359,6 +6355,8 @@ let fishingSpotMarkers = null;
 let rainWeatherSystem = null;
 let calmWeatherSnapshot = null;
 let harborDockGroup = null;
+let harborDockTerrain = null;
+let harborDockLoadPromise = null;
 let sceneGltfLoader = null;
 /** Resolves when the archipelago GLTF is in the scene (Quick Sail waits on this). */
 let archipelagoLoadPromise = null;
@@ -6973,23 +6971,8 @@ function startMissionFromBriefing() {
   
   const mission = missionToStart.value
   
-  console.log('Scene exists:', !!scene);
-  console.log('boatObject exists:', !!boatObject);
-  console.log('activeBoatModelFile:', activeBoatModelFile.value);
-  
-  // If scene is already active, reload the boat model immediately
-  if (scene && boatObject && activeBoatModelFile.value) {
-    console.log('Calling swapBoatModel with:', activeBoatModelFile.value);
-    swapBoatModel(activeBoatModelFile.value).then(() => {
-      console.log('swapBoatModel completed, starting training module');
-      // Start mission after boat is loaded
-      startTrainingModule(mission.moduleId, { mission });
-    });
-  } else {
-    console.log('Scene not ready, starting training module directly (boat will load in initThree)');
-    // Start mission directly (boat will load in initThree)
-    startTrainingModule(mission.moduleId, { mission });
-  }
+  // Training initialization loads the required hull alongside the harbor.
+  startTrainingModule(mission.moduleId, { mission });
   
   missionToStart.value = null
 }
@@ -7681,6 +7664,12 @@ async function syncWorldForSimulation() {
 
 async function rebuildHarborDocks() {
   if (!scene) return;
+  if (harborDockLoadPromise) await harborDockLoadPromise;
+  if (harborDockGroup && harborDockTerrain === islandGroup) {
+    setHarborPoleLightsVisible(harborDockGroup, environmentPreset !== 'day');
+    applySpawnAtBerth(getActiveHarborDockBerth());
+    return;
+  }
 
   if (harborDockGroup) {
     scene.remove(harborDockGroup);
@@ -7689,17 +7678,21 @@ async function rebuildHarborDocks() {
   }
 
   try {
-    harborDockGroup = await loadHarborDocks(null, islandGroup, SCENE_WATERLINE_Y, {
+    harborDockTerrain = islandGroup;
+    harborDockLoadPromise = loadHarborDocks(null, islandGroup, SCENE_WATERLINE_Y, {
       mainSegments: 10
+    }).then(group => {
+      harborDockGroup = group;
+      scene.add(group);
+      setHarborPoleLightsVisible(group, environmentPreset !== 'day');
+      applySpawnAtBerth(getActiveHarborDockBerth());
+      if (activeTrainingModule.value) syncTrainingWaypointMarkers();
     });
-    scene.add(harborDockGroup);
-    setHarborPoleLightsVisible(harborDockGroup, environmentPreset !== 'day');
-    applySpawnAtBerth(getActiveHarborDockBerth());
-    if (activeTrainingModule.value) {
-      syncTrainingWaypointMarkers();
-    }
+    await harborDockLoadPromise;
   } catch (err) {
     console.error('[HelmQuest] Harbor dock load error:', err);
+  } finally {
+    harborDockLoadPromise = null;
   }
 }
 
@@ -9794,19 +9787,12 @@ function startTrainingModule(moduleId, options = {}) {
     if (activeTrainingModule.value !== module || trainingRunMetrics.value !== startingRun) return;
     showCinematicLoading.value = false;
     goToScreen('simulation');
-    await syncWorldForSimulation();
-    if (activeTrainingModule.value !== module || trainingRunMetrics.value !== startingRun || activeScreen.value !== 'simulation') return;
-    
-    // Apply the mission's required boat type AFTER scene is ready
     if (activeMission.value?.boatType) {
-      const boatTypeId = activeMission.value.boatType;
-      console.log('[startTrainingModule] Applying mission boat type:', boatTypeId);
-      applyBoatTypePhysics(boatTypeId);
-      if (scene && boatObject && activeBoatModelFile.value) {
-        console.log('[startTrainingModule] Swapping to boat model:', activeBoatModelFile.value);
-        await swapBoatModel(activeBoatModelFile.value);
-      }
+      applyBoatTypePhysics(activeMission.value.boatType);
     }
+    const boatReady = scene && boatObject && activeBoatModelFile.value
+      ? swapBoatModel(activeBoatModelFile.value) : Promise.resolve();
+    await Promise.all([syncWorldForSimulation(), boatReady]);
     
     if (activeTrainingModule.value !== module || trainingRunMetrics.value !== startingRun || activeScreen.value !== 'simulation') return;
     resetTrainingRunState();
@@ -14725,6 +14711,7 @@ function finalizeSpawnedBoat(modelPath = activeBoatModelFile.value) {
   });
 
   boatObject = boat;
+  boatObject.userData.modelPath = modelPath;
   boatObject.userData.loaMeters = lengthMeters;
   scene.add(boatObject);
   tagHelmDeckRailMeshes(boatObject);
@@ -15874,7 +15861,7 @@ function initThree() {
     initFishingLineSystem();
     initRainWeather();
 
-    const gltfLoader = new GLTFLoader();
+    const gltfLoader = createModelLoader();
     sceneGltfLoader = gltfLoader;
 
     // 6. Ocean (Three.js Water2)
@@ -15978,13 +15965,7 @@ function initThree() {
 
     const boatGlbPath = activeBoatModelFile.value;
     if (boatGlbPath) {
-      loadBoatModel(boatGlbPath)
-        .then((model) => {
-          attachBoat(model, boatGlbPath);
-        })
-        .catch((err) => {
-          console.warn(`Boat GLB failed (${boatGlbPath}), keeping procedural:`, err);
-        });
+      void swapBoatModel(boatGlbPath);
     }
 
     setupMouseLook();

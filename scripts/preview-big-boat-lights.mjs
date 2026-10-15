@@ -10,6 +10,9 @@ const files = new Map([
   ['/normalizeBoatScale.js', ['src/helpers/normalizeBoatScale.js', 'text/javascript']],
   ['/bigBoatLights.js', ['src/helpers/bigBoatLights.js', 'text/javascript']],
   ['/helmCockpit.js', ['src/helpers/helmCockpit.js', 'text/javascript']],
+  ['/modelLoader.js', ['src/helpers/modelLoader.js', 'text/javascript']],
+  ['/modelBufferCache.js', ['src/helpers/modelBufferCache.js', 'text/javascript']],
+  ['/optimizedModelManifest.js', ['src/helpers/optimizedModelManifest.js', 'text/javascript']],
   ['/helmInterior.js', ['src/helpers/helmInterior.js', 'text/javascript']],
   ['/bigBoatBridge.js', ['src/helpers/bigBoatBridge.js', 'text/javascript']],
   ['/helmRadarScreen.js', ['src/helpers/helmRadarScreen.js', 'text/javascript']],
@@ -85,6 +88,7 @@ createServer((req, res) => {
   if (path === '/measure' && req.method === 'POST') { let body = ''; req.on('data', chunk => { body += chunk; }); req.on('end', () => { console.log(body); res.end('ok'); }); return; }
   if (path === '/') { res.writeHead(200, { 'Content-Type': 'text/html' }); res.end(html); return; }
   const file = files.get(path)
+    ?? (/^\/assets\/optimized\/[\w-]+\.[a-f0-9]{12}\.glb$/.test(path) ? ['public' + path, 'model/gltf-binary'] : null)
     ?? (/^\/helpers\/[\w-]+\.js$/.test(path) ? ['src' + path, 'text/javascript'] : null)
     ?? (/^\/vendor\/(?:[\w-]+\/)*[\w-]+\.js$/.test(path)
       ? ['node_modules/three/examples/jsm/' + path.slice('/vendor/'.length), 'text/javascript'] : null);

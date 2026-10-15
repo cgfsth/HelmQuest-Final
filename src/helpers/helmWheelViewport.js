@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { createModelLoader } from './modelLoader.js';
+import { disposeBridgeModel } from './bigBoatBridge.js';
 
 export const SHIP_WHEEL_GLB = '/assets/ship_wheel.glb';
 
-const _loader = new GLTFLoader();
+const _loader = createModelLoader();
 const _box = new THREE.Box3();
 const _size = new THREE.Vector3();
 const _center = new THREE.Vector3();
@@ -111,8 +112,11 @@ function loadShipWheelGLB(viewport) {
   _loader.load(
     SHIP_WHEEL_GLB,
     (gltf) => {
-      if (viewport.disposed || !viewport.wheelRotor) return;
-      const model = gltf.scene.clone(true);
+      if (viewport.disposed || !viewport.wheelRotor) {
+        disposeBridgeModel(gltf.scene);
+        return;
+      }
+      const model = gltf.scene;
       model.userData.fromGLB = true;
       attachWheelMesh(viewport, model);
     },
@@ -225,13 +229,7 @@ export function updateHelmWheelViewport(viewport, speedRot, delta, keyStates = {
 export function disposeHelmWheelViewport(viewport) {
   if (!viewport || viewport.disposed) return;
   viewport.disposed = true;
-  viewport.scene.traverse((obj) => {
-    if (obj.geometry) obj.geometry.dispose();
-    if (obj.material) {
-      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-      mats.forEach((m) => m.dispose?.());
-    }
-  });
+  disposeBridgeModel(viewport.scene);
   viewport.renderer.dispose();
 }
 

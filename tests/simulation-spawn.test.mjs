@@ -99,8 +99,9 @@ function addMissionWorld(context, type) {
   island.add(new THREE.Mesh(new THREE.BoxGeometry(600, 50, 800), new THREE.MeshBasicMaterial()));
   island.position.set(8200, 0, -4200);
   Object.assign(context, {
-    islandGroup: island, harborDockGroup: null, berth: null,
+    islandGroup: island, harborDockGroup: null, harborDockTerrain: null, harborDockLoadPromise: null, berth: null,
     isAuthenticated: { value: true }, currentUser: { value: null },
+    userRole: { value: 'student' }, canViewMission() { return true; },
     trainingModules: { value: [module] }, activeMission: { value: null },
     activeTrainingModule: { value: null }, isTrainingReviewMode: { value: false },
     currentTrainingStep: { value: 0 }, interactionReadyStep: { value: null },
@@ -148,6 +149,19 @@ const pose = context => ({
   compassHeading: context.compassHeading,
   boatX: context.stats.value.boatX,
   boatZ: context.stats.value.boatZ,
+});
+
+test('reentering the same terrain reuses the harbor and concurrent requests load it once', async () => {
+  const context = makeSimulation('medium');
+  addMissionWorld(context, 'medium');
+  await Promise.all([context.rebuildHarborDocks(), context.rebuildHarborDocks()]);
+  const group = context.harborDockGroup;
+  await context.rebuildHarborDocks();
+  assert.equal(context.dockLoads, 1);
+  assert.equal(context.harborDockGroup, group);
+  context.islandGroup = new THREE.Group();
+  await context.rebuildHarborDocks();
+  assert.equal(context.dockLoads, 2, 'a changed world must rebuild its harbor');
 });
 
 for (const type of ['small', 'medium', 'large']) {

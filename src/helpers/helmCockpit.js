@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { createModelLoader } from './modelLoader.js';
 import { buildHelmInterior } from './helmInterior.js';
 import {
   BIG_BOAT_BRIDGE_EYE, BIG_BOAT_BRIDGE_LOOK, BIG_BOAT_BRIDGE_WHEEL,
@@ -25,7 +25,7 @@ export const HELM_CAMERA_LOOK_LARGE = BIG_BOAT_BRIDGE_LOOK;
 const HELM_WHEEL_POS = new THREE.Vector3(7.22, 4.42, 0);
 const HELM_WHEEL_TILT = 0.12;
 
-const _loader = new GLTFLoader();
+const _loader = createModelLoader();
 const _box = new THREE.Box3();
 const _size = new THREE.Vector3();
 const _center = new THREE.Vector3();
@@ -90,7 +90,10 @@ function loadShipWheelGLB(rotor, diameter) {
   _loader.load(
     SHIP_WHEEL_GLB,
     (gltf) => {
-      if (!rotor.parent || rotor.userData.disposed) return;
+      if (!rotor.parent || rotor.userData.disposed) {
+        disposeBridgeModel(gltf.scene);
+        return;
+      }
       const model = gltf.scene;
       model.name = 'WheelMesh';
       fitWheelModel(model, diameter);
