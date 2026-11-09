@@ -270,7 +270,7 @@
 
       <!-- Footer Status Bar -->
       <div class="landing-footer">
-        <p class="footer-text">© 2026 HELMQUEST SIMULATOR · DMSC DECK OPERATIONS DEPT</p>
+        <p class="footer-text">© 2026 HELMQUEST SIMULATOR · DNSC DECK OPERATIONS DEPT</p>
         <div class="footer-status">
           <span class="status-indicator">●</span>
           <span class="status-text">SYS_STATUS: READY</span>
