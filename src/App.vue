@@ -3637,6 +3637,7 @@ import { updateTerrainSun, updateTerrainFog } from './helpers/terrainMaterial.js
 import { createBoatWake, createBowSpray } from './helpers/boatWake.js';
 import { updateBuoySignalLights } from './helpers/buoySignalLights.js';
 import { sampleBoatWaveMotion, getBoatWaveResponse } from './helpers/oceanWaves.js';
+import { applyBoatBuoyancy, advanceBoatSteering } from './helpers/boatMotion.js';
 import { advanceBoatSpeed, knotsToMetersPerSecond, metersPerSecondToKnots } from './helpers/boatPropulsion.js';
 import { createScenePostProcessing } from './helpers/scenePostProcessing.js';
 import { addGeoJSONLayer } from './helpers/geojsonToThree.js';
@@ -6059,7 +6060,7 @@ const BOAT_TYPES = {
     brakingDeceleration: 12.4,
     maxTurnDegreesPerSecond: 24,
     massMult: 0.55,
-    waterlineOffset: -0.10,  // Small boat needs to float ABOVE water surface
+    waterlineOffset: -0.35,  // Immerse the keel and outrigger floats.
     wavePhaseOffset: 0.3
   },
   medium: {
@@ -6078,7 +6079,7 @@ const BOAT_TYPES = {
     brakingDeceleration: 8.6,
     maxTurnDegreesPerSecond: 14,
     massMult: 1.0,
-    waterlineOffset: -6.0,
+    waterlineOffset: -8.0,
     wavePhaseOffset: 0       // No phase offset (baseline)
   },
   large: {
@@ -6097,7 +6098,7 @@ const BOAT_TYPES = {
     brakingDeceleration: 7.1,
     maxTurnDegreesPerSecond: 8,
     massMult: 1.9,
-    waterlineOffset: -0.6,
+    waterlineOffset: -4.5,
     wavePhaseOffset: 0.7     // Different phase offset
   }
 };
@@ -10056,14 +10057,20 @@ function getWaterSurfaceY(x, z) {
   return SCENE_WATERLINE_Y + (ocean?.sampleHeight?.(x, z) ?? 0);
 }
 
-function getBoatWaveMotion() {
+function getBoatWaveMotion(delta = 1 / 60) {
   const length = boatObject.userData?.loaMeters ?? 88;
   const motion = sampleBoatWaveMotion(
     boatObject.position.x, boatObject.position.z, boatObject.rotation.y,
     length,
-    (x, z) => ocean?.sampleHeight?.(x, z) ?? 0
+    (x, z) => ocean?.sampleHeight?.(x, z) ?? 0,
+    boatObject.userData?.beamMeters
   );
-  return { ...motion, ...getBoatWaveResponse(length) };
+  return { ...motion, ...getBoatWaveResponse(length, delta) };
+}
+
+function updateBoatFloating(delta, bank = 0) {
+  applyBoatBuoyancy(boatObject, getBoatWaveMotion(delta),
+    baselineWaterlineY + physics.value.waterlineOffset, bank);
 }
 
 function toggleFishingLine() {
@@ -12223,7 +12230,7 @@ function syncTrainingWaypointMarkers() {
   waypointMarkerGroup = createWaypointMarkerGroup(
     buoyZones,
     'all-buoys',
-    baselineWaterlineY + physics.value.waterlineOffset
+    SCENE_WATERLINE_Y
   );
   scene.add(waypointMarkerGroup);
   updateBuoySignalLights(waypointMarkerGroup, performance.now() * 0.001, environmentPreset !== 'day');
@@ -12234,6 +12241,7 @@ function resetTrainingRunState() {
   speedRot = 0;
   angularVelocity = 0;
   turnRadius = 0;
+  turnTilt = 0;
   isStopping = false;
   trainingHeadingHold.value = { startedAt: null };
 
@@ -13891,8 +13899,8 @@ function applyCameraLookOffset(camPos, lookTarget) {
 
 function snapChaseCamera() {
   if (!boatObject || !camera) return;
-  const behind = _chaseOffsetBehind.clone().applyQuaternion(boatObject.quaternion);
-  const ahead = _chaseOffsetLook.clone().applyQuaternion(boatObject.quaternion);
+  const behind = _chaseOffsetBehind.clone().applyAxisAngle(THREE.Object3D.DEFAULT_UP, boatObject.rotation.y);
+  const ahead = _chaseOffsetLook.clone().applyAxisAngle(THREE.Object3D.DEFAULT_UP, boatObject.rotation.y);
   camera.position.copy(boatObject.position).add(behind);
   camera.lookAt(boatObject.position.clone().add(ahead));
 }
@@ -15068,6 +15076,8 @@ function updateBoatPhysics(delta = 1 / 60) {
       speedVel = 0;
       speedRot = 0;
       angularVelocity = 0;
+      turnTilt *= Math.pow(0.92, frameScale);
+      updateBoatFloating(dt, turnTilt);
 
       stats.value.speedKnots = 0;
       const headingPrecise = boatHeadingDegrees(boatObject.rotation.y);
@@ -15075,8 +15085,8 @@ function updateBoatPhysics(delta = 1 / 60) {
       stats.value.rotationDeg = Math.round(validHeading);
       syncCompassVisualHeading(validHeading);
       stats.value.yPos = boatObject.position.y;
-      stats.value.rollDeg = THREE.MathUtils.radToDeg(boatObject.rotation.z || 0);
-      stats.value.pitchDeg = THREE.MathUtils.radToDeg(boatObject.rotation.x || 0);
+      stats.value.rollDeg = THREE.MathUtils.radToDeg(boatObject.rotation.x || 0);
+      stats.value.pitchDeg = THREE.MathUtils.radToDeg(boatObject.rotation.z || 0);
       syncStatsBoatXZ();
 
       if (activeTrainingModule.value && !isTrainingReviewMode.value) {
@@ -15098,6 +15108,8 @@ function updateBoatPhysics(delta = 1 / 60) {
       speedVel = 0;
       speedRot = 0;
       angularVelocity = 0;
+      turnTilt *= Math.pow(0.92, frameScale);
+      updateBoatFloating(dt, turnTilt);
 
       stats.value.speedKnots = 0;
       const headingPrecise = boatHeadingDegrees(boatObject.rotation.y);
@@ -15105,8 +15117,8 @@ function updateBoatPhysics(delta = 1 / 60) {
       stats.value.rotationDeg = Math.round(validHeading);
       syncCompassVisualHeading(validHeading);
       stats.value.yPos = boatObject.position.y;
-      stats.value.rollDeg = THREE.MathUtils.radToDeg(boatObject.rotation.z || 0);
-      stats.value.pitchDeg = THREE.MathUtils.radToDeg(boatObject.rotation.x || 0);
+      stats.value.rollDeg = THREE.MathUtils.radToDeg(boatObject.rotation.x || 0);
+      stats.value.pitchDeg = THREE.MathUtils.radToDeg(boatObject.rotation.z || 0);
       syncStatsBoatXZ();
 
       if (activeTrainingModule.value && !isTrainingReviewMode.value) {
@@ -15128,6 +15140,8 @@ function updateBoatPhysics(delta = 1 / 60) {
       speedVel = 0;
       speedRot = 0;
       angularVelocity = 0;
+      turnTilt *= Math.pow(0.92, frameScale);
+      updateBoatFloating(dt, turnTilt);
 
       stats.value.speedKnots = 0;
       const headingPrecise = boatHeadingDegrees(boatObject.rotation.y);
@@ -15135,8 +15149,8 @@ function updateBoatPhysics(delta = 1 / 60) {
       stats.value.rotationDeg = Math.round(validHeading);
       syncCompassVisualHeading(validHeading);
       stats.value.yPos = boatObject.position.y;
-      stats.value.rollDeg = THREE.MathUtils.radToDeg(boatObject.rotation.z || 0);
-      stats.value.pitchDeg = THREE.MathUtils.radToDeg(boatObject.rotation.x || 0);
+      stats.value.rollDeg = THREE.MathUtils.radToDeg(boatObject.rotation.x || 0);
+      stats.value.pitchDeg = THREE.MathUtils.radToDeg(boatObject.rotation.z || 0);
       syncStatsBoatXZ();
 
       if (activeTrainingModule.value && !isTrainingReviewMode.value) {
@@ -15160,25 +15174,6 @@ function updateBoatPhysics(delta = 1 / 60) {
 
     // Engine off: keep floating and coast with existing momentum, without powered steering.
     if (!engineRunning.value) {
-      // Apply wave bobbing and pitch/roll EVEN when engine is off
-      // (boat should float naturally on waves regardless of engine state)
-      const waveMotion = getBoatWaveMotion();
-      const MAX_WAVE_TILT = waveMotion.maxTilt;
-      const targetPitch = THREE.MathUtils.clamp(waveMotion.rotationX, -MAX_WAVE_TILT, MAX_WAVE_TILT);
-      const targetRoll = THREE.MathUtils.clamp(waveMotion.rotationZ, -MAX_WAVE_TILT, MAX_WAVE_TILT);
-      
-      const rollDamping = waveMotion.blend;
-      const pitchDamping = waveMotion.blend;
-      
-      const currentPitch = boatObject.rotation.x || 0;
-      boatObject.rotation.x = THREE.MathUtils.lerp(currentPitch, targetPitch, pitchDamping);
-      
-      boatObject.position.y = THREE.MathUtils.lerp(boatObject.position.y,
-        baselineWaterlineY + physics.value.waterlineOffset + waveMotion.height, waveMotion.heaveBlend);
-      
-      const currentRoll = boatObject.rotation.z || 0;
-      boatObject.rotation.z = THREE.MathUtils.lerp(currentRoll, targetRoll, rollDamping);
-      
       // If player is attempting to move, prompt to start engine
       if (keyStates["KeyW"] || keyStates["KeyS"] || keyStates["KeyA"] || keyStates["KeyD"]) {
         // show a short prompt
@@ -15188,11 +15183,13 @@ function updateBoatPhysics(delta = 1 / 60) {
         setTimeout(() => { collisionWarning.value = ''; }, 2000);
       }
 
-      _boatForward.set(1, 0, 0).applyQuaternion(boatObject.quaternion);
+      _boatForward.set(Math.cos(boatObject.rotation.y), 0, -Math.sin(boatObject.rotation.y));
       boatObject.position.addScaledVector(_boatForward, speedVel * dt);
       if (checkAndResolveCollisions().blocked) speedVel = 0;
       speedRot = 0;
       angularVelocity = 0;
+      turnTilt *= Math.pow(0.92, frameScale);
+      updateBoatFloating(dt, turnTilt);
 
       stats.value.speedKnots = metersPerSecondToKnots(speedVel);
       const headingPrecise = boatHeadingDegrees(boatObject.rotation.y);
@@ -15200,8 +15197,8 @@ function updateBoatPhysics(delta = 1 / 60) {
       stats.value.rotationDeg = Math.round(validHeading);
       syncCompassVisualHeading(validHeading);
       stats.value.yPos = boatObject.position.y;
-      stats.value.rollDeg = THREE.MathUtils.radToDeg(boatObject.rotation.z || 0);
-      stats.value.pitchDeg = THREE.MathUtils.radToDeg(boatObject.rotation.x || 0);
+      stats.value.rollDeg = THREE.MathUtils.radToDeg(boatObject.rotation.x || 0);
+      stats.value.pitchDeg = THREE.MathUtils.radToDeg(boatObject.rotation.z || 0);
       syncStatsBoatXZ();
 
       if (activeTrainingModule.value && !isTrainingReviewMode.value) {
@@ -15211,26 +15208,18 @@ function updateBoatPhysics(delta = 1 / 60) {
       return;
     }
 
-    if (keyStates["KeyA"]) {
-      const turnFactor = Math.min(1, Math.abs(speedVel) / knotsToMetersPerSecond(vessel.maxSpeedKnots * .35));
-      speedRot = THREE.MathUtils.degToRad(vessel.maxTurnDegreesPerSecond) * turnFactor * weatherFx.steerScale * Math.sign(speedVel);
-      angularVelocity = 0.04 * turnFactor * weatherFx.steerScale;
-      turnRadius = 1.0;
-    } else if (keyStates["KeyD"]) {
-      const turnFactor = Math.min(1, Math.abs(speedVel) / knotsToMetersPerSecond(vessel.maxSpeedKnots * .35));
-      speedRot = -THREE.MathUtils.degToRad(vessel.maxTurnDegreesPerSecond) * turnFactor * weatherFx.steerScale * Math.sign(speedVel);
-      angularVelocity = 0.04 * turnFactor * weatherFx.steerScale;
-      turnRadius = 1.0;
-    } else {
-      speedRot *= Math.pow(weatherFx.turnDamping, frameScale);
-      angularVelocity *= Math.pow(weatherFx.turnDamping, frameScale);
-      if (Math.abs(speedRot) < 0.001) speedRot = 0;
-      if (Math.abs(angularVelocity) < 0.001) angularVelocity = 0;
-      turnRadius = 0;
-    }
-
-    boatObject.rotation.y += speedRot * dt;
-    _boatForward.set(1, 0, 0).applyQuaternion(boatObject.quaternion);
+    const turnDirection = keyStates.KeyA ? 1 : keyStates.KeyD ? -1 : 0;
+    const turnFactor = Math.min(1, Math.abs(speedVel) / knotsToMetersPerSecond(vessel.maxSpeedKnots * .35));
+    const targetTurnRate = turnDirection * THREE.MathUtils.degToRad(vessel.maxTurnDegreesPerSecond)
+      * turnFactor * weatherFx.steerScale * Math.sign(speedVel);
+    const steering = advanceBoatSteering(speedRot, targetTurnRate, dt,
+      boatObject.userData?.loaMeters ?? resolveTargetBoatLength(vessel.modelFile),
+      turnDirection ? undefined : weatherFx.turnDamping);
+    speedRot = steering.rate;
+    angularVelocity = Math.abs(speedRot) * 0.1;
+    turnRadius = turnDirection ? 1 : 0;
+    boatObject.rotation.y += steering.angle;
+    _boatForward.set(Math.cos(boatObject.rotation.y), 0, -Math.sin(boatObject.rotation.y));
     
     // Apply movement
     boatObject.position.addScaledVector(_boatForward, speedVel * dt);
@@ -15260,24 +15249,6 @@ function updateBoatPhysics(delta = 1 / 60) {
       // Additional push back to ensure boat clears the obstacle
       boatObject.position.addScaledVector(_boatForward, speedVel * dt * 0.5);
     }
-
-    // Advanced Wave Response - realistic boat-wave interaction with roll and pitch
-    const waveMotion = getBoatWaveMotion();
-    // Follow the rendered swell, while keeping vessel tilt comfortable.
-    const MAX_WAVE_TILT = waveMotion.maxTilt;
-    const targetPitch = THREE.MathUtils.clamp(waveMotion.rotationX, -MAX_WAVE_TILT, MAX_WAVE_TILT);
-    const targetRoll = THREE.MathUtils.clamp(waveMotion.rotationZ, -MAX_WAVE_TILT, MAX_WAVE_TILT);
-    
-    const rollDamping = waveMotion.blend;
-    const pitchDamping = waveMotion.blend;
-    
-    // Smoothly interpolate pitch to follow waves (prevents sudden jerky motion).
-    // Roll is blended below with the turning bank so the two never abruptly overwrite each other.
-    const currentPitch = boatObject.rotation.x || 0;
-    boatObject.rotation.x = THREE.MathUtils.lerp(currentPitch, targetPitch, pitchDamping);
-    
-    boatObject.position.y = THREE.MathUtils.lerp(boatObject.position.y,
-      baselineWaterlineY + physics.value.waterlineOffset + waveMotion.height, waveMotion.heaveBlend);
 
     // Wind effect
     const windRad = THREE.MathUtils.degToRad(wind.value.directionAngle);
@@ -15309,7 +15280,7 @@ function updateBoatPhysics(delta = 1 / 60) {
     if (angularVelocity > 0 && turnRadius > 0) {
       const centrifugalForce = physics.value.mass * angularVelocity * angularVelocity * turnRadius;
       const adjustment = centrifugalForce * 0.0005;
-      _boatRight.set(0, 0, 1).applyQuaternion(boatObject.quaternion);
+      _boatRight.set(Math.sin(boatObject.rotation.y), 0, Math.cos(boatObject.rotation.y));
       boatObject.position.addScaledVector(_boatRight, adjustment * Math.sign(speedRot) * frameScale);
 
       const maxTiltAngle = Math.PI / 16; // gentler bank so it never overrides the wave clamp too hard
@@ -15318,8 +15289,7 @@ function updateBoatPhysics(delta = 1 / 60) {
     } else {
       turnTilt *= Math.pow(0.92, frameScale);
     }
-    // Blend wave roll + turning bank instead of overwriting, so rotation.z never snaps between frames
-    boatObject.rotation.z = THREE.MathUtils.lerp(boatObject.rotation.z || 0, targetRoll + turnTilt, rollDamping);
+    updateBoatFloating(dt, turnTilt);
 
     if (physics.value.mass > physics.value.sinkingThreshold) {
       isSinking = true;
@@ -15336,8 +15306,8 @@ function updateBoatPhysics(delta = 1 / 60) {
     stats.value.rotationDeg = Math.round(validHeading);
     syncCompassVisualHeading(validHeading);
     stats.value.yPos = boatObject.position.y;
-    stats.value.rollDeg = THREE.MathUtils.radToDeg(boatObject.rotation.z || 0);
-    stats.value.pitchDeg = THREE.MathUtils.radToDeg(boatObject.rotation.x || 0);
+    stats.value.rollDeg = THREE.MathUtils.radToDeg(boatObject.rotation.x || 0);
+    stats.value.pitchDeg = THREE.MathUtils.radToDeg(boatObject.rotation.z || 0);
     syncStatsBoatXZ();
     
     // Track steering precision if in training
@@ -15359,7 +15329,7 @@ function updateBoatPhysics(delta = 1 / 60) {
     boatObject.rotation.x += 0.0005 * frameScale;
     
     speedVel *= Math.pow(0.95, frameScale);
-    _boatForward.set(1, 0, 0).applyQuaternion(boatObject.quaternion);
+    _boatForward.set(Math.cos(boatObject.rotation.y), 0, -Math.sin(boatObject.rotation.y));
     boatObject.position.addScaledVector(_boatForward, speedVel * dt);
 
     if (boatObject.position.y < -120) {
@@ -15369,20 +15339,21 @@ function updateBoatPhysics(delta = 1 / 60) {
 
     stats.value.speedKnots = metersPerSecondToKnots(speedVel);
     stats.value.yPos = boatObject.position.y;
-    stats.value.rollDeg = THREE.MathUtils.radToDeg(boatObject.rotation.z || 0);
-    stats.value.pitchDeg = THREE.MathUtils.radToDeg(boatObject.rotation.x || 0);
+    stats.value.rollDeg = THREE.MathUtils.radToDeg(boatObject.rotation.x || 0);
+    stats.value.pitchDeg = THREE.MathUtils.radToDeg(boatObject.rotation.z || 0);
     syncStatsBoatXZ();
   }
 }
 
 // --- Camera Focus Update ---
-function updateCameras() {
+function updateCameras(delta = 1 / 60) {
   if (!boatObject) return;
 
   if (activeCamera.value === 'chase') {
-    _chasePosScratch.copy(_chaseOffsetBehind).applyQuaternion(boatObject.quaternion).add(boatObject.position);
-    _chaseLookScratch.copy(_chaseOffsetLook).applyQuaternion(boatObject.quaternion).add(boatObject.position);
-    camera.position.lerp(_chasePosScratch, 0.14);
+    // Keep the horizon steady instead of swinging the chase rig with hull roll/pitch.
+    _chasePosScratch.copy(_chaseOffsetBehind).applyAxisAngle(THREE.Object3D.DEFAULT_UP, boatObject.rotation.y).add(boatObject.position);
+    _chaseLookScratch.copy(_chaseOffsetLook).applyAxisAngle(THREE.Object3D.DEFAULT_UP, boatObject.rotation.y).add(boatObject.position);
+    camera.position.lerp(_chasePosScratch, 1 - Math.pow(0.86, delta * 60));
     camera.lookAt(applyCameraLookOffset(camera.position, _chaseLookScratch));
     if (orbitControls) orbitControls.target.copy(boatObject.position);
   } else if (activeCamera.value === 'orbit') {
@@ -16084,7 +16055,7 @@ function animate() {
     }
     
     // Update camera focal positions
-    updateCameras();
+    updateCameras(visualDelta);
 
     if (boatObject) updateTerrainTiles();
 

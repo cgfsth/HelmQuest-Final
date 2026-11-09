@@ -133,6 +133,8 @@ export function normalizeBoatToScene(meshRoot, opts) {
 
   const pivot = new THREE.Group();
   pivot.name = 'BoatPivot';
+  // Apply heading in world space, then the hull's local roll/pitch.
+  pivot.rotation.order = 'YXZ';
 
   meshRoot.position.set(0, 0, 0);
   meshRoot.rotation.set(0, 0, 0);

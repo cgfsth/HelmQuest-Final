@@ -36,7 +36,7 @@ test('boat height and tilt follow the water at its position and rotated heading'
   const surface = (x, z) => 0.03 * x + 0.02 * z;
   const east = sampleBoatWaveMotion(10, 20, 0, 60, surface);
   const north = sampleBoatWaveMotion(10, 20, Math.PI / 2, 60, surface);
-  assert.equal(east.height, surface(10, 20));
+  assert.ok(Math.abs(east.height - surface(10, 20)) < 1e-10);
   assert.ok(Math.abs(east.rotationZ - Math.atan(0.03)) < 1e-10);
   assert.ok(Math.abs(east.rotationX + Math.atan(0.02)) < 1e-10);
   assert.ok(Math.abs(north.rotationZ + Math.atan(0.02)) < 1e-10);

@@ -57,49 +57,43 @@ export function createOceanGeometry(halfExtent, segments = 320) {
 }
 
 /** Sample along the boat's actual heading: local X is the hull's long axis. */
-export function sampleBoatWaveMotion(x, z, yaw, length, sampleHeight) {
-  if (length >= 120) {
-    // A long hull spans several crests; its buoyancy follows the average water level.
-    const forwardX = Math.cos(yaw), forwardZ = -Math.sin(yaw);
-    const sideX = Math.sin(yaw), sideZ = Math.cos(yaw);
-    const halfBeam = length * 0.08;
-    let portSum = 0, starboardSum = 0, centerSum = 0;
-    let sternHeight = 0, bowHeight = 0;
-    for (let i = 0; i < 7; i++) {
-      const distance = (i - 3) * length * 0.14;
-      const px = x + forwardX * distance, pz = z + forwardZ * distance;
-      const port = sampleHeight(px - sideX * halfBeam, pz - sideZ * halfBeam);
-      const center = sampleHeight(px, pz);
-      const starboard = sampleHeight(px + sideX * halfBeam, pz + sideZ * halfBeam);
-      portSum += port;
-      centerSum += center;
-      starboardSum += starboard;
-      if (i === 0) sternHeight = (port + center + starboard) / 3;
-      if (i === 6) bowHeight = (port + center + starboard) / 3;
-    }
-    return {
-      height: (portSum + centerSum + starboardSum) / 21,
-      rotationX: -Math.atan((starboardSum - portSum) / (7 * 2 * halfBeam)),
-      rotationZ: Math.atan((bowHeight - sternHeight) / (length * 0.84)),
-    };
-  }
-  const along = Math.max(2, length * 0.15);
-  const across = Math.max(1, length * 0.045);
+export function sampleBoatWaveMotion(x, z, yaw, length, sampleHeight, beam = length * 0.18) {
   const forwardX = Math.cos(yaw), forwardZ = -Math.sin(yaw);
   const sideX = Math.sin(yaw), sideZ = Math.cos(yaw);
-  const alongSlope = (sampleHeight(x + forwardX * along, z + forwardZ * along)
-    - sampleHeight(x - forwardX * along, z - forwardZ * along)) / (2 * along);
-  const acrossSlope = (sampleHeight(x + sideX * across, z + sideZ * across)
-    - sampleHeight(x - sideX * across, z - sideZ * across)) / (2 * across);
-  return { height: sampleHeight(x, z), rotationX: -Math.atan(acrossSlope), rotationZ: Math.atan(alongSlope) };
+  let heightSum = 0, weightSum = 0, alongHeight = 0, acrossHeight = 0;
+  let alongSquared = 0, acrossSquared = 0;
+  // Fit a water plane over the whole footprint, rather than bouncing a long
+  // hull on the single crest underneath its pivot. Middle stations carry more weight.
+  for (let row = -2; row <= 2; row++) {
+    const along = row * Math.max(1, length * 0.2);
+    for (let column = -1; column <= 1; column++) {
+      const across = column * Math.max(0.5, beam * 0.35);
+      const weight = (row === 0 ? 2 : 1) * (column === 0 ? 2 : 1);
+      const height = sampleHeight(x + forwardX * along + sideX * across,
+        z + forwardZ * along + sideZ * across);
+      heightSum += weight * height;
+      weightSum += weight;
+      alongHeight += weight * along * height;
+      acrossHeight += weight * across * height;
+      alongSquared += weight * along * along;
+      acrossSquared += weight * across * across;
+    }
+  }
+  return {
+    height: heightSum / weightSum,
+    rotationX: -Math.atan(acrossHeight / acrossSquared),
+    rotationZ: Math.atan(alongHeight / alongSquared),
+  };
 }
 
-export function getBoatWaveResponse(length) {
+export function getBoatWaveResponse(length, delta = 1 / 60) {
   const large = length >= 120;
+  const size = THREE.MathUtils.clamp(length / 60, 0.65, 3);
+  const dt = Number.isFinite(delta) ? Math.max(0, Math.min(0.1, delta)) : 1 / 60;
   return {
-    maxTilt: THREE.MathUtils.degToRad(large ? 1 : 3.5),
-    blend: 0.08 / THREE.MathUtils.clamp(length / 60, 0.65, 3),
-    heaveBlend: large ? 0.04 : 1,
+    maxTilt: THREE.MathUtils.degToRad(large ? 1 : length < 30 ? 6 : 3.5),
+    blend: 1 - Math.exp(-dt / (0.22 * size)),
+    heaveBlend: 1 - Math.exp(-dt / (0.14 * size)),
   };
 }
 

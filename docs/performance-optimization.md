@@ -40,8 +40,9 @@ continue every simulation frame. High water quality refreshes every frame.
 Opaque screens and hidden tabs skip scene rendering. Animated landing backdrops
 are capped at 30 FPS. Terrain bounds rebuild only after streamed tiles change.
 Radar and helm share a chart snapshot, and the mission timer display refreshes
-at its existing 120ms HUD cadence. Physics, grading, collision rules, mission
-completion requirements, and persistence are not changed.
+at its existing 120ms HUD cadence. These performance changes preserve grading,
+collision rules, mission completion requirements, and persistence. Subsequent
+boat movement and flotation corrections are described in [boat-motion.md](boat-motion.md).
 
 ## Terrain deployment fix
 
@@ -57,7 +58,7 @@ Retry reloads the page to retry asset downloads.
 
 ## Verification
 
-- All 232 frontend Node regression tests passed, including missions, scores,
+- All 243 frontend Node regression tests passed, including missions, scores,
   quizzes, boat movement, radar, model integrity, and the new performance checks.
 - Production build passed. Vite still reports its existing large bundle warning.
 - Local Edge browser checks covered driving all three boats, chase/orbit/helm

@@ -5,6 +5,9 @@ import vm from 'node:vm';
 import * as THREE from 'three';
 import { advanceBoatSpeed, knotsToMetersPerSecond, metersPerSecondToKnots } from '../src/helpers/boatPropulsion.js';
 import { getRainPhysicsModifiers } from '../src/helpers/rainWeather.js';
+import { applyBoatBuoyancy, advanceBoatSteering } from '../src/helpers/boatMotion.js';
+import { resolveTargetBoatLength } from '../src/helpers/normalizeBoatScale.js';
+import { getBoatWaveResponse } from '../src/helpers/oceanWaves.js';
 
 const source = readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 function appFunction(name) {
@@ -15,6 +18,7 @@ function appFunction(name) {
 function simulation(type, mode = 'mission') {
   const context = {
     THREE, advanceBoatSpeed, knotsToMetersPerSecond, metersPerSecondToKnots, getRainPhysicsModifiers,
+    applyBoatBuoyancy, advanceBoatSteering, resolveTargetBoatLength,
     console: { log() {} }, simulationRunning: { value: true }, boatObject: new THREE.Group(),
     speedVel: 0, speedRot: 0, angularVelocity: 0, turnRadius: 0, turnTilt: 0,
     isSinking: false, sinkingTimer: 0, isStopping: false, baselineWaterlineY: 0,
@@ -36,7 +40,7 @@ function simulation(type, mode = 'mission') {
   vm.createContext(context);
   const start = source.indexOf('const BOAT_TYPES = {');
   vm.runInContext(source.slice(start, source.indexOf('\n};', start) + 3) + '\nglobalThis.profiles = BOAT_TYPES;', context);
-  for (const name of ['applyBoatTypePhysics', 'chooseBoatAndSail', 'boatHeadingDegrees', 'updateBoatPhysics']) vm.runInContext(appFunction(name), context);
+  for (const name of ['applyBoatTypePhysics', 'chooseBoatAndSail', 'boatHeadingDegrees', 'updateBoatFloating', 'updateBoatPhysics']) vm.runInContext(appFunction(name), context);
   if (mode === 'Set Sail') context.chooseBoatAndSail(type);
   else { context.applyBoatTypePhysics(type); context.activeTrainingModule.value = { steps: [] }; }
   return context;
@@ -127,6 +131,7 @@ test('full-speed boats enter reverse promptly and build astern speed consistentl
 test('boosted turning works in both directions across frame rates while larger vessels keep more momentum', () => {
   const turns = [], retainedSpeed = [];
   for (const [type, turnRate] of [['small', 24], ['medium', 14], ['large', 8]]) {
+    const magnitudes = [];
     for (const mode of ['mission', 'Set Sail']) {
       for (const fps of [30, 60, 144]) {
         for (const [key, direction] of [['KeyA', 1], ['KeyD', -1]]) {
@@ -134,11 +139,13 @@ test('boosted turning works in both directions across frame rates while larger v
           context.speedVel = knotsToMetersPerSecond(profile.maxSpeedKnots);
           context.keyStates[key] = true;
           const actualTurn = THREE.MathUtils.radToDeg(run(context, 10, fps).heading);
-          assert.ok(Math.abs(actualTurn - direction * turnRate * 10) < .001,
+          assert.ok(Math.abs(actualTurn) <= turnRate * 10 && Math.abs(actualTurn) > turnRate * 10 * .9 && Math.sign(actualTurn) === direction,
             `${type}/${mode}/${fps} FPS/${key}: ${actualTurn} degrees`);
+          magnitudes.push(Math.abs(actualTurn));
         }
       }
     }
+    assert.ok(Math.max(...magnitudes) - Math.min(...magnitudes) < .001, `${type}: rudder response varies with FPS`);
     const context = simulation(type), profile = context.profiles[type];
     context.speedVel = knotsToMetersPerSecond(profile.maxSpeedKnots);
     context.keyStates.KeyA = true;
@@ -173,5 +180,39 @@ test('anchor and deployed fishing gear hold the hull while engine-off throttle c
     assert.equal(context.speedVel, 0);
     assert.equal(context.boatObject.position.x, 0);
     assert.equal(context.stats.value.speedKnots, 0);
+  }
+});
+
+test('anchored, fishing and engine-off boats still float without moving across the sea', () => {
+  for (const state of ['anchor', 'net', 'line', 'engine']) {
+    const context = simulation('large');
+    context.boatObject.rotation.order = 'YXZ';
+    const waterline = context.physics.value.waterlineOffset;
+    context.boatObject.position.y = waterline;
+    context.getBoatWaveMotion = delta => ({height:1,rotationX:.01,rotationZ:.005,...getBoatWaveResponse(180,delta)});
+    if (state === 'anchor') context.anchor.value.deployed = true;
+    if (state === 'net') context.trawlNetState.value = 'ACTIVE';
+    if (state === 'line') context.fishingLineActive.value = true;
+    if (state === 'engine') context.engineRunning.value = false;
+    run(context, 3, 30);
+    assert.equal(context.speedVel,0);
+    assert.equal(context.boatObject.position.x,0);
+    assert.equal(context.boatObject.position.z,0);
+    assert.ok(Math.abs(context.boatObject.position.y-waterline-1)<.01, `${state}: buoyancy stays active`);
+    assert.ok(Math.abs(context.stats.value.rollDeg-THREE.MathUtils.radToDeg(.01))<.01);
+    assert.ok(Math.abs(context.stats.value.pitchDeg-THREE.MathUtils.radToDeg(.005))<.01);
+  }
+});
+
+test('tilted hull propulsion travels horizontally while buoyancy controls its height', () => {
+  for (const engineRunning of [true,false]) for (const yaw of [0,Math.PI/4,Math.PI/2]) {
+    const context = simulation('medium');
+    context.boatObject.rotation.set(.1,yaw,.1,'YXZ');
+    context.engineRunning.value = engineRunning;
+    context.speedVel = knotsToMetersPerSecond(20);
+    context.getBoatWaveMotion = () => ({maxTilt:.2,rotationX:.1,rotationZ:.1,height:.4,blend:1,heaveBlend:1});
+    context.updateBoatPhysics(1/30);
+    assert.ok(Math.abs(context.boatObject.position.y-context.physics.value.waterlineOffset-.4)<1e-10);
+    assert.ok(Math.abs(Math.atan2(-context.boatObject.position.z,context.boatObject.position.x)-yaw)<1e-10);
   }
 });
