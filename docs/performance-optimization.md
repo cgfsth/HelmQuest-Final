@@ -15,11 +15,21 @@ functional boat geometry, and world-space hull bounds are checked against the
 source GLBs. The loader uses the new hashed model URLs; include both new GLBs and
 the updated manifest when publishing.
 
-The two new optimized GLBs are stored as ordinary Git binaries through explicit
-`.gitattributes` exceptions. Each is under 10 MB, so this update requires no new
-LFS uploads. Existing LFS assets keep their tracking rules and still depend on
-the repository's LFS availability when fetched for a fresh clone or deployment.
-If regenerated filenames change, update the exceptions to match the new files.
+All current model, image and PDF assets are stored as ordinary Git binaries.
+Render checks out the whole repository, including older source assets; leaving
+those assets in LFS prevented checkout when the account's LFS budget was exhausted.
+The deployment fix converts the 78 remaining LFS pointers to their exact local
+files without rewriting history. All asset SHA-256 hashes were checked before
+conversion, and every file is below GitHub's 100 MiB individual-file limit.
+The initial clone is larger, but no LFS quota is needed to check out this branch.
+Historical commits retain their original LFS dependencies.
+
+After this fix reaches the branch connected to Render, use **Manual Deploy >
+Clear build cache & deploy**. If deploying this branch directly, select
+`fix/simulation-performance` in the service's branch setting. Frontend builds use
+`npm ci && npm run build` with publish directory `dist`; the API service keeps
+its existing backend root/build/start settings. Setting a build-time LFS skip
+variable alone does not restore missing images or models.
 
 Rendering now applies the selected graphics/shadow settings at startup. Medium
 graphics disable bloom, retain SMAA, and cap pixel ratio at 1.25. Low shadows use
