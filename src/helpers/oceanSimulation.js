@@ -62,13 +62,15 @@ function tuneWaterSurface(material, waveUniforms) {
  * @param {THREE.Scene | null} scene
  * @param {{ renderer?: THREE.WebGLRenderer, fog?: boolean }} [options]
  */
-export function loadOceanSimulation(scene, { renderer, fog = true } = {}) {
+export function loadOceanSimulation(scene, { renderer, fog = true, quality = 'medium' } = {}) {
   return new Promise((resolve) => {
     const sunDirection = new THREE.Vector3(0.4, 0.85, -0.2).normalize();
     let waveDistortion = 1.7;
     let playbackSpeed = 0.45;
     let opacityScale = 1.0;
     let elapsed = 0;
+    let reflectionQuality = quality;
+    let lastReflectionAt = -Infinity;
     let seaState = oceanWaveState();
     const waveCenter = { x: 0, z: 0 };
     const waveUniforms = {
@@ -124,8 +126,8 @@ export function loadOceanSimulation(scene, { renderer, fog = true } = {}) {
       configureWaterNormals(normals);
 
       const water = new Water(geometry, {
-        textureWidth: 2048,
-        textureHeight: 2048,
+        textureWidth: 1024,
+        textureHeight: 1024,
         waterNormals: normals,
         sunDirection,
         sunColor: 0xffe8cc,
@@ -142,6 +144,13 @@ export function loadOceanSimulation(scene, { renderer, fog = true } = {}) {
       water.name = 'OceanWater';
       water.receiveShadow = true;
       water.frustumCulled = false;
+      const renderReflection = water.onBeforeRender;
+      water.onBeforeRender = function (...args) {
+        const interval = reflectionQuality === 'low' ? 1 / 15 : reflectionQuality === 'medium' ? 1 / 30 : 0;
+        if (elapsed - lastReflectionAt + 1e-6 < interval) return;
+        lastReflectionAt = elapsed;
+        renderReflection.apply(this, args);
+      };
 
       if (scene?.fog) {
         water.material.fog = true;
@@ -190,6 +199,10 @@ export function loadOceanSimulation(scene, { renderer, fog = true } = {}) {
         },
         setOpacityScale(v) {
           opacityScale = v;
+        },
+        setQuality(value) {
+          reflectionQuality = value;
+          lastReflectionAt = -Infinity;
         },
         setShallowTint(_shallowHex, deepHex) {
           water.material.uniforms.waterColor.value.setHex(deepHex ?? 0x0a3a58);

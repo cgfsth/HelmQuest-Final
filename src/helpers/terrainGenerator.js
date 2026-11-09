@@ -140,6 +140,7 @@ export class TerrainTileManager {
     this.lastTileZ = null;
     /** @type {Map<string, { tx: number, tz: number, lod: string }>} */
     this.pendingTiles = new Map();
+    this.boundsDirty = false;
   }
 
   async init() {
@@ -221,6 +222,7 @@ export class TerrainTileManager {
           this.root.remove(tile);
           tile.geometry.dispose();
           this.tiles.delete(key);
+          this.boundsDirty = true;
         }
       }
 
@@ -257,13 +259,15 @@ export class TerrainTileManager {
       if (mesh) {
         this.tiles.set(key, mesh);
         this.root.add(mesh);
+        this.boundsDirty = true;
       }
       this.pendingTiles.delete(key);
       built += 1;
     }
 
-    if (this.pendingTiles.size === 0 && this.tiles.size > 0) {
+    if (this.boundsDirty && this.pendingTiles.size === 0 && this.tiles.size > 0) {
       rebuildIslandBoxes(this.root);
+      this.boundsDirty = false;
     }
   }
 

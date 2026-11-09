@@ -2,3 +2,7 @@
 *.jpeg filter=lfs diff=lfs merge=lfs -text
 *.png filter=lfs diff=lfs merge=lfs -text
 *.glb filter=lfs diff=lfs merge=lfs -text
+
+# These optimized runtime models fit regular Git and do not need LFS uploads.
+public/assets/optimized/seaside_wharf.d85a552bdcca.glb -filter -diff -merge -text
+public/assets/optimized/trawler__1_.c6e1b468d23e.glb -filter -diff -merge -text

@@ -97,6 +97,10 @@ export function createScenePostProcessing(renderer, scene, camera) {
     gradePass,
     smaaPass,
     defaultGrade,
+    setQuality({ bloom = false, smaa = true } = {}) {
+      bloomPass.enabled = bloom;
+      if (smaaPass) smaaPass.enabled = smaa;
+    },
     setColorGrade({ saturation, contrast, brightness, tint } = {}) {
       if (saturation != null) gradePass.uniforms.saturation.value = saturation;
       if (contrast != null) gradePass.uniforms.contrast.value = contrast;
@@ -120,13 +124,10 @@ export function createScenePostProcessing(renderer, scene, camera) {
       if (!composer) return;
       composer.setSize(width, height);
       composer.setPixelRatio(renderer.getPixelRatio());
-      bloomPass.resolution.set(width, height);
-      smaaPass?.setSize?.(
-        width * renderer.getPixelRatio(),
-        height * renderer.getPixelRatio()
-      );
+      // EffectComposer sizes each pass at the renderer's actual pixel ratio.
     },
     dispose() {
+      for (const pass of composer.passes) pass.dispose?.();
       composer?.dispose?.();
     },
   };

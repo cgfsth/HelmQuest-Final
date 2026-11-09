@@ -3607,6 +3607,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { createModelLoader } from './helpers/modelLoader.js';
+import { getRenderQuality, getShadowMapSize, shouldRenderScene } from './helpers/renderQuality.js';
 import InventoryModal from './components/InventoryModal.vue';
 import PostDockingQuizModal from './components/PostDockingQuizModal.vue';
 import QuizResultsModal from './components/QuizResultsModal.vue';
@@ -7201,7 +7202,7 @@ function renderGeoJsonOnMap() {
   });
 }
 
-function updateTacticalMinimap() {
+function updateTacticalMinimap(snapshot = null) {
   if (activeScreen.value !== 'simulation') return;
   if (activeCamera.value === 'helm') ensureHelmRadarDisplay();
   const size = ensureTacticalChartCtx();
@@ -7212,7 +7213,7 @@ function updateTacticalMinimap() {
     : Math.min(size.w, size.h) < 140 ? Math.min(size.w, size.h) / 180 : 1;
   tacticalChartCtx.save();
   tacticalChartCtx.scale(scale, scale);
-  drawCircularTacticalChart(tacticalChartCtx, size.w / scale, size.h / scale, getTacticalChartSnapshot());
+  drawCircularTacticalChart(tacticalChartCtx, size.w / scale, size.h / scale, snapshot || getTacticalChartSnapshot());
   tacticalChartCtx.restore();
   if (activeCamera.value === 'helm') updateHelmRadarScreen(helmRadarDisplay);
 }
@@ -15789,12 +15790,12 @@ function initThree() {
 
     // 1. Renderer
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+      renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
     } catch (rendererError) {
       console.warn('[HelmQuest] High-performance WebGL context failed; retrying with compatible settings.', rendererError);
       renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "default", failIfMajorPerformanceCaveat: false });
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(getRenderQuality(graphicsQuality.value, window.devicePixelRatio).pixelRatio);
     renderer.setSize(width, height);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -15854,6 +15855,8 @@ function initThree() {
       console.warn('[HelmQuest] Post-processing disabled:', err);
       postProcessing = null;
     }
+    applyGraphicsSettings();
+    applyShadowSettings();
 
     const foamSurface = { sampleHeight: (x, z) => ocean?.sampleHeight?.(x, z) ?? 0 };
     boatWakeSystem = createBoatWake(scene, foamSurface);
@@ -15865,7 +15868,7 @@ function initThree() {
     sceneGltfLoader = gltfLoader;
 
     // 6. Ocean (Three.js Water2)
-    loadOceanSimulation(scene, { renderer, fog: true })
+    loadOceanSimulation(scene, { renderer, fog: true, quality: waterQuality.value })
       .then((oceanApi) => {
         ocean = oceanApi;
         scene.add(ocean.root);
@@ -16003,11 +16006,15 @@ function animate() {
   try {
     animationFrameId = requestAnimationFrame(animate);
     if (!renderer || !scene || !camera) return;
+    const nowMs = performance.now();
+    if (!shouldRenderScene(activeScreen.value, document.hidden, nowMs, lastVisualFrameAt)) {
+      if (document.hidden || (!isMenuBackdropScreen() && activeScreen.value !== 'simulation')) lastVisualFrameAt = 0;
+      return;
+    }
 
     animationFrameCounter += 1;
     const delta = 1 / 60;
     const menuBackdrop = isMenuBackdropScreen();
-    const nowMs = performance.now();
     const visualDelta = lastVisualFrameAt ? Math.min(0.1, (nowMs - lastVisualFrameAt) / 1000) : delta;
     lastVisualFrameAt = nowMs;
     updateSkyClouds(sky, visualDelta, wind.value.speed);
@@ -16046,7 +16053,8 @@ function animate() {
     }
     
     // Track course deviation for Course Accuracy metric
-    if (activeTrainingModule.value && boatObject && trainingRunMetrics.value && simulationRunning.value && !trainingRunFinished.value) {
+    if (activeTrainingModule.value && boatObject && trainingRunMetrics.value && simulationRunning.value && !trainingRunFinished.value &&
+        (!window._lastDeviationTrack || nowMs - window._lastDeviationTrack > 1000)) {
       const currentStep = activeTrainingModule.value.steps[currentTrainingStep.value];
       if (currentStep?.waypointZone) {
         // Calculate cross-track error (perpendicular distance from ideal route)
@@ -16135,8 +16143,8 @@ function animate() {
     }
 
     if (activeTrainingModule.value && activeScreen.value === 'simulation') {
-      trainingElapsedTick.value = performance.now();
       if (shouldRefreshTraining) {
+        trainingElapsedTick.value = nowMs;
         lastTrainingUpdateAt = nowMs;
         if (activeTrainingModule.value.id === 'map-compass') {
           compassCoachTick.value = performance.now();
@@ -16180,7 +16188,7 @@ function animate() {
       activeScreen.value === 'simulation' && shouldRefreshTactical ? getTacticalChartSnapshot() : null;
     if (activeScreen.value === 'simulation' && shouldRefreshTactical) {
       lastTacticalUpdateAt = nowMs;
-      updateTacticalMinimap();
+      updateTacticalMinimap(simChartSnapshot);
     }
 
     if (activeCamera.value === 'helm') {
@@ -16228,6 +16236,7 @@ function onWindowResize() {
   camera2.aspect = w / h;
   camera2.updateProjectionMatrix();
 
+  renderer.setPixelRatio(getRenderQuality(graphicsQuality.value, window.devicePixelRatio).pixelRatio);
   renderer.setSize(w, h);
   postProcessing?.resize(w, h);
 }
@@ -16341,28 +16350,19 @@ watch(inventoryVisible, () => {
   syncUiCursor();
 });
 
-// Watch for interaction readiness to show buoy interaction modal
-watch(graphicsQuality, (newQuality) => {
+function applyGraphicsSettings() {
   if (!renderer) return;
-  const deviceRatio = window.devicePixelRatio || 1;
-  switch (newQuality) {
-    case 'low':
-      renderer.setPixelRatio(Math.min(deviceRatio, 1.2));
-      break;
-    case 'medium':
-      renderer.setPixelRatio(Math.min(deviceRatio, 1.5));
-      break;
-    case 'high':
-      renderer.setPixelRatio(Math.min(deviceRatio, 1.8));
-      break;
-    case 'ultra':
-      renderer.setPixelRatio(Math.min(deviceRatio, 2));
-      break;
-  }
-});
+  const profile = getRenderQuality(graphicsQuality.value, window.devicePixelRatio);
+  renderer.setPixelRatio(profile.pixelRatio);
+  postProcessing?.setQuality(profile);
+  postProcessing?.resize(window.innerWidth, window.innerHeight);
+}
+
+watch(graphicsQuality, applyGraphicsSettings);
 
 watch(waterQuality, (newQuality) => {
   if (!ocean) return;
+  ocean.setQuality(newQuality);
   switch (newQuality) {
     case 'low':
       ocean.setOpacityScale(0.88);
@@ -16376,8 +16376,9 @@ watch(waterQuality, (newQuality) => {
   }
 });
 
-watch(shadowQuality, (newQuality) => {
+function applyShadowSettings() {
   if (!renderer) return;
+  const newQuality = shadowQuality.value;
   switch (newQuality) {
     case 'off':
       renderer.shadowMap.enabled = false;
@@ -16395,7 +16396,24 @@ watch(shadowQuality, (newQuality) => {
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       break;
   }
-});
+  if (mainLight) {
+    const size = getShadowMapSize(newQuality);
+    if (size && mainLight.shadow.mapSize.width !== size) {
+      mainLight.shadow.map?.dispose();
+      mainLight.shadow.map = null;
+      mainLight.shadow.mapSize.set(size, size);
+    }
+    mainLight.shadow.needsUpdate = true;
+  }
+  // Switching shadow filter type changes shader defines on existing materials.
+  scene?.traverse(node => {
+    for (const material of (Array.isArray(node.material) ? node.material : [node.material])) {
+      if (material) material.needsUpdate = true;
+    }
+  });
+}
+
+watch(shadowQuality, applyShadowSettings);
 
 watch(uiScale, (newScale) => {
   document.documentElement.style.fontSize = `${parseFloat(newScale) * 16}px`;

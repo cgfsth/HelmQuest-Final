@@ -3,12 +3,14 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { meshopt, textureCompress } from '@gltf-transform/functions';
-import { MeshoptEncoder } from 'meshoptimizer';
+import { meshopt, simplifyPrimitive, textureCompress, weldPrimitive } from '@gltf-transform/functions';
+import { MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
 import sharp from 'sharp';
+import existingManifest from '../src/helpers/optimizedModelManifest.js';
 
 // Keep source models intact: gameplay measurements and extraction tools use them.
-// Do not merge, simplify or flatten nodes: anchors, windows and lamps use their names.
+// Keep every node/transform: anchors, windows and lamps use their names. Only
+// decorative high-poly ropes and the static wharf may have geometry simplified.
 const models = [
   'SmallBoat.glb', 'trawler (1).glb', 'BigBoat.glb', 'seaside_wharf.glb',
   'ship_wheel.glb', 'helm/large_boat_bridge.glb', 'wooden_planks_dock_set.glb',
@@ -16,17 +18,37 @@ const models = [
 const assetRoot = new URL('../public/assets/', import.meta.url);
 const outputRoot = new URL('optimized/', assetRoot);
 await mkdir(outputRoot, { recursive: true });
-await MeshoptEncoder.ready;
+await Promise.all([MeshoptEncoder.ready, MeshoptSimplifier.ready]);
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS)
   .registerDependencies({ 'meshopt.encoder': MeshoptEncoder });
-const manifest = {};
-const report = [];
-for (const name of models) {
+const manifest = { ...existingManifest };
+const selected = process.argv.slice(2);
+if (selected.some(name => !models.includes(name))) throw new Error('Unknown model requested');
+const report = JSON.parse(await readFile(new URL('report.json', outputRoot), 'utf8'));
+const triangleCount = document => document.getRoot().listMeshes().reduce((sum, mesh) =>
+  sum + mesh.listPrimitives().reduce((sum, prim) => sum + (prim.getIndices()?.getCount() ?? prim.getAttribute('POSITION').getCount()) / 3, 0), 0);
+for (const name of selected.length ? selected : models) {
   const input = new URL(name, assetRoot);
   const document = await io.read(fileURLToPath(input));
+  const sourceTriangles = triangleCount(document);
+  const simplifiedMeshes = [];
+  for (const mesh of document.getRoot().listMeshes()) {
+    const isRope = name === 'trawler (1).glb' && /^rope1_high/i.test(mesh.getName());
+    if (!isRope && name !== 'seaside_wharf.glb') continue;
+    for (const primitive of mesh.listPrimitives()) {
+      weldPrimitive(primitive);
+      simplifyPrimitive(primitive, {
+        simplifier: MeshoptSimplifier,
+        ratio: isRope ? 0.12 : 0.25,
+        error: 0.0001,
+        lockBorder: true,
+      });
+    }
+    simplifiedMeshes.push(mesh.getName());
+  }
   await document.transform(
     textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [2048, 2048], quality: 85 }),
-    // Compression preserves topology and the scene hierarchy.
+    // All other geometry and the scene hierarchy stay intact.
     meshopt({ encoder: MeshoptEncoder, level: 'medium', quantizePosition: 16 }),
   );
   const bytes = await io.writeBinary(document);
@@ -35,7 +57,10 @@ for (const name of models) {
   await writeFile(new URL(filename, outputRoot), bytes);
   manifest[`/assets/${name}`] = `/assets/optimized/${filename}`;
   const before = (await readFile(input)).byteLength;
-  report.push({ model: name, before, after: bytes.byteLength, reduction: `${(100 * (1 - bytes.byteLength / before)).toFixed(1)}%` });
+  const entry = { model: name, before, after: bytes.byteLength, reduction: `${(100 * (1 - bytes.byteLength / before)).toFixed(1)}%`, sourceTriangles, triangles: triangleCount(document), simplifiedMeshes };
+  const index = report.findIndex(entry => entry.model === name);
+  if (index < 0) report.push(entry);
+  else report[index] = entry;
   console.log(`${name}: ${(before / 1e6).toFixed(2)} MB -> ${(bytes.byteLength / 1e6).toFixed(2)} MB`);
 }
 await writeFile(new URL('../src/helpers/optimizedModelManifest.js', import.meta.url),

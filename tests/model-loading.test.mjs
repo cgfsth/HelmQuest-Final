@@ -73,7 +73,31 @@ for (const [originalURL, optimizedURL] of Object.entries(manifest)) {
       if (node.name) assert.ok(names.has(node.name), `Missing animated/model part: ${node.name}`);
     }
     const before = await parse(original), after = await parse(optimized);
-    assert.equal(triangles(after), triangles(before), 'compression must retain every triangle');
+    const simplified = originalURL === '/assets/trawler (1).glb' || originalURL === '/assets/seaside_wharf.glb';
+    if (simplified) {
+      assert.ok(triangles(after) < triangles(before) * 0.5, 'the two high-poly models must shed at least half their triangles');
+    } else {
+      assert.equal(triangles(after), triangles(before), 'other models retain every triangle');
+    }
+    const sourceMeshes = new Map();
+    before.updateMatrixWorld(true);
+    after.updateMatrixWorld(true);
+    before.traverse(node => { if (node.isMesh) sourceMeshes.set(node.name, node); });
+    after.traverse(node => {
+      if (!node.isMesh) return;
+      const source = sourceMeshes.get(node.name);
+      assert.ok(source, `Mesh hierarchy changed: ${node.name}`);
+      if (originalURL !== '/assets/seaside_wharf.glb' && !/^rope1_high/i.test(node.name)) {
+        assert.equal(triangles(node), triangles(source), `Functional geometry changed: ${node.name}`);
+      }
+      // Meshopt rebases local mesh transforms during quantization. Compare the
+      // world-space part, which is what the helm, anchor and collision code use.
+      const originalBounds = new THREE.Box3().setFromObject(source);
+      const optimizedBounds = new THREE.Box3().setFromObject(node);
+      const partTolerance = originalBounds.getSize(new THREE.Vector3()).length() * 0.0002 + 1e-6;
+      assert.ok(originalBounds.min.distanceTo(optimizedBounds.min) < partTolerance, `Part minimum bounds changed: ${node.name}`);
+      assert.ok(originalBounds.max.distanceTo(optimizedBounds.max) < partTolerance, `Part maximum bounds changed: ${node.name}`);
+    });
     const beforeBox = new THREE.Box3().setFromObject(before);
     const afterBox = new THREE.Box3().setFromObject(after);
     const tolerance = beforeBox.getSize(new THREE.Vector3()).length() * 0.0001;
