@@ -6147,7 +6147,7 @@ function startQuickSailWithBoat() {
     .then(enterSimulation)
     .catch((err) => {
       console.error('Archipelago not ready for Quick Sail:', err);
-      enterSimulation();
+      handleTerrainLoadFailure(err);
     });
 }
 
@@ -7584,7 +7584,16 @@ const compassCoachTick = ref(0);
 
 // Clear local error HUD
 function clearError() {
+  if (!islandGroup && sceneGltfLoader) {
+    window.location.reload();
+    return;
+  }
   fatalError.value = null;
+}
+
+function handleTerrainLoadFailure(err) {
+  showCinematicLoading.value = false;
+  fatalError.value = `Terrain could not load. Check your connection, then select Dismiss & Retry.\n${err.message || err}`;
 }
 
 // Watch parameters to update water shader properties
@@ -9827,7 +9836,7 @@ function startTrainingModule(moduleId, options = {}) {
     .then(enterTrainingSimulation)
     .catch((err) => {
       console.error('Archipelago not ready for training:', err);
-      enterTrainingSimulation();
+      handleTerrainLoadFailure(err);
     });
 }
 
@@ -12817,7 +12826,7 @@ function startQuickSail() {
     .then(enterSimulation)
     .catch((err) => {
       console.error('Archipelago not ready for Quick Sail:', err);
-      enterSimulation();
+      handleTerrainLoadFailure(err);
     });
 }
 
@@ -15908,7 +15917,7 @@ function initThree() {
     orbitControls.dampingFactor = 0.05;
     orbitControls.update();
 
-    // 8. Archipelago from public/assets/tropical_island.glb (terrain only, no sky LOD)
+    // 8. Procedural terrain, with a bundled island as the emergency fallback.
     archipelagoLoadPromise = loadArchipelago(gltfLoader)
       .then((archipelago) => {
         islandGroup = archipelago;
@@ -15947,11 +15956,13 @@ function initThree() {
           if (boatObject) restoreBoatSimPose();
         }
         return archipelago;
-      })
-      .catch((err) => {
-        console.error('Archipelago load error:', err);
-        throw err;
       });
+    // Handle startup failures immediately, while keeping the original rejection
+    // available to launch handlers so they cannot start without terrain/colliders.
+    void archipelagoLoadPromise.catch((err) => {
+      console.error('Archipelago load error:', err);
+      handleTerrainLoadFailure(err);
+    });
 
     // 9. Spawn boat: show procedural hull immediately, swap in OBJ when ready
     const attachBoat = (model, modelPath = activeBoatModelFile.value) => {

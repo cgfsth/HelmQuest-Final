@@ -43,9 +43,21 @@ Radar and helm share a chart snapshot, and the mission timer display refreshes
 at its existing 120ms HUD cadence. Physics, grading, collision rules, mission
 completion requirements, and persistence are not changed.
 
+## Terrain deployment fix
+
+The legacy terrain fallback previously shipped its `.gltf` without the referenced
+`scene.bin` in production. Its referenced image files are also absent from the
+source repository. The fallback now explicitly imports the binary through Vite
+and parses the preserved scene geometry with solid materials. Both files are
+loaded only if the primary Davao heightmap fails. The normal terrain is unchanged.
+
+Startup terrain rejection is observed immediately. If both terrain sources fail,
+Quick Sail and training stay out of the simulation, show the terrain error, and
+Retry reloads the page to retry asset downloads.
+
 ## Verification
 
-- All 228 frontend Node regression tests passed, including missions, scores,
+- All 232 frontend Node regression tests passed, including missions, scores,
   quizzes, boat movement, radar, model integrity, and the new performance checks.
 - Production build passed. Vite still reports its existing large bundle warning.
 - Local Edge browser checks covered driving all three boats, chase/orbit/helm
@@ -53,6 +65,11 @@ completion requirements, and persistence are not changed.
   postprocessing resolution. No browser exceptions or fatal simulation errors
   occurred in these checks.
 - Visual screenshots confirmed the vessel, wharf and bridge remain visible.
+- Production-preview Edge checks covered the normal heightmap, deliberately
+  blocked heightmap with a successful fallback buffer download, and both terrain
+  downloads failing followed by a successful Retry. No unhandled exceptions
+  occurred; Quick Sail launched with both terrain sources and the production
+  footer showed DNSC.
 
 A short local headless Edge sample at 1280x720 and device pixel ratio 1 observed
 medium-vessel frame rates rise from about 14.5 to 24.6 FPS. These are local

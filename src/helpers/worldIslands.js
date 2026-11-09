@@ -9,7 +9,6 @@ import { getCachedHeightmapSync, sampleHeightmapElevation } from './terrainHeigh
 export const OCEAN_MAP_HALF_EXTENT = 30000; // Increased for Davao Gulf (~60km span)
 export const ISLAND_PROXIMITY_MARGIN = 14;
 
-const ISLAND_GLB = new URL('./tropical_island/scene.gltf', import.meta.url).href;
 const DAVAO_GULF_GLB = '/assets/terrain/Davao_Gulf.glb';
 
 // Use the Davao Gulf GLB as primary terrain; procedural as fallback
@@ -173,34 +172,27 @@ export async function loadArchipelago(gltfLoader, options = {}) {
   }
 
   // Legacy tropical island GLTF as last resort
-  return new Promise((resolve, reject) => {
-    gltfLoader.load(
-      ISLAND_GLB,
-      (gltf) => {
-        const group = new THREE.Group();
-        group.name = 'Archipelago';
+  const { loadLegacyIsland } = await import('./legacyIslandModel.js');
+  const gltf = await loadLegacyIsland(gltfLoader);
+  const group = new THREE.Group();
+  group.name = 'Archipelago';
 
-        const island = gltf.scene;
-        island.scale.set(2.2, 2.2, 2.2);
-        island.position.set(-420, -1.5, 80);
-        island.rotation.y = 0.35;
+  const island = gltf.scene;
+  island.scale.set(2.2, 2.2, 2.2);
+  island.position.set(-420, -1.5, 80);
+  island.rotation.y = 0.35;
 
-        stripGhostIslandContent(island);
+  stripGhostIslandContent(island);
 
-        island.traverse((child) => {
-          if (!child.isMesh || !child.visible) return;
-          child.castShadow = true;
-          child.receiveShadow = true;
-        });
-
-        group.add(island);
-        rebuildIslandBoxes(group);
-        resolve(group);
-      },
-      undefined,
-      reject
-    );
+  island.traverse((child) => {
+    if (!child.isMesh || !child.visible) return;
+    child.castShadow = true;
+    child.receiveShadow = true;
   });
+
+  group.add(island);
+  rebuildIslandBoxes(group);
+  return group;
 }
 
 /** Load Davao_Gulf.glb and apply realistic terrain materials. */
