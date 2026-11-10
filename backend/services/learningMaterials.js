@@ -4,6 +4,27 @@ export const PDF_LIMIT = 15 * 1024 * 1024;
 export class MaterialsError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
+export class MaterialsStorageError extends MaterialsError {
+  constructor(error, operation) {
+    const sourceCode = String(error?.code || 'unknown');
+    let code = 'MATERIALS_STORAGE_UNAVAILABLE';
+    let message = 'PDF storage is temporarily unavailable. Please try again later.';
+    if (sourceCode === '404' && operation === 'upload') {
+      code = 'MATERIALS_STORAGE_NOT_CONFIGURED';
+      message = 'PDF storage is not set up yet. Ask your administrator to create the Firebase Storage bucket.';
+    } else if (['401', '403', 'storage/unauthorized', 'storage/unauthenticated'].includes(sourceCode)) {
+      code = 'MATERIALS_STORAGE_ACCESS_DENIED';
+      message = 'The server cannot access PDF storage. Ask your administrator to check its storage permissions.';
+    } else if (sourceCode === '404') {
+      code = 'MATERIALS_PDF_NOT_FOUND';
+      message = 'This PDF is unavailable. Ask your instructor to check or replace the document.';
+    }
+    super(503, message);
+    this.code = code;
+    this.operation = operation;
+    this.sourceCode = sourceCode;
+  }
+}
 const fail = (status, message) => { throw new MaterialsError(status, message); };
 const validId = id => typeof id === 'string' && /^[\w-]{1,128}$/.test(id);
 const text = (value, name, max, required = true) => {
@@ -149,8 +170,12 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
     }
     if (isModule) check(await ref('syllabi', parentId).get(), user, true);
     const storagePath = file ? `${name}/${docRef.id}/${randomUUID()}.pdf` : null;
-    if (file) await bucket().file(storagePath).save(file.buffer, { resumable: false, validation: 'crc32c', preconditionOpts: { ifGenerationMatch: 0 },
-      metadata: { contentType: 'application/pdf', cacheControl: 'private, no-store', metadata: { recordId: docRef.id, collection: name } } });
+    if (file) {
+      try {
+        await bucket().file(storagePath).save(file.buffer, { resumable: false, validation: 'crc32c', preconditionOpts: { ifGenerationMatch: 0 },
+          metadata: { contentType: 'application/pdf', cacheControl: 'private, no-store', metadata: { recordId: docRef.id, collection: name } } });
+      } catch (error) { throw new MaterialsStorageError(error, 'upload'); }
+    }
     try {
       await db.runTransaction(async tx => {
         const current = await tx.get(docRef);
@@ -232,7 +257,9 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
     const parentRef = name === 'syllabi' ? doc.ref : ref('syllabi', data.syllabusId);
     check(await parentRef.get(), user);
     if (!filePath(name, id, data.storagePath)) fail(404, 'Document not found.');
-    const [buffer] = await bucket().file(data.storagePath).download({ start: 0, end: PDF_LIMIT, validation: false });
+    let buffer;
+    try { [buffer] = await bucket().file(data.storagePath).download({ start: 0, end: PDF_LIMIT, validation: false }); }
+    catch (error) { throw new MaterialsStorageError(error, 'read'); }
     if (buffer.length > PDF_LIMIT) fail(400, 'PDF documents must be 15 MB or smaller.');
     // File access always follows the latest parent assignment and current revision.
     check(await parentRef.get(), user);

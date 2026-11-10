@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "test:materials": "npm test -- --runInBand tests/learningMaterials.test.js",
+    "check:materials-storage": "node scripts/check-learning-materials-storage.js",
     "cleanup:materials": "node scripts/cleanup-learning-materials.js",
     "start": "node server.js",
     "dev": "nodemon server.js",

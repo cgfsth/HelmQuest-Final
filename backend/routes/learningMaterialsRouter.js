@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import { MaterialsError, PDF_LIMIT } from '../services/learningMaterials.js';
+import { MaterialsError, MaterialsStorageError, PDF_LIMIT } from '../services/learningMaterials.js';
 
 export function createLearningMaterialsRouter({ service, authenticate }) {
   const router = express.Router();
@@ -45,7 +45,8 @@ export function createLearningMaterialsRouter({ service, authenticate }) {
     req.releaseMaterialsSlot?.();
     if (res.headersSent) return next(error);
     if (error instanceof multer.MulterError) return res.status(400).json({ message: error.code === 'LIMIT_FILE_SIZE' ? 'PDF documents must be 15 MB or smaller.' : 'Upload one PDF with the required document information.' });
-    if (error instanceof MaterialsError) return res.status(error.status).json({ message: error.message });
+    if (error instanceof MaterialsStorageError) console.error('Learning materials storage operation failed:', JSON.stringify({ operation: error.operation, code: error.code, sourceCode: error.sourceCode }));
+    if (error instanceof MaterialsError) return res.status(error.status).json({ message: error.message, ...(error.code ? { code: error.code } : {}) });
     console.error('Learning materials operation failed:', error.code || error.name);
     res.status(503).json({ message: 'Unable to complete the document operation. Please refresh and try again.' });
   });

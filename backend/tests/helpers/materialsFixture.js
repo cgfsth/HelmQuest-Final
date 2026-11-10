@@ -7,7 +7,7 @@ export function materialsFixture({ middleware } = {}) {
   const records = { instructor: { a: { name: 'Captain Helen', status: 'active' }, b: { name: 'Captain Marcus', status: 'active' }, admin: { name: 'Admin', role: 'admin', status: 'active' } },
     students: { sa: { status: 'active', instructorid: 'a' }, sb: { status: 'active', instructorId: 'b' }, pending: { status: 'pending', instructorid: 'a' }, unassigned: { status: 'active' } },
     syllabi: { placeholder: { title: '' } }, syllabus_modules: { placeholder: { title: '' } }, training_modules: { untouched: { title: 'Simulation' } } };
-  const files = new Map(), events = [], state = { failSave: false, failDelete: false, beforeCommit: null, afterSave: null, failCommit: false, loseCommitAcknowledgement: false, timestamps: 0 };
+  const files = new Map(), events = [], state = { failSave: false, saveError: null, failDelete: false, beforeCommit: null, afterSave: null, failCommit: false, loseCommitAcknowledgement: false, timestamps: 0 };
   let generated = 0, lock = Promise.resolve();
   const clone = value => structuredClone(value);
   const doc = (name, id = `generated-${++generated}`) => {
@@ -47,6 +47,7 @@ export function materialsFixture({ middleware } = {}) {
   const bucket = { file: path => ({ name: path,
     save: async (buffer, options) => {
       events.push(['upload', path]); if (state.failSave) throw new Error('Storage unavailable');
+      if (state.saveError) throw state.saveError;
       if (files.has(path)) throw new Error('Object exists');
       files.set(path, { buffer: Buffer.from(buffer), options, timeCreated: new Date().toISOString() });
       await state.afterSave?.(path);

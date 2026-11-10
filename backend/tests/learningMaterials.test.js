@@ -27,6 +27,27 @@ test('real multipart upload creates generated metadata after the file, using inj
   expect(f.records.training_modules).toEqual({ untouched: { title: 'Simulation' } });
 });
 
+test.each([
+  [404, 'MATERIALS_STORAGE_NOT_CONFIGURED', /not set up yet/],
+  [403, 'MATERIALS_STORAGE_ACCESS_DENIED', /storage permissions/],
+  [401, 'MATERIALS_STORAGE_ACCESS_DENIED', /storage permissions/],
+  ['ETIMEDOUT', 'MATERIALS_STORAGE_UNAVAILABLE', /temporarily unavailable/],
+])('upload storage failure %s is actionable and never saves a placeholder or leaks provider details', async (sourceCode, code, message) => {
+  f.state.saveError = Object.assign(new Error('provider detail: private-account@example.com secret-token'), { code: sourceCode });
+  const response = await request(f.app).post('/learning-materials/syllabi').set(headers()).field('title', 'Navigation')
+    .attach('file', samplePdf(), { filename: 'course.pdf', contentType: 'application/pdf' }).expect(503);
+  expect(response.body.code).toBe(code);expect(response.body.message).toMatch(message);
+  expect(JSON.stringify(response.body)).not.toMatch(/private-account|secret-token|provider detail/);
+  expect(Object.keys(f.records.syllabi)).toEqual(['placeholder']);expect(f.files.size).toBe(0);
+});
+
+test('a missing PDF is distinguished from an unconfigured upload bucket', async () => {
+  const { id } = await create();
+  f.bucket.file = () => ({ download: async () => { throw Object.assign(new Error('No such object'), { code: 404 }); } });
+  const response = await request(f.app).get(`/learning-materials/syllabi/${id}/pdf`).set(headers('sa','student')).expect(503);
+  expect(response.body.code).toBe('MATERIALS_PDF_NOT_FOUND');expect(response.body.message).toMatch(/replace the document/);
+});
+
 test('anonymous, forged IDs, tampered sessions and pending accounts are denied', async () => {
   await request(f.app).get('/learning-materials/syllabi').expect(401);
   await request(f.app).get('/learning-materials/syllabi').set('x-user-id', 'admin-root').expect(401);
