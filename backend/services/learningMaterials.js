@@ -9,9 +9,18 @@ export class MaterialsStorageError extends MaterialsError {
     const sourceCode = String(error?.code || 'unknown');
     let code = 'MATERIALS_STORAGE_UNAVAILABLE';
     let message = 'PDF storage is temporarily unavailable. Please try again later.';
-    if (sourceCode === '404' && operation === 'upload') {
+    if (sourceCode === 'storage/not-configured') {
       code = 'MATERIALS_STORAGE_NOT_CONFIGURED';
-      message = 'PDF storage is not set up yet. Ask your administrator to create the Firebase Storage bucket.';
+      message = 'PDF storage is not configured on the server. Ask your administrator to complete the storage setup.';
+    } else if (sourceCode === 'storage/public-bucket') {
+      code = 'MATERIALS_STORAGE_NOT_PRIVATE';
+      message = 'PDF storage must be private. Ask your administrator to check the bucket settings.';
+    } else if (sourceCode === '413') {
+      code = 'MATERIALS_STORAGE_FILE_TOO_LARGE';
+      message = 'The PDF exceeds the storage file limit. Choose a smaller file or ask your administrator to check the bucket limit.';
+    } else if (sourceCode === '404' && operation === 'upload') {
+      code = 'MATERIALS_STORAGE_NOT_CONFIGURED';
+      message = 'PDF storage is not set up yet. Ask your administrator to check the configured storage bucket.';
     } else if (['401', '403', 'storage/unauthorized', 'storage/unauthenticated'].includes(sourceCode)) {
       code = 'MATERIALS_STORAGE_ACCESS_DENIED';
       message = 'The server cannot access PDF storage. Ask your administrator to check its storage permissions.';

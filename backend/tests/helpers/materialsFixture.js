@@ -3,7 +3,7 @@ import { createLearningMaterialsService } from '../../services/learningMaterials
 import { createMaterialsAccess } from '../../middleware/materialsAccess.js';
 import { createLearningMaterialsRouter } from '../../routes/learningMaterialsRouter.js';
 
-export function materialsFixture({ middleware } = {}) {
+export function materialsFixture({ middleware, bucketOverride } = {}) {
   const records = { instructor: { a: { name: 'Captain Helen', status: 'active' }, b: { name: 'Captain Marcus', status: 'active' }, admin: { name: 'Admin', role: 'admin', status: 'active' } },
     students: { sa: { status: 'active', instructorid: 'a' }, sb: { status: 'active', instructorId: 'b' }, pending: { status: 'pending', instructorid: 'a' }, unassigned: { status: 'active' } },
     syllabi: { placeholder: { title: '' } }, syllabus_modules: { placeholder: { title: '' } }, training_modules: { untouched: { title: 'Simulation' } } };
@@ -56,7 +56,7 @@ export function materialsFixture({ middleware } = {}) {
     download: async () => { if (!files.has(path)) throw new Error('Missing file'); return [Buffer.from(files.get(path).buffer)]; },
     getMetadata: async () => [files.get(path)],
   }), getFiles: async ({ prefix }) => [[...files.keys()].filter(path => path.startsWith(prefix)).map(path => bucket.file(path)), null] };
-  const service = createLearningMaterialsService({ db, bucket: () => bucket, timestamp: () => { state.timestamps++; return new Date('2026-11-10T00:00:00Z'); } });
+  const service = createLearningMaterialsService({ db, bucket: () => bucketOverride || bucket, timestamp: () => { state.timestamps++; return new Date('2026-11-10T00:00:00Z'); } });
   const app = express(); app.use(express.json()); if (middleware) app.use(middleware); app.use('/learning-materials', createLearningMaterialsRouter({ service, authenticate: createMaterialsAccess({ db }) }));
   return { app, service, db, bucket, records, files, events, state };
 }
