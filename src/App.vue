@@ -3639,6 +3639,7 @@ import BuoyInteraction from './components/BuoyInteraction.vue';
 import MissionComplete from './components/MissionComplete.vue';
 import SimulationTouchControls from './components/SimulationTouchControls.vue';
 import SimulationTutorial from './components/SimulationTutorial.vue';
+import { getLandingBoatPresentation } from './helpers/landingBoatPresentation.js';
 import { useSimulationTutorial } from './helpers/simulationTutorial.js';
 import { loadOceanSimulation } from './helpers/oceanSimulation.js';
 import {
@@ -12771,14 +12772,17 @@ function showWeatherNotice(message) {
 
 function applyLandingBoatPose() {
   if (!boatObject || landingBoatPoseActive) return;
-  // Float the boat nicely on the water surface for landing page visual
+  const presentation = getLandingBoatPresentation(boatObject, BOAT_TYPES, camera?.aspect);
+  const yaw = Math.PI / 2 + 0.52;
+  const motion = sampleBoatWaveMotion(LANDING_BOAT_X, LANDING_BOAT_Z, yaw,
+    presentation.length, (x, z) => ocean?.sampleHeight?.(x, z) ?? 0, presentation.beam);
   boatObject.position.set(
     LANDING_BOAT_X,
-    baselineWaterlineY + 2.5, // Float well above waterline for better landing page visual
+    baselineWaterlineY + presentation.waterlineOffset + motion.height,
     LANDING_BOAT_Z
   );
-  boatObject.rotation.set(0, Math.PI / 2 + 0.52, 0);
-  boatObject.scale.setScalar(1.50);
+  boatObject.rotation.set(motion.rotationX, yaw, motion.rotationZ);
+  boatObject.scale.setScalar(presentation.scale);
   landingBoatPoseActive = true;
 }
 
@@ -12816,32 +12820,32 @@ function updateLandingCinematic(delta) {
   landingCinematicTime += delta;
   const t = landingCinematicTime;
 
-  const bob = Math.sin(t * 0.85) * 0.45;  // Increased from 0.18 to 0.45 - bigger vertical wave motion
-  const sway = Math.sin(t * 0.48) * 0.025;  // Increased from 0.008 to 0.025 - more side-to-side roll
-  const pitch = Math.sin(t * 0.31) * 0.015;  // Increased from 0.004 to 0.015 - more front-to-back pitch
-  boatObject.position.y = baselineWaterlineY - 8.0 + bob; // Sit boat lower in water
-  boatObject.rotation.z = sway;  // Roll (side to side)
-  boatObject.rotation.x = pitch;  // Pitch (bow up/down)
+  const presentation = getLandingBoatPresentation(boatObject, BOAT_TYPES, window.innerWidth / window.innerHeight);
+  const motion = sampleBoatWaveMotion(boatObject.position.x, boatObject.position.z, boatObject.rotation.y,
+    presentation.length, (x, z) => ocean?.sampleHeight?.(x, z) ?? 0, presentation.beam);
+  applyBoatBuoyancy(boatObject, { ...motion, ...getBoatWaveResponse(presentation.length, delta) },
+    baselineWaterlineY + presentation.waterlineOffset);
 
   const boatPos = boatObject.position;
+  const seaY = boatPos.y - presentation.waterlineOffset;
 
-  // Slow orbital sweep — trawler silhouette against sunset water
+  // Keep the selected hull framed above the sea, at a distance proportional to its size.
   const orbitPhase = t * 0.038;
-  const orbitRadius = 85 + Math.sin(t * 0.07) * 10;  // Adjusted to 85 for better balance
-  const camHeight = 18 + Math.sin(t * 0.11) * 2.5;  // Higher camera - raised from 12 to 18
+  const orbitRadius = presentation.orbitRadius + Math.sin(t * 0.07) * presentation.orbitVariation;
+  const camHeight = presentation.cameraHeight * (1 + Math.sin(t * 0.11) * .14);
   const camX = boatPos.x + Math.cos(orbitPhase) * orbitRadius;
-  const camZ = boatPos.z + Math.sin(orbitPhase) * orbitRadius * 0.62;
+  const camZ = boatPos.z + Math.sin(orbitPhase) * orbitRadius;
 
   camera.fov = LANDING_CAMERA_FOV + Math.sin(t * 0.13) * 1.2;
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
 
-  camera.position.set(camX, boatPos.y + camHeight, camZ);
+  camera.position.set(camX, seaY + camHeight, camZ);
 
   _landingLookAt.set(
-    boatPos.x + Math.sin(orbitPhase) * 3,
-    boatPos.y + 10,  // Lower look-at point from 14 to 10 - shows more ocean
-    boatPos.z - 8
+    boatPos.x + Math.sin(orbitPhase) * presentation.length / 30,
+    seaY + presentation.lookHeight,
+    boatPos.z
   );
   camera.lookAt(_landingLookAt);
 }
@@ -16067,8 +16071,8 @@ function animate() {
     const shouldRefreshWaypoints = activeScreen.value === 'simulation' && nowMs - lastWaypointUpdateAt >= SIM_WAYPOINT_INTERVAL_MS;
 
     if (menuBackdrop) {
-      updateLandingCinematic(visualDelta);
       if (ocean) ocean.update(visualDelta, camera.position);
+      updateLandingCinematic(visualDelta);
       updateBigBoatLightPools(boatObject, getWaterSurfaceY);
       updateTerrainTiles();
       if (boatObject && boatWakeSystem) {
