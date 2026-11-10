@@ -10,6 +10,10 @@
         <button type="button" class="simulation-orientation-back" @click="exitTraining">Back to dashboard</button>
       </div>
     </div>
+    <SimulationTutorial v-if="tutorialVisible"
+      :step-index="tutorialStepIndex" :screen="activeScreen" :touch="simulationTouchEnabled"
+      :storage-notice="tutorialStorageNotice"
+      @next="advanceStudentTour" @back="previousStudentTourStep" @close="closeStudentTour" @choose-mission="chooseMissionForTour" />
     <InventoryModal/>
     <PostDockingQuizModal 
       :quiz="postDockingQuizData || {}" 
@@ -1603,7 +1607,7 @@
       
       <!-- Main Dashboard (only shown if not pending) -->
       <div v-else class="missions-hub missions-hub--with-sidebar student-hub-shell"
-        :class="{ 'student-hub--menu-open': studentMenuOpen }">
+        :class="{ 'student-hub--menu-open': studentMenuOpen }" :inert="tutorialVisible">
         <button v-if="studentCompactLayout && studentMenuOpen" type="button"
           class="student-menu-backdrop" tabindex="-1" aria-label="Close navigation menu" @click="closeStudentMenu()"></button>
         <!-- Left Sidebar -->
@@ -1635,14 +1639,6 @@
           </div>
 
           <nav class="hub-sidebar-nav" aria-label="Training sections">
-            <button
-              type="button"
-              class="hub-nav-item"
-              :class="{ 'hub-nav-item--active': hubTab === 'tutorial' }"
-              @click="selectHubTab('tutorial'); closeStudentMenu()"
-            >
-              <span class="hub-nav-icon" aria-hidden="true">📖</span> Simulation Tutorial
-            </button>
             <button
               type="button"
               class="hub-nav-item"
@@ -1692,7 +1688,7 @@
             <span aria-hidden="true">☰</span><span>Menu</span>
           </button>
         </div>
-        <header class="missions-hub-header" id="hub-overview">
+        <header class="missions-hub-header" id="hub-overview" data-tour="student-header">
           <div class="missions-hub-intro">
             <p class="training-eyebrow">HelmQuest Training</p>
             <h1 class="missions-hub-title">
@@ -1700,7 +1696,6 @@
               <template v-else-if="hubTab === 'certificates'">Training Records</template>
               <template v-else-if="hubTab === 'missions'">Missions</template>
               <template v-else-if="hubTab === 'leaderboards'">Leaderboards</template>
-              <template v-else-if="hubTab === 'tutorial'">Simulation Tutorial</template>
               <template v-else>Navigation Training</template>
             </h1>
             <p v-if="hubTab === 'overview'" class="missions-hub-welcome">
@@ -1721,24 +1716,13 @@
               <template v-else-if="hubTab === 'leaderboards'">
                 See how you rank against other students
               </template>
-              <template v-else-if="hubTab === 'tutorial'">
-                Learn the boat controls and mission flow before your first voyage
-              </template>
             </p>
           </div>
+          <button v-if="tutorialEligible" type="button" class="student-tour-trigger" title="Simulation guided tour"
+            aria-label="Open simulation guided tour" aria-haspopup="dialog" :aria-expanded="tutorialVisible" @click="openStudentTour">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.7-2.5 2-2.5 4"/><circle cx="12" cy="16.5" r=".7" fill="currentColor" stroke="none"/></svg>
+          </button>
         </header>
-
-        <SimulationTutorial
-          v-if="tutorialEligible && (hubTab === 'tutorial' || hubTab === 'overview')"
-          :step-index="tutorialStepIndex"
-          :completed="tutorialCompleted"
-          :touch="simulationTouchEnabled"
-          :storage-notice="tutorialStorageNotice"
-          @next="nextTutorialCard"
-          @back="previousTutorialCard"
-          @restart="restartTutorial"
-          @missions="selectHubTab('missions')"
-        />
 
         <section v-show="hubTab === 'overview'" class="motivation-panel" id="hub-badges" aria-label="Your progress and rewards">
           <!-- Student Profile Card - Horizontal Layout -->
@@ -2637,7 +2621,7 @@
     <!-- Shared layout keeps the mission card above the transparent controls. -->
     <div v-if="activeScreen === 'simulation' && (activeCamera !== 'helm' || simulationTouchEnabled)"
       v-show="!controlsGuideVisible && (!simulationTouchEnabled || (!activeMiniGame && !gearInfoPopup))"
-      class="simulation-control-panel" :inert="simulationNeedsLandscape || undefined">
+      class="simulation-control-panel" :inert="simulationNeedsLandscape || tutorialVisible || undefined">
       <!-- Minimal mission objective box -->
       <div v-if="activeScreen === 'simulation' && (activeCamera !== 'helm' || simulationTouchEnabled)" class="mission-objective-box">
         <button class="objective-toggle" :aria-expanded="!isObjectiveCollapsed" aria-controls="simulation-objective-body" @click="isObjectiveCollapsed = !isObjectiveCollapsed">
@@ -2864,7 +2848,7 @@
     </button>
 
     <SimulationTouchControls v-if="activeScreen === 'simulation' && simulationTouchEnabled" v-show="!controlsGuideVisible"
-      :disabled="simulationNeedsLandscape || exitConfirmVisible || exitFinalConfirmVisible || !!gearInfoPopup || showPostDockingQuiz || showQuizResults || controlsGuideVisible"
+      :disabled="simulationNeedsLandscape || tutorialVisible || exitConfirmVisible || exitFinalConfirmVisible || !!gearInfoPopup || showPostDockingQuiz || showQuizResults || controlsGuideVisible"
       @press="pressSimulationTouchKey" @release="releaseSimulationTouchKey" @interact="interactSimulationTouch" />
 
     <!-- Navigation Map removed -->
@@ -3864,7 +3848,8 @@ const userRole = ref('student');
 const currentUser = ref({ id: 'student-alex', name: 'Alex Rivera', email: 'student@helmquest.local' });
 const {
   stepIndex: tutorialStepIndex, completed: tutorialCompleted, storageNotice: tutorialStorageNotice,
-  eligible: tutorialEligible, next: nextTutorialCard, back: previousTutorialCard, restart: restartTutorial,
+  eligible: tutorialEligible, visible: tutorialOpen, next: nextTutorialCard, back: previousTutorialCard,
+  show: showTutorial, dismiss: dismissTutorial, waitForSimulation: waitForTutorialSimulation, resumeInSimulation: resumeTutorialInSimulation,
 } = useSimulationTutorial({ currentUser, isAuthenticated, userRole });
 const adminLoginMode = ref(false); // Track if user is trying to login as admin
 const instructorLoginMode = ref(false); // Track if user is trying to login as instructor
@@ -4561,6 +4546,41 @@ function selectHubTab(tab) {
   }
   
   maybeAutoCollapseSidebar();
+}
+
+async function openStudentTour() {
+  await closeStudentMenu(false);
+  showTutorial();
+  selectHubTab(tutorialStepIndex.value === 0 ? 'overview' : 'missions');
+}
+
+async function advanceStudentTour() {
+  nextTutorialCard();
+  if (activeScreen.value === 'dashboard') selectHubTab('missions');
+  if (tutorialCompleted.value) await restoreStudentTourFocus();
+}
+
+function previousStudentTourStep() {
+  previousTutorialCard();
+  if (activeScreen.value === 'dashboard') selectHubTab(tutorialStepIndex.value === 0 ? 'overview' : 'missions');
+}
+
+async function chooseMissionForTour() {
+  selectHubTab('missions');
+  waitForTutorialSimulation();
+  await nextTick();
+  const target = document.querySelector('#hub-missions .hub-mission-start:not(:disabled)');
+  (target || document.querySelector('.student-tour-trigger'))?.focus();
+}
+
+async function restoreStudentTourFocus() {
+  await nextTick();
+  document.querySelector(activeScreen.value === 'simulation' ? '.engine-btn' : '.student-tour-trigger')?.focus({ preventScroll: true });
+}
+
+async function closeStudentTour() {
+  dismissTutorial();
+  await restoreStudentTourFocus();
 }
 
 function selectInstructorTab(tab) {
@@ -12889,6 +12909,7 @@ function syncUiCursor(screen = activeScreen.value) {
     exitConfirmVisible.value ||
     exitFinalConfirmVisible.value ||
     controlsGuideVisible.value ||
+    tutorialVisible.value ||
     showMenuSettings.value ||
     !!missionEditorModal.value ||
     !!quizEditorModal.value ||
@@ -15451,6 +15472,7 @@ function setupInputs() {
 
   window.addEventListener("keydown", (event) => {
     if (activeScreen.value !== 'simulation') return;
+    if (tutorialVisible.value) return;
     // If final exit confirmation is visible, handle it first
     if (exitFinalConfirmVisible.value) {
       if ((event.code === 'Enter' || event.key === 'Enter') && !event.repeat) {
@@ -16034,6 +16056,10 @@ function animate() {
     const menuBackdrop = isMenuBackdropScreen();
     const visualDelta = lastVisualFrameAt ? Math.min(0.1, (nowMs - lastVisualFrameAt) / 1000) : delta;
     lastVisualFrameAt = nowMs;
+    if (tutorialVisible.value && activeScreen.value === 'simulation') {
+      renderFrame(activeCamera.value === 'helm' ? camera2 : camera);
+      return;
+    }
     updateSkyClouds(sky, visualDelta, wind.value.speed);
     const shouldRefreshTactical = activeScreen.value === 'simulation' && nowMs - lastTacticalUpdateAt >= SIM_TACTICAL_INTERVAL_MS;
     const shouldRefreshTraining = activeScreen.value === 'simulation' && nowMs - lastTrainingUpdateAt >= SIM_TRAINING_INTERVAL_MS;
@@ -16268,9 +16294,42 @@ window.addEventListener("unhandledrejection", (e) => {
 });
 
 // --- Lifecycle Hooks ---
+const tutorialVisible = computed(() => tutorialEligible.value && tutorialOpen.value
+  && ['dashboard', 'simulation'].includes(activeScreen.value)
+  && !showCinematicLoading.value && !showMissionBriefing.value
+  && (activeScreen.value !== 'simulation' || !simulationNeedsLandscape.value) && !controlsGuideVisible.value && !gearInfoPopup.value
+  && !showPostDockingQuiz.value && !showQuizResults.value && !exitConfirmVisible.value && !exitFinalConfirmVisible.value);
+
+watch(activeScreen, screen => { if (screen === 'simulation') resumeTutorialInSimulation(); });
+
+let tutorialPause = null;
+watch([tutorialVisible, activeScreen], ([visible, screen]) => {
+  if (visible && screen === 'simulation' && !tutorialPause) {
+    tutorialPause = { at: performance.now(), run: trainingRunMetrics.value,
+      state: performanceManager.state };
+    simulationRunning.value = false;
+    Object.keys(keyStates).forEach(key => { keyStates[key] = false; });
+    cancelExitHold();
+  } else if ((!visible || screen !== 'simulation') && tutorialPause) {
+    const paused = tutorialPause;
+    tutorialPause = null;
+    if (screen === 'simulation' && paused.run === trainingRunMetrics.value) {
+      const duration = performance.now() - paused.at;
+      if (Number.isFinite(trainingRunMetrics.value.startedAt) && !trainingRunMetrics.value.endedAt) trainingRunMetrics.value.startedAt += duration;
+      if (trainingStepStartedAt.value) trainingStepStartedAt.value += duration;
+      if (trainingHeadingHold.value.startedAt != null) trainingHeadingHold.value.startedAt += duration;
+      if (performanceManager.state === paused.state && performanceManager.state.missionStartTime && !performanceManager.state.missionEndTime) {
+        performanceManager.state.missionStartTime += duration;
+      }
+      simulationRunning.value = !simulationNeedsLandscape.value;
+    }
+  }
+  syncUiCursor();
+});
+
 watch(simulationNeedsLandscape, (needsLandscape) => {
   if (activeScreen.value !== 'simulation') return;
-  simulationRunning.value = !needsLandscape;
+  simulationRunning.value = !needsLandscape && !tutorialVisible.value;
   Object.keys(keyStates).forEach(key => { keyStates[key] = false; });
   syncUiCursor();
   nextTick(onWindowResize);

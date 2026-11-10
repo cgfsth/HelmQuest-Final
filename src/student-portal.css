@@ -1,4 +1,27 @@
 /* Student-only layout rules; instructor/admin consoles retain their own navigation. */
+.student-dashboard-overlay .missions-hub-header {
+  flex-wrap: nowrap;
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.student-tour-trigger {
+  display: grid;
+  place-items: center;
+  flex: 0 0 44px;
+  height: 44px;
+  margin-left: auto;
+  margin-top: 14px;
+  border: 1px solid #33506c;
+  border-radius: 12px;
+  background: #122d43;
+  color: #8ee5ef;
+  cursor: pointer;
+}
+.student-tour-trigger svg { width: 24px; height: 24px; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+.student-tour-trigger:hover { background: #19405a; border-color: #63cbd9; }
+.student-tour-trigger:focus-visible { outline: 2px solid #67e8f9; outline-offset: 4px; }
+
 .student-mobile-toolbar,
 .student-menu-close {
   display: none;

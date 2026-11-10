@@ -18,6 +18,7 @@ function simulation({ review = false, quickSail = false } = {}) {
     authForm: { value: { email: 'student@example.test', password: '', remember: true } },
     activeScreen: { value: 'simulation' }, simulationRunning: { value: true },
     simulationNeedsLandscape: { value: false },
+    tutorialVisible: { value: false },
     isQuickSailMode: { value: quickSail },
     exitConfirmVisible: { value: false }, exitFinalConfirmVisible: { value: false },
     activeTrainingModule: { value: quickSail ? null : { id: 'module-1' } },
@@ -53,6 +54,14 @@ function simulation({ review = false, quickSail = false } = {}) {
   };
   return { context, press };
 }
+
+test('tour keyboard input never starts boat actions or opens the simulation exit dialog', () => {
+  const { context, press } = simulation();
+  context.tutorialVisible.value = true;
+  press('KeyP'); press('KeyH'); press('Backquote'); press('Escape');
+  assert.equal(context.exitConfirmVisible.value, false);
+  assert.equal(context.activeScreen.value, 'simulation');
+});
 
 for (const mode of [{ name: 'mission' }, { name: 'practice review', review: true }, { name: 'Quick Sail', quickSail: true }]) {
   test(`ESC quits ${mode.name} to the dashboard while retaining the signed-in student`, () => {

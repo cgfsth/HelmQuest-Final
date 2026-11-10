@@ -2,7 +2,7 @@ import { computed, ref, watch } from 'vue';
 
 export const SIMULATION_TUTORIAL_STEPS = [
   {
-    title: 'Choose your first mission', label: 'Mission briefing', icon: 'compass',
+    title: 'Welcome aboard, Cadet', label: 'Your first voyage', target: '[data-tour="student-header"]',
     description: 'Your instructor has approved your enrollment. Get familiar with the simulation before your first voyage.',
     instructions: [
       'Open Missions in the sidebar and choose an available mission from your instructor.',
@@ -12,7 +12,7 @@ export const SIMULATION_TUTORIAL_STEPS = [
     tip: 'This tutorial is a guide. Reading it does not start a mission or affect your scores.',
   },
   {
-    title: 'Prepare your boat', label: 'Engine & anchor', icon: 'engine',
+    title: 'Prepare your boat', label: 'Engine & anchor', target: '.simulation-primary-actions',
     description: 'Your boat starts with its engine off. Prepare it before trying to move.',
     instructions: [
       'Start the engine and wait for the engine-running message.',
@@ -24,7 +24,7 @@ export const SIMULATION_TUTORIAL_STEPS = [
     tip: 'Pressing the engine control again stops the engine. Keep it running while navigating.',
   },
   {
-    title: 'Learn to steer and slow down', label: 'Boat controls', icon: 'steer',
+    title: 'Learn to steer and slow down', label: 'Boat controls', target: '.speed-pill', touchTarget: '.simulation-touch-controls',
     description: 'Use small inputs and leave room to turn. A moving boat takes time to stop.',
     instructions: [
       'Move forward gently, then steer left or right toward your destination.',
@@ -36,7 +36,7 @@ export const SIMULATION_TUTORIAL_STEPS = [
     tip: 'Slow down before a turn or docking approach. Different boats respond at different speeds.',
   },
   {
-    title: 'Find and complete each checkpoint', label: 'Navigation & buoys', icon: 'buoy',
+    title: 'Find and complete each checkpoint', label: 'Navigation & buoys', target: '.tactical-minimap',
     description: 'Follow the current mission step and use the radar and compass to stay on course.',
     instructions: [
       'Check the current objective, target marker and required heading or coordinates.',
@@ -48,7 +48,7 @@ export const SIMULATION_TUTORIAL_STEPS = [
     tip: 'Passing near a buoy may not complete the step. Read the prompt and finish the required interaction.',
   },
   {
-    title: 'Return to port and finish', label: 'Docking & quiz', icon: 'flag',
+    title: 'Return to port and finish', label: 'Docking & quiz', target: '.mission-objective-box',
     description: 'Complete the remaining objectives and follow the docking instructions shown in your mission.',
     instructions: [
       'Approach the assigned docking area slowly and bring the boat to a stop.',
@@ -58,12 +58,12 @@ export const SIMULATION_TUTORIAL_STEPS = [
     tip: 'Complete the required simulation steps before taking the quiz. Your instructor sets the mission requirements.',
   },
   {
-    title: 'Ready for your first voyage', label: 'Help & next steps', icon: 'help',
-    description: 'You can revisit these cards whenever you need a reminder.',
+    title: 'You are ready to take the helm', label: 'Help & next steps', target: '.exit-hold-btn',
+    description: 'Reopen this guided tour using the question-mark icon beside the dashboard heading.',
     instructions: [
       'Use the controls guide inside the simulation for a quick reminder of the buttons.',
       'To leave a simulation, use the exit control and follow the confirmation prompts. Finish your mission first if you want a completed result.',
-      'Select Finish tutorial, then open Missions when you are ready to begin.',
+      'Select Finish tour to return to your boat and begin following the mission objectives.',
     ],
     desktop: [{ key: '?', action: 'Open controls guide' }, { key: '`', action: 'Hold to exit' }],
     touch: [{ key: 'Guide arrow', action: 'Open controls guide' }, { key: 'Exit', action: 'Hold to exit' }],
@@ -86,6 +86,8 @@ function readProgress(storage, studentId) {
 export function useSimulationTutorial({ currentUser, isAuthenticated, userRole, storage }) {
   const stepIndex = ref(0);
   const completed = ref(false);
+  const visible = ref(false);
+  const waitingForSimulation = ref(false);
   const storageNotice = ref('');
   const visitProgress = new Map();
   const studentId = computed(() => isAuthenticated.value && userRole.value === 'student'
@@ -101,15 +103,19 @@ export function useSimulationTutorial({ currentUser, isAuthenticated, userRole, 
   watch(studentId, id => {
     stepIndex.value = 0;
     completed.value = false;
+    visible.value = false;
+    waitingForSimulation.value = false;
     storageNotice.value = '';
     if (!id) return;
     try {
       const saved = visitProgress.get(id) || readProgress(getStorage(), id);
       stepIndex.value = saved.stepIndex;
       completed.value = saved.completed;
+      visible.value = !saved.completed;
     } catch {
       const saved = visitProgress.get(id);
       if (saved) { stepIndex.value = saved.stepIndex; completed.value = saved.completed; }
+      visible.value = !completed.value;
       storageUnavailable();
     }
   }, { immediate: true, flush: 'sync' });
@@ -127,7 +133,11 @@ export function useSimulationTutorial({ currentUser, isAuthenticated, userRole, 
   function next() {
     if (!studentId.value) return;
     if (stepIndex.value < LAST_STEP) stepIndex.value += 1;
-    else completed.value = true;
+    else {
+      completed.value = true;
+      visible.value = false;
+      waitingForSimulation.value = false;
+    }
     saveProgress();
   }
   function back() {
@@ -139,8 +149,31 @@ export function useSimulationTutorial({ currentUser, isAuthenticated, userRole, 
     if (!studentId.value) return;
     stepIndex.value = 0;
     completed.value = false;
+    visible.value = true;
+    waitingForSimulation.value = false;
     saveProgress();
   }
 
-  return { stepIndex, completed, storageNotice, eligible: computed(() => !!studentId.value), next, back, restart };
+  function show() {
+    if (!studentId.value) return;
+    if (completed.value) restart();
+    else visible.value = true;
+  }
+  function dismiss() {
+    visible.value = false;
+    waitingForSimulation.value = false;
+  }
+  function waitForSimulation() {
+    if (!studentId.value || completed.value) return;
+    visible.value = false;
+    waitingForSimulation.value = true;
+  }
+  function resumeInSimulation() {
+    if (!studentId.value || !waitingForSimulation.value || completed.value) return;
+    waitingForSimulation.value = false;
+    visible.value = true;
+  }
+
+  return { stepIndex, completed, visible, waitingForSimulation, storageNotice,
+    eligible: computed(() => !!studentId.value), next, back, restart, show, dismiss, waitForSimulation, resumeInSimulation };
 }
