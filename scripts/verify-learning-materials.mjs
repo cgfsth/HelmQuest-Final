@@ -1,15 +1,18 @@
 // Exercises the real Vue library, signed API, multer and PDF.js in hidden Edge.
 // All Firebase operations use isolated local substitutes; no live credentials.
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { createServer } from 'vite';
+import { compileStyle, parse } from '@vue/compiler-sfc';
 import { materialsFixture, samplePdf } from '../backend/tests/helpers/materialsFixture.js';
 import { issueSession } from '../backend/services/authSession.js';
 
 const directory = resolve('../.tmp/learning-materials-verification');
 mkdirSync(directory, { recursive: true });
+const appStyles = parse(readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8')).descriptor.styles
+  .map(style => compileStyle({ source: style.content, id: 'data-v-materials-host', scoped: style.scoped }).code).join('\n');
 const fixture = materialsFixture({middleware(req,res,next) {
   res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Access-Control-Allow-Headers','Content-Type,Authorization');res.setHeader('Access-Control-Allow-Methods','GET,POST,PUT,DELETE,OPTIONS');
   if(req.method==='OPTIONS') return res.sendStatus(204);next();
@@ -30,17 +33,23 @@ const apiOrigin = `http://127.0.0.1:${apiServer.address().port}`;
 const modulePath = resolve(directory,'fixture.mjs');
 writeFileSync(modulePath, `import {createApp,h,ref,nextTick} from 'vue';
 import LearningMaterials from '/src/components/materials/LearningMaterials.vue';
+import AdminDashboard from '/src/components/admin/AdminDashboard.vue';
 import * as api from '/src/api/firebaseApi.js';
-const role=ref('student'),user=ref(null);
+const role=ref('student'),user=ref(null),portal=ref(null);
 async function prepareAccess(){if(role.value==='admin') await api.ensureLearningMaterialsSession('admin@test','local-password');}
-window.fixture={async login(nextRole){user.value=null;await nextTick();api.clearSession();role.value=nextRole;if(nextRole!=='admin')await api.loginDemo(nextRole+'@test','local-password');user.value={id:nextRole==='admin'?'admin':nextRole==='instructor'?'a':'sa',name:'Local Test'};await nextTick();}};
-createApp({setup:()=>()=>h('main',user.value?[h(LearningMaterials,{key:role.value,currentUser:user.value,role:role.value,prepareAccess})]:[])}).mount('#app');
+window.fixture={async login(nextRole){user.value=null;await nextTick();api.clearSession();role.value=nextRole;if(nextRole!=='admin')await api.loginDemo(nextRole+'@test','local-password');user.value={id:nextRole==='admin'?'admin':nextRole==='instructor'?'a':'sa',name:'Local Test'};await nextTick();},async openPortal(nextRole){portal.value=nextRole;await this.login(nextRole);}};
+createApp({__scopeId:'data-v-materials-host',setup:()=>()=>{
+  const library=()=>user.value?h(LearningMaterials,{key:role.value,currentUser:user.value,role:role.value,prepareAccess}):null;
+  if(portal.value==='admin')return h('div',{class:'simulation-container'},user.value?[h(AdminDashboard,{currentUser:user.value,prepareMaterialsAccess:prepareAccess})]:[]);
+  if(portal.value==='instructor')return h('div',{class:'simulation-container'},[h('div',{class:'scene-overlay dashboard-overlay'},[h('main',{class:'instructor-console'},[library()])])]);
+  return h('main',[library()]);
+}}).mount('#app');
 window.fixture.login('student');`);
 const vite = await createServer({ root:resolve('.'), resolve:{dedupe:['vue']}, define:{'import.meta.env.VITE_API_BASE_URL':JSON.stringify(apiOrigin)},
   server:{host:'127.0.0.1',port:5189,strictPort:true,hmr:false,fs:{allow:[resolve('..')]}},
   plugins:[{name:'materials-browser-fixture',configureServer(server){server.middlewares.use((req,res,next)=>{
     if(req.url!=='/__materials-fixture')return next();res.setHeader('Content-Type','text/html');
-    res.end(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;background:#0a1628;font-family:Arial,sans-serif}main{max-width:1180px;margin:auto;padding:24px;box-sizing:border-box}@media(max-width:600px){main{padding:12px}}</style></head><body><div id="app"></div><script type="module" src="/@fs/${modulePath.replaceAll('\\','/')}"></script></body></html>`);
+    res.end(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${appStyles}\nbody{margin:0;background:#0a1628;font-family:Arial,sans-serif}main{max-width:1180px;margin:auto;padding:24px;box-sizing:border-box}@media(max-width:600px){main{padding:12px}}</style></head><body><div id="app"></div><script type="module" src="/@fs/${modulePath.replaceAll('\\','/')}"></script></body></html>`);
   });}}] });
 await vite.listen();
 const pdfPath=resolve(directory,'test-upload.pdf');writeFileSync(pdfPath,samplePdf());
@@ -60,7 +69,15 @@ try {
   function send(method,params={}){return new Promise((resolve,reject)=>{const id=++sequence;commands.set(id,{resolve,reject});socket.send(JSON.stringify({id,method,params}));});}
   async function evaluate(expression){const result=await send('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(result.exceptionDetails)throw new Error(result.exceptionDetails.exception?.description||result.exceptionDetails.text);return result.result.value;}
   async function waitFor(expression){for(let attempt=0;attempt<150;attempt++){if(await evaluate(expression))return;await pause();}throw new Error('Browser condition failed: '+expression+'\n'+await evaluate('document.body.innerText'));}
-  const click = text => evaluate(`(() => {const button=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(text)});if(!button)throw new Error('Missing button: '+${JSON.stringify(text)});button.click();})()`);
+  async function pointerClick(expression) {
+    await evaluate(`(() => {const node=${expression};if(!node)throw new Error('Missing click target');node.scrollIntoView({block:'center',inline:'center',behavior:'instant'});})()`);
+    const target=await evaluate(`(() => {const node=${expression};const rect=node.getBoundingClientRect();const x=rect.x+rect.width/2,y=rect.y+rect.height/2;const hit=document.elementFromPoint(x,y);return {x,y,disabled:!!node.disabled,reachable:node.contains(hit),blockedBy:hit?.className};})()`);
+    assert.equal(target.disabled,false,'Click target is disabled');assert.equal(target.reachable,true,`Click target is covered by ${target.blockedBy}`);
+    await send('Input.dispatchMouseEvent',{type:'mouseMoved',x:target.x,y:target.y});
+    await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,x:target.x,y:target.y});
+    await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,x:target.x,y:target.y});
+  }
+  const click = text => pointerClick(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(text)})`);
   const fill = (selector,value) => evaluate(`(() => {const input=document.querySelector(${JSON.stringify(selector)});input.value=${JSON.stringify(value)};input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
   async function attach(){const {root}=await send('DOM.getDocument');const {nodeId}=await send('DOM.querySelector',{nodeId:root.nodeId,selector:'input[type=file]'});await send('DOM.setFileInputFiles',{nodeId,files:[pdfPath]});}
   async function screenshot(name){const result=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});writeFileSync(resolve(directory,name+'.png'),Buffer.from(result.data,'base64'));}
@@ -99,7 +116,20 @@ try {
   await evaluate('window.fixture.login("student")');await waitFor('document.querySelectorAll(".lm-grid .lm-card").length===2');
   assert.equal(await evaluate('document.body.textContent.includes("Admin assigned syllabus")'),false);
   assert.equal(await evaluate('[...document.querySelectorAll("button")].some(b=>/Create syllabus|Edit|Delete|Add module/.test(b.textContent))'),false);
-  assert.deepEqual(errors,[]);console.log('PASS: student scoped reads/PDF pages/zoom, instructor upload/order/module deletion, admin assignment/filter, 375/768/1365 responsive layouts.');
+  for(const role of ['instructor','admin'])for(const width of [1365,375]){
+    await viewport(width);await evaluate(`window.fixture.openPortal(${JSON.stringify(role)})`);
+    if(role==='admin'){await waitFor('document.querySelector(".admin-sidebar-nav")');await click('Syllabus Management');}
+    await waitFor('document.querySelector(".lm-filters")');await click('Create syllabus');await waitFor('document.querySelector(".lm-modal input")');
+    const layer=await evaluate(`(() => {const dialog=document.querySelector('.lm-modal');const rect=dialog.getBoundingClientRect();const hit=document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2);return {visible:dialog.contains(hit),blockedBy:hit?.className};})()`);
+    assert.equal(layer.visible,true,`${role} dialog is behind ${layer.blockedBy}`);
+    await pointerClick(`document.querySelector('.lm-form input:not([type])')`);
+    assert.equal(await evaluate(`document.activeElement===document.querySelector('.lm-form input:not([type])')`),true);
+    await screenshot(`${role}-portal-create-${width}`);await click('Cancel');await waitFor('!document.querySelector(".lm-modal")');
+    await click('Create syllabus');await waitFor('document.querySelector(".lm-modal input")');
+    await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+    await waitFor('!document.querySelector(".lm-modal")');
+  }
+  assert.deepEqual(errors,[]);console.log('PASS: student scoped reads/PDF pages/zoom, instructor upload/order/module deletion, admin assignment/filter, 375/768/1365 layouts, and physical dialog clicks inside both portal layers.');
   console.log('Screenshots: '+directory);
 } catch (error) {
   console.error(error);

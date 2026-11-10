@@ -51,7 +51,8 @@
 .lm-alert { padding:13px 16px; border:1px solid #37758b; background:#123243; border-radius:10px; color:#c8f4ff!important; margin-bottom:16px!important; font-size:.88rem; }
 .lm-alert button { margin-left:8px; }
 .lm-error { background:#361e2c; border-color:#995162; color:#ffd0d6!important; }
-.lm-modal-backdrop { position:fixed; inset:0; z-index:10020; background:#020617bc; backdrop-filter:blur(5px); display:flex; align-items:center; justify-content:center; padding:20px; overflow:auto; }
+/* Teleported to body: must sit above App.vue's 85000 portal overlay. */
+.lm-modal-backdrop { position:fixed; inset:0; z-index:200100; background:#020617bc; backdrop-filter:blur(5px); display:flex; align-items:center; justify-content:center; padding:20px; overflow:auto; }
 .lm-modal { width:100%; max-width:570px; max-height:calc(100dvh - 40px); overflow:auto; background:#102036; border:1px solid #385575; border-radius:18px; padding:26px; box-shadow:0 30px 90px #0008; }
 .lm-modal>.lm-toolbar { align-items:center; }
 .lm-form { display:flex; flex-direction:column; gap:18px; }
