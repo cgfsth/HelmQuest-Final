@@ -752,7 +752,8 @@
         </p>
 
         <!-- SIGN IN FORM -->
-        <form v-if="authMode === 'signin'" class="auth-form" @submit.prevent="mockAuthenticate">
+        <form v-if="authMode === 'signin'" class="auth-form" :aria-busy="authSubmitting"
+          @submit.prevent="mockAuthenticate" @keydown.enter="submitLoginOnEnter">
           <label class="auth-field">
             <span>{{ (instructorLoginMode || adminLoginMode) ? 'ADMIN EMAIL ADDRESS' : 'EMAIL ADDRESS' }}</span>
             <div class="input-wrapper">
@@ -760,7 +761,10 @@
               <input 
                 class="auth-input" 
                 type="email" 
+                name="email"
                 autocomplete="username" 
+                required
+                :disabled="authSubmitting"
                 v-model="authForm.email" 
                 :placeholder="(instructorLoginMode || adminLoginMode) ? 'email@Dnsc.edu.ph' : 'student.dnsc.edu.ph'"
               />
@@ -773,13 +777,17 @@
               <input
                 class="auth-input"
                 :type="showPassword ? 'text' : 'password'"
+                name="password"
                 autocomplete="current-password"
+                required
+                :disabled="authSubmitting"
                 v-model="authForm.password"
                 :placeholder="(instructorLoginMode || adminLoginMode) ? 'Enter your password' : 'Enter your password'"
               />
               <button
                 type="button"
                 class="password-toggle-btn"
+                :disabled="authSubmitting"
                 @click="showPassword = !showPassword"
                 :aria-label="showPassword ? 'Hide password' : 'Show password'"
               >
@@ -788,10 +796,12 @@
               </button>
             </div>
           </label>
-          <button type="submit" class="auth-signin-btn" :class="{ 'instructor-signin': instructorLoginMode || adminLoginMode }">
-            {{ (instructorLoginMode || adminLoginMode) ? '→ UNLOCK CONSOLE COCKPIT' : 'SIGN IN' }}
+          <button type="submit" class="auth-signin-btn" :disabled="authSubmitting"
+            :class="{ 'instructor-signin': instructorLoginMode || adminLoginMode }">
+            {{ authSubmitting ? 'Signing in…' : (instructorLoginMode || adminLoginMode) ? '→ UNLOCK CONSOLE COCKPIT' : 'SIGN IN' }}
           </button>
-          <p v-if="authError" class="auth-error">{{ authError }}</p>
+          <p v-if="authSubmitting" class="auth-signin-status" role="status">Checking your account. Please wait…</p>
+          <p v-if="authError" class="auth-error" role="alert">{{ authError }}</p>
         </form>
 
         <!-- SIGN UP FORM (students only) -->
@@ -862,7 +872,7 @@
         </form>
 
         <div class="auth-mode-switch">
-          <button v-if="authMode === 'signin' && !instructorLoginMode && !adminLoginMode" type="button" class="auth-mode-link" @click="switchAuthMode('signup')">
+          <button v-if="authMode === 'signin' && !instructorLoginMode && !adminLoginMode" type="button" class="auth-mode-link" :disabled="authSubmitting" @click="switchAuthMode('signup')">
             No account? <strong>Sign up as student</strong>
           </button>
           <button v-if="authMode === 'signup'" type="button" class="auth-mode-link" @click="switchAuthMode('signin')">
@@ -873,7 +883,7 @@
         <p v-if="authMode === 'signin' && !adminLoginMode && !instructorLoginMode" class="auth-demo-hint">
           CREDENTIALS: instructor@helmquest.edu.ph / password
         </p>
-        <button type="button" class="auth-guest-link" @click="goToScreen('landing')">
+        <button type="button" class="auth-guest-link" :disabled="authSubmitting" @click="goToScreen('landing')">
           ← RETURN TO SHORE
         </button>
       </div>
@@ -5266,6 +5276,7 @@ const authForm = ref({
 const showPassword = ref(false);
 const showPasswordStudent = ref(false);
 const authError = ref('');
+const authSubmitting = ref(false);
 const authMode = ref('signin'); // 'signin' | 'signup'
 const signupForm = ref({ studentId: '', name: '', email: '', password: '', instructorId: '' });
 const signupSuccess = ref(false);
@@ -13107,101 +13118,91 @@ function submitStudentSignup() {
  * - Status validation prevents unauthorized access
  * - Password never transmitted in logs or error messages
  */
-function mockAuthenticate() {
+function submitLoginOnEnter(event) {
+  if (event.target?.tagName !== 'INPUT' || event.isComposing) return;
+  event.preventDefault();
+  if (event.repeat || authSubmitting.value) return;
+  // Use the same validated submit path as clicking Sign In, including mobile keyboards.
+  event.currentTarget.requestSubmit();
+}
+
+async function mockAuthenticate(event) {
+  if (authSubmitting.value) return;
   authError.value = '';
-  const email = authForm.value.email.trim().toLowerCase();
-  const password = authForm.value.password;
-
-  // ========================================================================
-  // PRIORITY 1: Demo account authentication (HIGHEST PRIORITY)
-  // ========================================================================
-  // Check hardcoded DEMO_USERS first to maintain backward compatibility
-  // This includes instructor@helmquest.local, admin@helmquest.local, etc.
-  let user = authenticateUser(email, password);
-
-  // Admin login mode: restrict to admin credentials only
-  if (adminLoginMode.value && (!user || user.role !== 'admin')) {
-    authError.value = 'Invalid admin credentials. Please use admin@helmquest.local with password: password';
+  // Read the actual controls too: autofill can populate them without updating v-model.
+  const form = event?.currentTarget;
+  const fields = form?.elements ? new FormData(form) : null;
+  const email = String(fields?.get('email') ?? authForm.value.email).trim().toLowerCase();
+  const password = String(fields?.get('password') ?? authForm.value.password);
+  if (!email || !password) {
+    authError.value = 'Enter your email address and password.';
     return;
   }
+  authForm.value.email = email;
+  authForm.value.password = password;
+  authSubmitting.value = true;
 
-  // The built-in admin account signs in locally with the hardcoded credentials.
-  if (user) {
-    if (user.role === 'admin') {
-      firebaseApi.clearSession();
-      proceedWithAuthentication(user);
+  try {
+    const user = authenticateUser(email, password);
+    if (adminLoginMode.value && (!user || user.role !== 'admin')) {
+      authError.value = 'Invalid admin credentials. Please use admin@helmquest.local with password: password';
       return;
     }
-    firebaseApi.loginDemo(email, password)
-      .then(response => proceedWithAuthentication({ ...user, ...response.user }))
-      .catch(error => { authError.value = error.message || 'Login service is unavailable.'; });
-    return;
-  }
 
-  // ========================================================================
-  // PRIORITY 2: Instructor Firestore authentication (multi-domain support)
-  // ========================================================================
-  // For instructors created through the admin panel and stored in Firestore
-  // Support both @helmquest.edu.ph AND @dnsc.edu.ph domains for instructors
-  if (!adminLoginMode.value && 
-      (email.endsWith('@helmquest.edu.ph') || 
-       (instructorLoginMode.value && email.endsWith('@dnsc.edu.ph'))) && 
-      window.firebaseApi) {
-    window.firebaseApi.loginInstructor(email, password)
-      .then(response => {
+    // The built-in admin is local; other demo accounts use a server session.
+    if (user) {
+      if (user.role === 'admin') {
+        firebaseApi.clearSession();
+        await proceedWithAuthentication(user);
+      } else {
+        const response = await firebaseApi.loginDemo(email, password);
+        await proceedWithAuthentication({ ...user, ...response.user });
+      }
+      return;
+    }
+
+    if (!adminLoginMode.value && window.firebaseApi &&
+        (email.endsWith('@helmquest.edu.ph') ||
+         (instructorLoginMode.value && email.endsWith('@dnsc.edu.ph')))) {
+      try {
+        const response = await window.firebaseApi.loginInstructor(email, password);
         const instructorData = response.instructor;
-        
-        // Instructor status validation - only active instructors can login
         if (instructorData.status === 'inactive') {
           authError.value = 'Account disabled. Contact system admin.';
           return;
         }
-        
-        // Status is 'active' - create user object and proceed with login
-        const user = {
+
+        await proceedWithAuthentication({
           id: instructorData.id,
           name: instructorData.name,
           email: instructorData.email,
           role: 'instructor',
           status: instructorData.status,
-          instructorid: instructorData.id // For instructors, their own ID is used for leaderboard filtering
-        };
-        
-        proceedWithAuthentication(user);
-      })
-      .catch(error => {
-        // FIXED: Only allow fallback to student if NOT in instructor login mode
+          instructorid: instructorData.id,
+        });
+      } catch (error) {
         if (email.endsWith('@dnsc.edu.ph') && !instructorLoginMode.value) {
-          console.log('Instructor login failed, trying student authentication fallback...');
-          tryStudentAuthenticationFallback(email, password);
+          await tryStudentAuthenticationFallback(email, password);
         } else {
           console.error('Instructor login error:', error);
           authError.value = error?.message?.includes('Failed to fetch')
             ? 'Login service is unavailable. Please start the backend server and try again.'
             : 'Invalid instructor credentials.';
         }
-      });
-    return;
-  }
+      }
+      return;
+    }
 
-  // ========================================================================
-  // PRIORITY 3: Student Firestore authentication (@dnsc.edu.ph)
-  // ========================================================================
-  // For students created through the signup form and stored in Firestore
-  // This only runs if instructor authentication failed or user is in student mode
-  if (!adminLoginMode.value && email.endsWith('@dnsc.edu.ph') && window.firebaseApi) {
-    tryStudentAuthenticationFallback(email, password);
-    return;
-  }
+    if (!adminLoginMode.value && email.endsWith('@dnsc.edu.ph') && window.firebaseApi) {
+      await tryStudentAuthenticationFallback(email, password);
+      return;
+    }
 
-  // ========================================================================
-  // FALLBACK: No authentication method succeeded
-  // ========================================================================
-  // Show appropriate error message based on login mode
-  if (adminLoginMode.value) {
-    authError.value = 'Invalid admin credentials. Please use admin@helmquest.local with password: password';
-  } else {
     authError.value = 'Invalid email or password. Use one of the demo accounts below.';
+  } catch (error) {
+    authError.value = error?.message || 'Login service is unavailable. Please try again.';
+  } finally {
+    authSubmitting.value = false;
   }
 }
 
@@ -13209,47 +13210,42 @@ function mockAuthenticate() {
  * Student authentication fallback for @dnsc.edu.ph emails
  * Used when instructor authentication fails or for direct student login
  */
-function tryStudentAuthenticationFallback(email, password) {
-  window.firebaseApi.loginStudent(email, password)
-    .then(response => {
-      const studentData = response.student;
-      
-      // FIXED: Block students from logging into instructor console
-      if (instructorLoginMode.value) {
-        authError.value = 'Invalid instructor credentials. Student accounts cannot access the instructor console.';
-        return;
-      }
-      
-      if (studentData.status === 'pending') {
-        authError.value = 'Your account is pending instructor approval. You\'ll receive access once approved.';
-        return;
-      }
-      if (studentData.status === 'rejected' || studentData.status === 'inactive') {
-        authError.value = 'Account disabled. Contact your instructor.';
-        return;
-      }
-      const user = {
-        id: studentData.id,
-        name: studentData.name,
-        email: studentData.email,
-        studentId: studentData.studentId,
-        instructorid: studentData.instructorid || studentData.instructorId,
-        role: 'student',
-        status: studentData.status,
-        xp: studentTotalXp(studentData),
-        total_xp: studentData.total_xp,
-        rank: studentData.rank,
-        rankId: studentData.rankId,
-        badges: studentData.badges
-      };
-      proceedWithAuthentication(user);
-    })
-    .catch(error => {
-      console.error('Student login error:', error);
-      authError.value = error?.message?.includes('Failed to fetch')
-        ? 'Login service is unavailable. Please start the backend server and try again.'
-        : 'Invalid email or password.';
+async function tryStudentAuthenticationFallback(email, password) {
+  try {
+    const response = await window.firebaseApi.loginStudent(email, password);
+    const studentData = response.student;
+    if (instructorLoginMode.value) {
+      authError.value = 'Invalid instructor credentials. Student accounts cannot access the instructor console.';
+      return;
+    }
+    if (studentData.status === 'pending') {
+      authError.value = 'Your account is pending instructor approval. You\'ll receive access once approved.';
+      return;
+    }
+    if (studentData.status === 'rejected' || studentData.status === 'inactive') {
+      authError.value = 'Account disabled. Contact your instructor.';
+      return;
+    }
+    await proceedWithAuthentication({
+      id: studentData.id,
+      name: studentData.name,
+      email: studentData.email,
+      studentId: studentData.studentId,
+      instructorid: studentData.instructorid || studentData.instructorId,
+      role: 'student',
+      status: studentData.status,
+      xp: studentTotalXp(studentData),
+      total_xp: studentData.total_xp,
+      rank: studentData.rank,
+      rankId: studentData.rankId,
+      badges: studentData.badges,
     });
+  } catch (error) {
+    console.error('Student login error:', error);
+    authError.value = error?.message?.includes('Failed to fetch')
+      ? 'Login service is unavailable. Please start the backend server and try again.'
+      : 'Invalid email or password.';
+  }
 }
 
 /**
@@ -13295,14 +13291,13 @@ function tryStudentAuthenticationFallback(email, password) {
  * @param {string} user.status - Account status: 'active', 'pending', 'inactive'
  * @param {string} [user.studentId] - Student ID (for student role only)
  */
-function proceedWithAuthentication(user) {
-  // Show cinematic loading for smooth transition
+async function proceedWithAuthentication(user) {
+  // Keep feedback visible until the dashboard is ready; no extra timed login delay.
   showCinematicLoading.value = true;
   loadingHint.value = 'Authenticating maritime profile';
   
-  window.setTimeout(async () => {
+  try {
     // Set global authentication state
-    showCinematicLoading.value = false;
     isAuthenticated.value = true;
     userRole.value = user.role;
     currentUser.value = { 
@@ -13343,11 +13338,10 @@ function proceedWithAuthentication(user) {
     }
 
     // Navigate to appropriate dashboard
-    goToScreen(user.role === 'admin' ? 'dashboard' : 'dashboard');
+    goToScreen('dashboard');
     
     // Show welcome achievement for new students
     if (user.role === 'student') {
-      await syncStudentMotivation();
       try {
         if (!localStorage.getItem(WELCOME_ACHIEVEMENT_KEY)) {
           localStorage.setItem(WELCOME_ACHIEVEMENT_KEY, '1');
@@ -13357,7 +13351,15 @@ function proceedWithAuthentication(user) {
         showAchievement('Welcome aboard, Cadet!');
       }
     }
-  }, 1200);
+  } catch (error) {
+    firebaseApi.clearSession();
+    isAuthenticated.value = false;
+    currentUser.value = null;
+    goToScreen('auth');
+    throw error;
+  } finally {
+    showCinematicLoading.value = false;
+  }
 }
 
 
@@ -18052,8 +18054,27 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 .auth-signin-btn:hover {
-  transform: translateY(-2px);
   box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
+}
+
+.auth-signin-btn:disabled {
+  cursor: wait;
+  opacity: 0.75;
+  transform: none;
+}
+
+.auth-signin-status {
+  margin: 0;
+  color: #93c5fd;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.auth-mode-link:disabled,
+.auth-guest-link:disabled,
+.password-toggle-btn:disabled {
+  cursor: wait;
+  opacity: 0.5;
 }
 
 .auth-signin-btn.instructor-signin:hover {
