@@ -1628,6 +1628,14 @@
             <button
               type="button"
               class="hub-nav-item"
+              :class="{ 'hub-nav-item--active': hubTab === 'tutorial' }"
+              @click="selectHubTab('tutorial'); closeStudentMenu()"
+            >
+              <span class="hub-nav-icon" aria-hidden="true">📖</span> Simulation Tutorial
+            </button>
+            <button
+              type="button"
+              class="hub-nav-item"
               :class="{ 'hub-nav-item--active': hubTab === 'overview' }"
               @click="selectHubTab('overview'); closeStudentMenu()"
             >
@@ -1682,6 +1690,7 @@
               <template v-else-if="hubTab === 'certificates'">Training Records</template>
               <template v-else-if="hubTab === 'missions'">Missions</template>
               <template v-else-if="hubTab === 'leaderboards'">Leaderboards</template>
+              <template v-else-if="hubTab === 'tutorial'">Simulation Tutorial</template>
               <template v-else>Navigation Training</template>
             </h1>
             <p v-if="hubTab === 'overview'" class="missions-hub-welcome">
@@ -1702,9 +1711,24 @@
               <template v-else-if="hubTab === 'leaderboards'">
                 See how you rank against other students
               </template>
+              <template v-else-if="hubTab === 'tutorial'">
+                Learn the boat controls and mission flow before your first voyage
+              </template>
             </p>
           </div>
         </header>
+
+        <SimulationTutorial
+          v-if="tutorialEligible && (hubTab === 'tutorial' || hubTab === 'overview')"
+          :step-index="tutorialStepIndex"
+          :completed="tutorialCompleted"
+          :touch="simulationTouchEnabled"
+          :storage-notice="tutorialStorageNotice"
+          @next="nextTutorialCard"
+          @back="previousTutorialCard"
+          @restart="restartTutorial"
+          @missions="selectHubTab('missions')"
+        />
 
         <section v-show="hubTab === 'overview'" class="motivation-panel" id="hub-badges" aria-label="Your progress and rewards">
           <!-- Student Profile Card - Horizontal Layout -->
@@ -3620,6 +3644,8 @@ import EngineStatus from './components/EngineStatus.vue';
 import BuoyInteraction from './components/BuoyInteraction.vue';
 import MissionComplete from './components/MissionComplete.vue';
 import SimulationTouchControls from './components/SimulationTouchControls.vue';
+import SimulationTutorial from './components/SimulationTutorial.vue';
+import { useSimulationTutorial } from './helpers/simulationTutorial.js';
 import { loadOceanSimulation } from './helpers/oceanSimulation.js';
 import {
   VISUAL_CONFIG,
@@ -3826,6 +3852,10 @@ const showMenuSettings = ref(false);
 const isAuthenticated = ref(false);
 const userRole = ref('student');
 const currentUser = ref({ id: 'student-alex', name: 'Alex Rivera', email: 'student@helmquest.local' });
+const {
+  stepIndex: tutorialStepIndex, completed: tutorialCompleted, storageNotice: tutorialStorageNotice,
+  eligible: tutorialEligible, next: nextTutorialCard, back: previousTutorialCard, restart: restartTutorial,
+} = useSimulationTutorial({ currentUser, isAuthenticated, userRole });
 const adminLoginMode = ref(false); // Track if user is trying to login as admin
 const instructorLoginMode = ref(false); // Track if user is trying to login as instructor
 
@@ -13296,6 +13326,9 @@ function proceedWithAuthentication(user) {
 
     // Reset login mode flags
     adminLoginMode.value = false;
+
+    // Each student begins on their own overview, including an unfinished simulation guide.
+    if (user.role === 'student') hubTab.value = 'overview';
 
     // Role-specific initialization
     if (user.role === 'student') {
