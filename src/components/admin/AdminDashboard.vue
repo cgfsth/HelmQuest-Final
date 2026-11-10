@@ -26,7 +26,8 @@
               :class="{ 'admin-sidebar-tab--active': activeTab === tab.id }"
               @click="selectTab(tab.id)"
             >
-              <span class="hub-nav-icon" aria-hidden="true">{{ tab.icon }}</span>
+              <LibraryBig v-if="tab.id === 'materials'" class="hub-nav-icon" :size="20" aria-hidden="true" />
+              <span v-else class="hub-nav-icon" aria-hidden="true">{{ tab.icon }}</span>
               <span>{{ tab.label }}</span>
             </button>
           </nav>
@@ -70,6 +71,7 @@
               v-else-if="activeTab === 'instructors'"
               :admin-id="adminId"
             />
+            <LearningMaterials v-else-if="activeTab === 'materials'" :key="currentUser.id" :current-user="currentUser" role="admin" :prepare-access="prepareMaterialsAccess" />
             <GlobalStudentView
               v-else
               :admin-id="adminId"
@@ -82,13 +84,16 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
+import { LibraryBig } from '@lucide/vue';
 import { API_BASE_URL } from '../../api/firebaseApi.js';
 import SystemOverview from './SystemOverview.vue';
 import InstructorManagement from './InstructorManagement.vue';
 import GlobalStudentView from './GlobalStudentView.vue';
+const LearningMaterials = defineAsyncComponent(() => import('../materials/LearningMaterials.vue'));
 
 const props = defineProps({
+  prepareMaterialsAccess: { type: Function, default: async () => {} },
   currentUser: {
     type: Object,
     required: true
@@ -100,10 +105,12 @@ defineEmits(['logout']);
 const tabs = [
   { id: 'overview', label: 'Overview', icon: '📊' },
   { id: 'instructors', label: 'Instructors', icon: '🧑‍🏫' },
-  { id: 'students', label: 'Students', icon: '👥' }
+  { id: 'students', label: 'Students', icon: '👥' },
+  { id: 'materials', label: 'Syllabus Management' }
 ];
 
 const sectionCopy = {
+  materials: { title: 'Syllabus Management', subtitle: 'Manage course documents and instructor assignments.' },
   overview: {
     title: 'System Overview',
     subtitle: 'Monitor accounts, training activity, and course content.'

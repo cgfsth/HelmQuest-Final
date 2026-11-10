@@ -1,0 +1,9 @@
+// MERGE these matches into the existing /databases/{database}/documents block.
+// This is a feature fragment, NOT a replacement for the project's full rules.
+// Any broader allow rule MUST exclude these collection names (see docs).
+match /syllabi/{document=**} {
+  allow read, write: if false;
+}
+match /syllabus_modules/{document=**} {
+  allow read, write: if false;
+}

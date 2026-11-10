@@ -25,9 +25,11 @@
 export const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL || 'http://localhost:3001/api/v1')
   .trim().replace(/\/+$/, '');
 let sessionToken = null;
+let sessionEpoch = 0;
 
 export function clearSession() {
   sessionToken = null;
+  sessionEpoch++;
 }
 
 async function loginWithSession(endpoint, email, password) {
@@ -39,6 +41,66 @@ async function loginWithSession(endpoint, email, password) {
 
 export async function loginDemo(email, password) {
   return loginWithSession('/auth/demo-login', email, password);
+}
+
+// The existing local admin dashboard acquires a server-verified session only
+// when opening protected materials. Credentials remain in the login component.
+export async function ensureLearningMaterialsSession(email, password, options = {}) {
+  if (sessionToken) return;
+  if (!email || !password) throw new Error('Please sign in again to access learning materials.');
+  const epoch = sessionEpoch;
+  const response = await apiFetch('/auth/demo-login', { method: 'POST', body: JSON.stringify({ email, password }), timeoutMs: 30000, ...options });
+  if (epoch !== sessionEpoch || options.signal?.aborted) throw new DOMException('Session changed.', 'AbortError');
+  if (!response.sessionToken) throw new Error('Please sign in again to access learning materials.');
+  sessionToken = response.sessionToken;
+}
+
+const materialsPath = '/learning-materials';
+const materialId = id => encodeURIComponent(id);
+export function listLearningSyllabi(options = {}) {
+  const { signal, instructorId = '', search = '' } = options;
+  return apiFetch(`${materialsPath}/syllabi?${new URLSearchParams({ instructorId, search })}`, { signal, timeoutMs: 30000 });
+}
+export const getLearningSyllabus = (id, options = {}) => apiFetch(`${materialsPath}/syllabi/${materialId(id)}`, { timeoutMs: 30000, ...options });
+export const getMaterialsInstructors = (options = {}) => apiFetch(`${materialsPath}/instructors`, { timeoutMs: 30000, ...options });
+export const deleteLearningMaterial = (kind, id, revision, options = {}) => apiFetch(`${materialsPath}/${kind === 'module' ? 'modules' : 'syllabi'}/${materialId(id)}`, { method: 'DELETE', body: JSON.stringify({ revision }), timeoutMs: 60000, ...options });
+export const reorderLearningModules = (id, ids, revision, options = {}) => apiFetch(`${materialsPath}/syllabi/${materialId(id)}/reorder`, { method: 'POST', body: JSON.stringify({ ids, revision }), timeoutMs: 30000, ...options });
+export const retryMaterialsCleanup = (options = {}) => apiFetch(`${materialsPath}/cleanup`, { method: 'POST', body: '{}', timeoutMs: 60000, ...options });
+
+export async function getLearningPdf(kind, id, { signal } = {}) {
+  const response = await fetch(`${API_BASE_URL}${materialsPath}/${kind === 'module' ? 'modules' : 'syllabi'}/${materialId(id)}/pdf`, {
+    headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}, signal, cache: 'no-store',
+  });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message || 'Unable to open this PDF.');
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+export function saveLearningMaterial({ kind, id, syllabusId, fields, file, onProgress, signal }) {
+  const endpoint = id ? `/${kind === 'module' ? 'modules' : 'syllabi'}/${materialId(id)}`
+    : kind === 'module' ? `/syllabi/${materialId(syllabusId)}/modules` : '/syllabi';
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(new DOMException('Upload cancelled.', 'AbortError'));
+    const xhr = new XMLHttpRequest();
+    const abort = () => xhr.abort();
+    const finish = (fn, value) => { signal?.removeEventListener('abort', abort); fn(value); };
+    xhr.open(id ? 'PUT' : 'POST', `${API_BASE_URL}${materialsPath}${endpoint}`);
+    if (sessionToken) xhr.setRequestHeader('Authorization', `Bearer ${sessionToken}`);
+    xhr.timeout = 120000;
+    xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress?.(Math.round(event.loaded / event.total * 100)); };
+    xhr.onload = () => {
+      let data;
+      try { data = JSON.parse(xhr.responseText); } catch { data = {}; }
+      xhr.status >= 200 && xhr.status < 300 ? finish(resolve, data) : finish(reject, new Error(data.message || 'The document could not be saved.'));
+    };
+    xhr.onerror = () => finish(reject, new Error('Connection lost. Refresh the materials before retrying.'));
+    xhr.ontimeout = () => finish(reject, new Error('The upload timed out. Refresh the materials before retrying.'));
+    xhr.onabort = () => finish(reject, new DOMException('Upload cancelled. Refresh before retrying.', 'AbortError'));
+    signal?.addEventListener('abort', abort, { once: true });
+    const data = new FormData();
+    for (const [key, value] of Object.entries(fields)) if (value !== undefined && value !== null) data.append(key, String(value));
+    if (file) data.append('file', file);
+    xhr.send(data);
+  });
 }
 
 export async function getInstructorOverview(instructorId) {

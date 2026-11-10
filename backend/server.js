@@ -20,6 +20,7 @@ import progressRoutes from './routes/progress.js';
 import adminRoutes from './routes/admin.js';
 import missionScoresRoutes from './routes/mission_scores.js';
 import quizScoresRoutes from './routes/quiz_scores.js';
+import learningMaterialsRoutes from './routes/learningMaterials.js';
 
 // Import Firebase Admin initialization
 import './config/firebase-admin.js';
@@ -90,6 +91,7 @@ app.use(`${API_PREFIX}/progress`, progressRoutes);
 app.use(`${API_PREFIX}/admin`, adminRoutes);
 app.use(`${API_PREFIX}/mission-scores`, missionScoresRoutes);
 app.use(`${API_PREFIX}/quiz-scores`, quizScoresRoutes);
+app.use(`${API_PREFIX}/learning-materials`, learningMaterialsRoutes);
 
 // API documentation endpoint
 app.get(`${API_PREFIX}`, (req, res) => {

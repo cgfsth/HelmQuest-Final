@@ -947,6 +947,9 @@
             >
               <span class="hub-nav-icon">🏆</span> Leaderboards
             </button>
+            <button type="button" class="hub-nav-item" :class="{ 'hub-nav-item--active': instructorTab === 'materials' }" @click="selectInstructorTab('materials')">
+              <LibraryBig :size="20" class="hub-nav-icon" aria-hidden="true" /> Syllabus Management
+            </button>
           </nav>
 
           <button type="button" class="hub-sidebar-logout" @click="signOut">
@@ -964,6 +967,7 @@
               <span v-else-if="instructorTab === 'students'">👥 Student Management</span>
               <span v-else-if="instructorTab === 'quizzes'">📝 Quiz Management</span>
               <span v-else-if="instructorTab === 'leaderboards'">🏆 Leaderboards</span>
+              <span v-else-if="instructorTab === 'materials'">Syllabus Management</span>
               <span v-else>Instructor Console</span>
             </h1>
             <p class="instructor-header-subtitle">
@@ -972,6 +976,7 @@
               <span v-else-if="instructorTab === 'students'">Manage student accounts, review progress, and approve signups.</span>
               <span v-else-if="instructorTab === 'quizzes'">Create and manage quizzes for mission assessments.</span>
               <span v-else-if="instructorTab === 'leaderboards'">View student rankings by performance and track class progress.</span>
+              <span v-else-if="instructorTab === 'materials'">Manage syllabus documents and learning modules for your class.</span>
               <span v-else>Manage your courses and students.</span>
             </p>
           </div>
@@ -985,6 +990,8 @@
             <span class="toggle-icon">{{ sidebarCollapsed ? '▸' : '▾' }}</span>
           </button>
         </header>
+
+        <LearningMaterials v-if="instructorTab === 'materials'" :key="currentUser.id" :current-user="currentUser" role="instructor" :prepare-access="prepareLearningMaterialsAccess" />
 
         <section v-show="instructorTab === 'overview'" class="instructor-overview" aria-label="Class overview">
           <div class="overview-toolbar">
@@ -1671,6 +1678,9 @@
             >
               <span class="hub-nav-icon">🏆</span> Leaderboards
             </button>
+            <button type="button" class="hub-nav-item" :class="{ 'hub-nav-item--active': hubTab === 'materials' }" @click="selectHubTab('materials'); closeStudentMenu()">
+              <BookOpen :size="20" class="hub-nav-icon" aria-hidden="true" /> Learning Materials
+            </button>
           </nav>
 
           <button type="button" class="hub-sidebar-logout" @click="signOut">
@@ -1696,6 +1706,7 @@
               <template v-else-if="hubTab === 'certificates'">Training Records</template>
               <template v-else-if="hubTab === 'missions'">Missions</template>
               <template v-else-if="hubTab === 'leaderboards'">Leaderboards</template>
+              <template v-else-if="hubTab === 'materials'">Learning Materials</template>
               <template v-else>Navigation Training</template>
             </h1>
             <p v-if="hubTab === 'overview'" class="missions-hub-welcome">
@@ -1716,6 +1727,7 @@
               <template v-else-if="hubTab === 'leaderboards'">
                 See how you rank against other students
               </template>
+              <template v-else-if="hubTab === 'materials'">Read your instructor’s syllabus and learning modules.</template>
             </p>
           </div>
           <button v-if="tutorialEligible" type="button" class="student-tour-trigger" title="Simulation guided tour"
@@ -1723,6 +1735,8 @@
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 1.7-2.5 2-2.5 4"/><circle cx="12" cy="16.5" r=".7" fill="currentColor" stroke="none"/></svg>
           </button>
         </header>
+
+        <LearningMaterials v-if="hubTab === 'materials' && !isStudentPending" :key="currentUser.id" :current-user="currentUser" role="student" :prepare-access="prepareLearningMaterialsAccess" />
 
         <section v-show="hubTab === 'overview'" class="motivation-panel" id="hub-badges" aria-label="Your progress and rewards">
           <!-- Student Profile Card - Horizontal Layout -->
@@ -2142,6 +2156,7 @@
     <AdminDashboard 
       v-if="activeScreen === 'dashboard' && userRole === 'admin'"
       :current-user="currentUser"
+      :prepare-materials-access="prepareLearningMaterialsAccess"
       @logout="signOut"
     />
 
@@ -3619,7 +3634,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, nextTick, provide } from 'vue';
+import { ref, computed, defineAsyncComponent, onMounted, onUnmounted, watch, nextTick, provide } from 'vue';
+import { BookOpen, LibraryBig } from '@lucide/vue';
+const LearningMaterials = defineAsyncComponent(() => import('./components/materials/LearningMaterials.vue'));
 import { deriveProgression, studentTotalXp } from '../shared/progression.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -4533,6 +4550,11 @@ function maybeAutoCollapseSidebar() {
   if (typeof window !== 'undefined' && window.innerWidth <= 900) {
     sidebarCollapsed.value = true;
   }
+}
+
+async function prepareLearningMaterialsAccess(options = {}) {
+  if (!isAuthenticated.value) throw new Error('Please sign in to access learning materials.');
+  if (userRole.value === 'admin') await firebaseApi.ensureLearningMaterialsSession(currentUser.value.email, authForm.value.password, options);
 }
 
 function selectHubTab(tab) {

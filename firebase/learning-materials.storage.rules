@@ -1,0 +1,9 @@
+// MERGE into the existing /b/{bucket}/o block; do not deploy in isolation.
+// Server-issued sessions are checked by the API, not by the Firebase client SDK.
+// Any broader allow rule MUST exclude these prefixes (see docs).
+match /syllabi/{path=**} {
+  allow read, write: if false;
+}
+match /syllabus_modules/{path=**} {
+  allow read, write: if false;
+}
