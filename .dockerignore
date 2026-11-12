@@ -1,0 +1,15 @@
+.git
+**/node_modules
+dist
+archive
+17-marlow66
+**/.env
+**/.env.*
+**/serviceAccountKey.json
+**/*firebase-adminsdk*.json
+**/*.log
+src
+public
+tests
+scripts
+.tmp

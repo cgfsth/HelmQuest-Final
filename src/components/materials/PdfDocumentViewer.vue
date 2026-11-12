@@ -1,16 +1,17 @@
 <template>
   <section class="lm-reader" aria-label="PDF reader">
-    <header class="lm-reader-heading"><button type="button" @click="$emit('back')"><ArrowLeft :size="18" /> Back</button><div><span class="lm-eyebrow">DOCUMENT READER</span><h2>{{ document.title }}</h2></div></header>
+    <header class="lm-reader-heading"><button type="button" @click="$emit('back')"><ArrowLeft :size="18" /> Back to Module</button><div><span class="lm-eyebrow">{{ document.presentation ? 'LESSON VIEWER' : 'DOCUMENT READER' }}</span><h2>{{ document.title }}</h2></div></header>
+    <div v-if="document.objectives" class="lc-objectives"><strong>Learning objectives</strong><p>{{ document.objectives }}</p></div>
     <p v-if="loading" class="lm-empty" role="status">Opening PDF document…</p>
     <div v-else-if="error" class="lm-alert lm-error" role="alert"><p>{{ error }}</p><button type="button" @click="load">Try again</button></div>
     <template v-else-if="pdf">
       <div class="lm-reader-controls" aria-label="PDF controls">
-        <div class="lm-actions"><button type="button" :disabled="page <= 1" aria-label="Previous page" @click="jump(page - 1)"><ChevronLeft :size="18" /></button><label>Page <input v-model.number="pageInput" type="number" min="1" :max="pdf.numPages" aria-label="Page number" @keydown.enter.prevent="jump(pageInput)" @change="jump(pageInput)" /> of {{ pdf.numPages }}</label><button type="button" :disabled="page >= pdf.numPages" aria-label="Next page" @click="jump(page + 1)"><ChevronRight :size="18" /></button></div>
+        <div class="lm-actions"><button type="button" :disabled="page <= 1" :aria-label="document.presentation ? 'Previous slide' : 'Previous page'" @click="jump(page - 1)"><ChevronLeft :size="18" /></button><label>{{ document.presentation ? 'Slide' : 'Page' }} <input v-model.number="pageInput" type="number" min="1" :max="pdf.numPages" :aria-label="document.presentation ? 'Slide number' : 'Page number'" @keydown.enter.prevent="jump(pageInput)" @change="jump(pageInput)" /> of {{ pdf.numPages }}</label><button type="button" :disabled="page >= pdf.numPages" :aria-label="document.presentation ? 'Next slide' : 'Next page'" @click="jump(page + 1)"><ChevronRight :size="18" /></button></div>
         <div class="lm-actions"><button type="button" :disabled="zoom <= .5" aria-label="Zoom out" @click="zoom = Math.max(.5, zoom - .25)"><Minus :size="18" /></button><output aria-live="polite">{{ Math.round(zoom * 100) }}%</output><button type="button" :disabled="zoom >= 2" aria-label="Zoom in" @click="zoom = Math.min(2, zoom + .25)"><Plus :size="18" /></button><button type="button" @click="zoom = 1"><ScanLine :size="17" /> Fit width</button></div>
       </div>
       <p class="lm-reader-hint">Scroll to read all pages. Select text to copy or use your screen reader.</p>
       <div ref="scrollArea" class="lm-reader-pages" tabindex="0" aria-label="Scrollable PDF pages" @scroll.passive="trackPage">
-        <PdfPage v-for="number in pdf.numPages" :key="number" :pdf="pdf" :number="number" :width="width" :zoom="zoom" :scroll-root="scrollArea" />
+        <PdfPage v-for="number in pdf.numPages" :key="number" :pdf="pdf" :number="number" :width="width" :zoom="zoom" :scroll-root="scrollArea" @rendered="pageRendered" />
       </div>
     </template>
   </section>
@@ -24,10 +25,11 @@ import { getLearningPdf } from '../../api/firebaseApi.js';
 import PdfPage from './PdfPage.vue';
 GlobalWorkerOptions.workerSrc = workerUrl;
 const props = defineProps({ document: { type: Object, required: true } });
-defineEmits(['back']);
+const emit = defineEmits(['back', 'loaded']);
 const pdf = shallowRef(null), scrollArea = ref(null), loading = ref(true), error = ref('');
 const page = ref(1), pageInput = ref(1), zoom = ref(1), width = ref(600);
-let controller, task, resize, alive = true, frame;
+let controller, task, resize, alive = true, frame, viewed = false;
+function pageRendered(number) { if (!viewed && number === 1) { viewed = true; emit('loaded'); } }
 async function load() {
   controller?.abort(); controller = new AbortController(); const signal = controller.signal;
   task?.destroy(); task = null; pdf.value = null; loading.value = true; error.value = '';
@@ -39,7 +41,7 @@ async function load() {
     loadingTask.onPassword = () => { error.value = 'This PDF is password protected. Ask your instructor for an accessible copy.'; loading.value = false; loadingTask.destroy(); };
     const result = await loadingTask.promise;
     if (!alive || signal.aborted) { await result.destroy(); return; }
-    pdf.value = result; page.value = pageInput.value = 1;
+    pdf.value = result; page.value = pageInput.value = 1; viewed = false;
   } catch (err) { if (alive && !signal.aborted && !error.value) error.value = err.message || 'Unable to read this PDF. Try again or contact your instructor.'; }
   finally { if (alive && !signal.aborted) loading.value = false; }
 }

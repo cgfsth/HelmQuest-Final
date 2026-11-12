@@ -7,3 +7,9 @@ match /syllabi/{document=**} {
 match /syllabus_modules/{document=**} {
   allow read, write: if false;
 }
+match /learning_activities/{document=**} {
+  allow read, write: if false;
+}
+match /learning_activity_progress/{document=**} {
+  allow read, write: if false;
+}

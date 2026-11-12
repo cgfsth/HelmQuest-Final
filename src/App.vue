@@ -1736,7 +1736,7 @@
           </button>
         </header>
 
-        <LearningMaterials v-if="hubTab === 'materials' && !isStudentPending" :key="currentUser.id" :current-user="currentUser" role="student" :prepare-access="prepareLearningMaterialsAccess" />
+        <LearningMaterials v-if="hubTab === 'materials' && !isStudentPending" :key="currentUser.id" :current-user="currentUser" role="student" :prepare-access="prepareLearningMaterialsAccess" :initial-course-id="courseNavigation.studentId === currentUser.id ? courseNavigation.syllabusId : ''" @navigate-course="rememberCourse" @launch-simulation="launchCourseSimulation" @launch-quiz="launchCourseQuiz" />
 
         <section v-show="hubTab === 'overview'" class="motivation-panel" id="hub-badges" aria-label="Your progress and rewards">
           <!-- Student Profile Card - Horizontal Layout -->
@@ -2315,14 +2315,15 @@
         </div>
         
         <footer class="quiz-taking-footer">
+          <p v-if="activeQuizSession.quiz.courseActivityId && courseQuizError" class="overview-error" role="alert">{{ courseQuizError }}</p>
           <button
             class="quiz-submit-btn"
-            :disabled="!allQuestionsAnswered"
+            :disabled="!allQuestionsAnswered || courseQuizSaving"
             @click="submitQuizSession"
           >
-            Submit Quiz
+            {{ courseQuizSaving ? 'Saving…' : 'Submit Quiz' }}
           </button>
-          <button class="quiz-cancel-btn" @click="cancelQuizSession">Cancel</button>
+          <button class="quiz-cancel-btn" :disabled="courseQuizSaving" @click="cancelQuizSession">Cancel</button>
         </footer>
       </div>
     </div>
@@ -4555,6 +4556,60 @@ function maybeAutoCollapseSidebar() {
 async function prepareLearningMaterialsAccess(options = {}) {
   if (!isAuthenticated.value) throw new Error('Please sign in to access learning materials.');
   if (userRole.value === 'admin') await firebaseApi.ensureLearningMaterialsSession(currentUser.value.email, authForm.value.password, options);
+}
+
+// Retain the student's course while the existing 3D simulator owns the screen.
+const courseNavigation = ref({ studentId: '', syllabusId: '' });
+const courseQuizSaving = ref(false), courseQuizError = ref('');
+function rememberCourse(syllabusId) { courseNavigation.value = { studentId: currentUser.value?.id || '', syllabusId }; }
+async function launchCourseSimulation({ target, fail }) {
+  const studentId = currentUser.value?.id;
+  try {
+    if (userRole.value !== 'student' || !studentId) throw new Error('Please sign in as a student.');
+    await loadMissionDatesFromFirestore();
+    if (studentId !== currentUser.value?.id || userRole.value !== 'student') return;
+    const mission = findMissionForModule(target.id);
+    if (!mission || !trainingModules.value.some(module => module.id === target.id)) throw new Error('The assigned mission is unavailable. Refresh the course or contact your instructor.');
+    if (isMissionLocked(mission)) throw new Error(getMissionAvailabilityStatus(target.id).message || 'This mission is locked. Complete its prerequisites first.');
+    await startMissionSimulation(mission);
+  } catch (error) { fail(error); }
+}
+function showCourseQuizResult(quiz, saved) {
+  const detailed = Array.isArray(saved.answers) && Array.isArray(saved.validation);
+  quizResultsModal.value = { quizTitle: quiz.title, quizId: quiz.id, questions: detailed ? quiz.questions : [], answers: detailed ? saved.answers : [], validation: detailed ? saved.validation : [],
+    score: saved['Quiz-score-percentage'] ?? saved.score ?? 0, passed: saved.passed === true,
+    feedback: `Saved result: ${saved['raw-score'] ?? saved.correctAnswers ?? 0} of ${saved.totalQuestions ?? quiz.questions?.length ?? 0} correct.`, gradedAt: saved.completedAt };
+}
+async function launchCourseQuiz({ target, activityId, fail }) {
+  const studentId = currentUser.value?.id;
+  try {
+    const { scores } = await firebaseApi.getQuizScores(studentId);
+    if (!Array.isArray(scores)) throw new Error('Unable to verify your saved quiz result. Try again.');
+    if (studentId !== currentUser.value?.id || userRole.value !== 'student') return;
+    const saved = scores.find(score => score.quizId === target.id);
+    if (saved) { showCourseQuizResult(target, saved); return; }
+    if (!target.questions?.length) throw new Error('This quiz has no questions yet. Contact your instructor.');
+    // The server confirmed no saved attempt; remove stale browser-only entries.
+    progressData.value.quizSubmissions = (progressData.value.quizSubmissions || []).filter(s => s.studentId !== studentId || s.quizId !== target.id);
+    courseQuizError.value = '';
+    startQuizSession({ ...target, courseActivityId: activityId });
+  } catch (error) { fail(error); }
+}
+async function submitCourseQuizSession() {
+  const session = activeQuizSession.value, studentId = currentUser.value?.id;
+  if (courseQuizSaving.value || !session || !allQuestionsAnswered.value) return;
+  const answers = [...session.answers];
+  courseQuizSaving.value = true; courseQuizError.value = '';
+  try {
+    const result = await firebaseApi.submitLearningQuiz(session.quiz.courseActivityId, answers);
+    if (studentId !== currentUser.value?.id || activeQuizSession.value !== session) return;
+    if (!result.data) throw new Error('The result was not saved. Please try again.');
+    progressData.value.quizSubmissions = restoreQuizSubmissions(progressData.value.quizSubmissions, [{ ...result.data, id: result.scoreId }], studentId);
+    saveProgress(progressData.value);
+    activeQuizSession.value = null;
+    showCourseQuizResult(result.quiz || session.quiz, result.data);
+  } catch (error) { if (studentId === currentUser.value?.id && activeQuizSession.value === session) courseQuizError.value = error.message || 'Your answers were not saved. Try again.'; }
+  finally { courseQuizSaving.value = false; }
 }
 
 function selectHubTab(tab) {
@@ -9081,6 +9136,7 @@ const allQuestionsAnswered = computed(() => {
 });
 
 async function submitQuizSession() {
+  if (activeQuizSession.value?.quiz.courseActivityId) { await submitCourseQuizSession(); return; }
   if (!activeQuizSession.value || !canTakeQuiz(activeQuizSession.value.quiz.id)) return;
   if (!allQuestionsAnswered.value) {
     alert('Please answer all questions before submitting');
@@ -9259,6 +9315,7 @@ async function submitQuizSession() {
 }
 
 function cancelQuizSession() {
+  if (activeQuizSession.value?.quiz.courseActivityId && courseQuizSaving.value) return;
   if (confirm('Are you sure you want to cancel? Your answers will not be saved.')) {
     activeQuizSession.value = null;
   }

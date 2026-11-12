@@ -1,4 +1,7 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+
+// Opaque content version: adding/reordering activities must not revoke PDF views.
+export const documentVersion = record => createHash('sha256').update(record.storagePath || '').digest('hex');
 
 export const PDF_LIMIT = 15 * 1024 * 1024;
 export class MaterialsError extends Error {
@@ -53,6 +56,7 @@ export function validatePdf(file) {
 
 // All ownership decisions use the current parent, including after reassignment.
 export function canReadSyllabus(record, user) {
+  if (user.role === 'student' && record.published === false) return false;
   const owner = record.instructorId;
   return user.role === 'admin' || (typeof owner === 'string' && !!owner && ((user.role === 'instructor' && owner === user.id) ||
     (user.role === 'student' && owner === (user.instructorid || user.instructorId))));
@@ -66,7 +70,7 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
     return col(name).doc(id);
   };
   const filePath = (name, id, path) => typeof path === 'string' && new RegExp(`^${name}/${id}/[a-f0-9-]{36}\\.pdf$`).test(path);
-  const usable = data => data?.status === 'active' && !!data.title?.trim() && !!data.storagePath;
+  const usable = data => data?.status === 'active' && !!data.title?.trim() && (!!data.storagePath || !!data.syllabusId);
   function check(doc, user, write = false, allowDeleting = false) {
     const data = doc.exists && doc.data();
     if (!data || (!usable(data) && !(allowDeleting && data.status === 'deleting')) || !(write ? canManageSyllabus(data, user) : canReadSyllabus(data, user))) fail(404, 'Material not found.');
@@ -80,6 +84,8 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
     return { id: doc.id, title: data.title, description: data.description, instructorId: data.instructorId,
       syllabusId: data.syllabusId, moduleNumber: data.moduleNumber, moduleCount: data.moduleCount || 0,
       fileName: data.fileName, fileSize: data.fileSize, createdAt: date(data.createdAt), updatedAt: date(data.updatedAt),
+      documentVersion: documentVersion(data),
+      published: data.published !== false, announcement: data.announcement || '', objectives: data.objectives || '',
       ...(user.role !== 'student' ? { revision: data.revision, cleanupPending: !!data.pendingFileDeletes?.length } : {}) };
   };
   async function instructor(id) {
@@ -124,7 +130,7 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
     let name = 'Instructor';
     try { name = (await instructor(data.instructorId)).name; } catch { /* deleted instructor */ }
     return { syllabus: { ...summary(doc, user), instructorName: name },
-      modules: children.docs.filter(item => usable(item.data())).map(item => summary(item, user)).sort((a, b) => a.moduleNumber - b.moduleNumber),
+      modules: children.docs.filter(item => usable(item.data()) && (user.role !== 'student' || item.data().published !== false)).map(item => summary(item, user)).sort((a, b) => a.moduleNumber - b.moduleNumber),
       cleanupPending: user.role !== 'student' && children.docs.some(item => item.data().status === 'deleting' || item.data().pendingFileDeletes?.length) };
   }
   async function removeFile(name, id, path) {
@@ -169,7 +175,7 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
     }
     const moduleNumber = Number(body.moduleNumber);
     if (isModule && (!Number.isInteger(moduleNumber) || moduleNumber < 1 || moduleNumber > 999)) fail(400, 'Module number must be between 1 and 999.');
-    if (creating || file) validatePdf(file);
+    if ((creating && !isModule) || file) validatePdf(file);
     // Scope validation happens before uploading and again in the transaction.
     if (!creating) {
       const old = await docRef.get();
@@ -202,6 +208,9 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
         const pending = [...new Set([...(old?.pendingFileDeletes || []), ...(storagePath && old?.storagePath ? [old.storagePath] : [])])];
         if (pending.length > 50) fail(409, 'Retry pending file cleanup before replacing this document again.');
         const data = { title, description, updatedAt: timestamp(), revision: (old?.revision || 0) + 1, pendingFileDeletes: pending,
+          published: body.published === undefined ? old?.published !== false : body.published === true || body.published === 'true',
+          objectives: text(body.objectives ?? old?.objectives ?? '', 'Learning objectives', 2500, false),
+          ...(!isModule ? { announcement: text(body.announcement ?? old?.announcement ?? '', 'Announcement', 2500, false) } : {}),
           ...(isModule ? { syllabusId: parentId, moduleNumber } : { instructorId }),
           ...(creating ? { status: 'active', createdAt: timestamp(), [isModule ? 'uploadedBy' : 'createdBy']: user.id, ...(!isModule ? { moduleCount: 0 } : {}) } : {}),
           ...(storagePath ? { storagePath, fileName: validatePdf(file), fileSize: file.buffer.length, contentType: 'application/pdf' } : {}) };
@@ -227,6 +236,8 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
       const doc = await tx.get(docRef);
       if (!doc.exists) fail(404, 'Material not found.');
       const data = doc.data();
+      const activities = await tx.get(col('learning_activities').where(name === 'syllabi' ? 'syllabusId' : 'moduleId', '==', id));
+      if (activities.size) fail(409, 'Delete the learning activities and finish their file cleanup before deleting this section.');
       if (name === 'syllabi') {
         check(doc, user, true, true);
         if (data.status !== 'deleting') revision(data, expectedRevision);
@@ -241,7 +252,7 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
         }
       }
       if (data.status !== 'deleting') tx.update(docRef, { status: 'deleting', updatedAt: timestamp(), revision: data.revision + 1,
-        pendingFileDeletes: [...new Set([...(data.pendingFileDeletes || []), data.storagePath])] });
+        pendingFileDeletes: [...new Set([...(data.pendingFileDeletes || []), ...(data.storagePath ? [data.storagePath] : [])])] });
     });
     return { cleanupPending: !(await cleanupRecord(name, id)) };
   }
@@ -263,6 +274,7 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
     const doc = await ref(name, id).get();
     if (!doc.exists || !usable(doc.data())) fail(404, 'Document not found.');
     const data = doc.data();
+    if (user.role === 'student' && data.published === false) fail(404, 'Document not found.');
     const parentRef = name === 'syllabi' ? doc.ref : ref('syllabi', data.syllabusId);
     check(await parentRef.get(), user);
     if (!filePath(name, id, data.storagePath)) fail(404, 'Document not found.');
@@ -273,7 +285,7 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
     // File access always follows the latest parent assignment and current revision.
     check(await parentRef.get(), user);
     const latest = await doc.ref.get();
-    if (!latest.exists || latest.data().status !== 'active' || latest.data().storagePath !== data.storagePath) fail(409, 'This document changed. Open it again.');
+    if (!latest.exists || latest.data().status !== 'active' || (user.role === 'student' && latest.data().published === false) || latest.data().storagePath !== data.storagePath) fail(409, 'This document changed. Open it again.');
     return { buffer, fileName: data.fileName };
   }
   async function cleanup(user) {
@@ -284,6 +296,8 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
       if (!canManageSyllabus(doc.data(), user)) continue;
       const children = await col('syllabus_modules').where('syllabusId', '==', doc.id).get();
       for (const child of children.docs) if (!(await cleanupRecord('syllabus_modules', child.id))) pending++;
+      const activities = await col('learning_activities').where('syllabusId', '==', doc.id).get();
+      for (const activity of activities.docs) if (!(await cleanupRecord('learning_activities', activity.id))) pending++;
       if (!(await cleanupRecord('syllabi', doc.id))) pending++;
     }
     return { cleanupPending: pending > 0 };
@@ -293,7 +307,7 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
   // are eligible. Never touches simulation files or other Storage prefixes.
   async function sweepOrphans() {
     let removed = 0;
-    for (const name of ['syllabi', 'syllabus_modules']) {
+    for (const name of ['syllabi', 'syllabus_modules', 'learning_activities']) {
       let pageToken;
       do {
         const [files, next] = await bucket().getFiles({ prefix: `${name}/`, autoPaginate: false, maxResults: 100, pageToken });
@@ -312,5 +326,5 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
     }
     return removed;
   }
-  return { list, detail, instructors, save, remove, reorder, pdf, cleanup, sweepOrphans };
+  return { list, detail, instructors, save, remove, reorder, pdf, cleanup, sweepOrphans, cleanupRecord };
 }

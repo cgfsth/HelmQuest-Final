@@ -62,13 +62,19 @@ export function listLearningSyllabi(options = {}) {
   return apiFetch(`${materialsPath}/syllabi?${new URLSearchParams({ instructorId, search })}`, { signal, timeoutMs: 30000 });
 }
 export const getLearningSyllabus = (id, options = {}) => apiFetch(`${materialsPath}/syllabi/${materialId(id)}`, { timeoutMs: 30000, ...options });
+export const getLearningCourse = (id, options = {}) => apiFetch(`${materialsPath}/syllabi/${materialId(id)}/course`, { timeoutMs: 30000, ...options });
+export const recordLearningActivity = (id, fields = {}, options = {}) => apiFetch(`${materialsPath}/activities/${materialId(id)}/progress`, { method: 'POST', body: JSON.stringify(fields), timeoutMs: 20000, ...options });
+export const launchLearningActivity = (id, options = {}) => apiFetch(`${materialsPath}/activities/${materialId(id)}/launch`, { method: 'POST', body: '{}', timeoutMs: 30000, ...options });
+export const submitLearningQuiz = (id, answers, options = {}) => apiFetch(`${materialsPath}/activities/${materialId(id)}/submit-quiz`, { method: 'POST', body: JSON.stringify({ answers }), timeoutMs: 30000, ...options });
+export const reorderLearningActivities = (id, fields, options = {}) => apiFetch(`${materialsPath}/syllabi/${materialId(id)}/activity-order`, { method: 'POST', body: JSON.stringify(fields), timeoutMs: 30000, ...options });
+const materialEndpoint = kind => kind === 'activity' ? 'activities' : kind === 'module' ? 'modules' : 'syllabi';
 export const getMaterialsInstructors = (options = {}) => apiFetch(`${materialsPath}/instructors`, { timeoutMs: 30000, ...options });
-export const deleteLearningMaterial = (kind, id, revision, options = {}) => apiFetch(`${materialsPath}/${kind === 'module' ? 'modules' : 'syllabi'}/${materialId(id)}`, { method: 'DELETE', body: JSON.stringify({ revision }), timeoutMs: 60000, ...options });
+export const deleteLearningMaterial = (kind, id, revision, options = {}) => apiFetch(`${materialsPath}/${materialEndpoint(kind)}/${materialId(id)}`, { method: 'DELETE', body: JSON.stringify({ revision }), timeoutMs: 60000, ...options });
 export const reorderLearningModules = (id, ids, revision, options = {}) => apiFetch(`${materialsPath}/syllabi/${materialId(id)}/reorder`, { method: 'POST', body: JSON.stringify({ ids, revision }), timeoutMs: 30000, ...options });
 export const retryMaterialsCleanup = (options = {}) => apiFetch(`${materialsPath}/cleanup`, { method: 'POST', body: '{}', timeoutMs: 60000, ...options });
 
 export async function getLearningPdf(kind, id, { signal } = {}) {
-  const response = await fetch(`${API_BASE_URL}${materialsPath}/${kind === 'module' ? 'modules' : 'syllabi'}/${materialId(id)}/pdf`, {
+  const response = await fetch(`${API_BASE_URL}${materialsPath}/${materialEndpoint(kind)}/${materialId(id)}/pdf`, {
     headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}, signal, cache: 'no-store',
   });
   if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message || 'Unable to open this PDF.');
@@ -76,8 +82,8 @@ export async function getLearningPdf(kind, id, { signal } = {}) {
 }
 
 export function saveLearningMaterial({ kind, id, syllabusId, fields, file, onProgress, signal }) {
-  const endpoint = id ? `/${kind === 'module' ? 'modules' : 'syllabi'}/${materialId(id)}`
-    : kind === 'module' ? `/syllabi/${materialId(syllabusId)}/modules` : '/syllabi';
+  const endpoint = id ? `/${materialEndpoint(kind)}/${materialId(id)}`
+    : kind === 'module' || kind === 'activity' ? `/syllabi/${materialId(syllabusId)}/${materialEndpoint(kind)}` : '/syllabi';
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(new DOMException('Upload cancelled.', 'AbortError'));
     const xhr = new XMLHttpRequest();
@@ -85,7 +91,7 @@ export function saveLearningMaterial({ kind, id, syllabusId, fields, file, onPro
     const finish = (fn, value) => { signal?.removeEventListener('abort', abort); fn(value); };
     xhr.open(id ? 'PUT' : 'POST', `${API_BASE_URL}${materialsPath}${endpoint}`);
     if (sessionToken) xhr.setRequestHeader('Authorization', `Bearer ${sessionToken}`);
-    xhr.timeout = 120000;
+    xhr.timeout = 180000;
     xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress?.(Math.round(event.loaded / event.total * 100)); };
     xhr.onload = () => {
       let data;

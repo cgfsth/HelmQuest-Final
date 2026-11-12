@@ -2,9 +2,9 @@ import express from 'express';
 import multer from 'multer';
 import { MaterialsError, MaterialsStorageError, PDF_LIMIT } from '../services/learningMaterials.js';
 
-export function createLearningMaterialsRouter({ service, authenticate }) {
+export function createLearningMaterialsRouter({ service, course, authenticate }) {
   const router = express.Router();
-  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: PDF_LIMIT, files: 1, fields: 6, fieldSize: 12000, parts: 7 } }).single('file');
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: PDF_LIMIT, files: 1, fields: 20, fieldSize: 12000, parts: 21 } }).single('file');
   const active = new Map();
   let total = 0;
   const bounded = (req, res, next) => {
@@ -27,6 +27,21 @@ export function createLearningMaterialsRouter({ service, authenticate }) {
   router.get('/instructors', manager, action(req => service.instructors(req.materialsUser)));
   router.get('/syllabi', action(req => service.list(req.materialsUser, req.query)));
   router.get('/syllabi/:id', action(req => service.detail(req.materialsUser, req.params.id)));
+  if (course) {
+    router.get('/syllabi/:id/course', action(req => course.course(req.materialsUser, req.params.id)));
+    router.post('/syllabi/:id/activities', manager, bounded, upload, action(req => course.save(req.materialsUser, req.params.id, req.body.moduleId || null, null, req.body, req.file)));
+    router.post('/syllabi/:id/activity-order', manager, action(req => course.reorder(req.materialsUser, req.params.id, req.body)));
+    router.put('/activities/:id', manager, bounded, upload, action(req => course.save(req.materialsUser, null, null, req.params.id, req.body, req.file)));
+    router.delete('/activities/:id', manager, action(req => course.remove(req.materialsUser, req.params.id, req.body.revision)));
+    router.get('/activities/:id/pdf', bounded, action(async (req, res) => {
+      const { buffer, fileName } = await course.pdf(req.materialsUser, req.params.id);
+      res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="document.pdf"; filename*=UTF-8''${encodeURIComponent(fileName)}`, 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
+      res.send(buffer);
+    }));
+    router.post('/activities/:id/progress', action(req => course.record(req.materialsUser, req.params.id, req.body)));
+    router.post('/activities/:id/launch', action(req => course.launch(req.materialsUser, req.params.id)));
+    router.post('/activities/:id/submit-quiz', action(req => course.submitQuiz(req.materialsUser, req.params.id, req.body)));
+  }
   for (const [endpoint, collection] of [['syllabi', 'syllabi'], ['modules', 'syllabus_modules']]) {
     router.get(`/${endpoint}/:id/pdf`, bounded, action(async (req, res) => {
       const { buffer, fileName } = await service.pdf(req.materialsUser, collection, req.params.id);

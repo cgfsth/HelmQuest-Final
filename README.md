@@ -18,6 +18,8 @@ MarineSim3D is a 3D boat simulation project built using Three.js. It features re
 
 For detailed documentation on specific features, see the `/docs` folder:
 
+- **[LMS Course Interface](./docs/lms-course-interface.md)**: Course/module authoring, private PowerPoint previews, simulator links, completion rules, deployment and validation.
+
 - **[Post-Docking Quiz System](./docs/post-docking-quiz.md)**: Comprehensive guide to the automated quiz system including architecture, API reference, and integration points
 - **[Data Flow](./docs/data-flow.md)**: System data flow documentation
 - **[Database Management](./docs/database-management-system.md)**: Database schema and management

@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:courses": "node --test tests/course-interface.test.mjs",
     "test:materials": "node --test tests/learning-materials.test.mjs",
     "verify:materials": "node scripts/verify-learning-materials.mjs",
     "dev": "vite",

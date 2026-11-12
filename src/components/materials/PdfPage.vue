@@ -9,6 +9,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { TextLayer } from 'pdfjs-dist';
 const props = defineProps({ pdf: { type: Object, required: true }, number: { type: Number, required: true }, width: { type: Number, required: true }, zoom: { type: Number, required: true }, scrollRoot: { type: Object, default: null } });
+const emit = defineEmits(['rendered']);
 const root = ref(null), canvas = ref(null), text = ref(null), ratio = ref(1.4142), nativeWidth = ref(595), rendered = ref(false), error = ref('');
 const pageWidth = computed(() => props.width * props.zoom), pageHeight = computed(() => pageWidth.value * ratio.value), scale = computed(() => pageWidth.value / nativeWidth.value);
 let observer, visible = false, renderTask, textTask, version = 0, alive = true;
@@ -33,7 +34,7 @@ async function render() {
     if (!alive || ticket !== version) return;
     text.value.replaceChildren(); textTask = new TextLayer({ textContentSource: content, container: text.value, viewport });
     await textTask.render();
-    if (ticket === version) rendered.value = true;
+    if (ticket === version) { rendered.value = true; emit('rendered', props.number); }
   } catch (err) { if (alive && ticket === version && err.name !== 'RenderingCancelledException' && err.name !== 'AbortException') error.value = 'Rendering failed'; }
 }
 function release() { version++; renderTask?.cancel(); textTask?.cancel(); if (canvas.value) { canvas.value.width = 0; canvas.value.height = 0; } text.value?.replaceChildren(); rendered.value = false; }

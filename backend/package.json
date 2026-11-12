@@ -5,6 +5,7 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
+    "test:courses": "npm test -- --runInBand tests/courseActivities.test.js tests/learningMaterials.test.js",
     "test:materials": "npm test -- --runInBand tests/learningMaterials.test.js tests/supabaseMaterialsStorage.test.js",
     "check:materials-storage": "node scripts/check-learning-materials-storage.js",
     "cleanup:materials": "node scripts/cleanup-learning-materials.js",

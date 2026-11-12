@@ -1,7 +1,7 @@
 // A small server-only adapter for the file operations used by learningMaterials.
 // Firestore/auth stay in the existing backend. No public/signed PDF URLs are made.
 const storageError = code => Object.assign(new Error('PDF storage request failed.'), { code });
-const validPath = path => typeof path === 'string' && /^(syllabi|syllabus_modules)\/[\w-]{1,128}\/[a-f\d-]{36}\.pdf$/.test(path);
+const validPath = path => typeof path === 'string' && /^(syllabi|syllabus_modules|learning_activities)\/[\w-]{1,128}\/[a-f\d-]{36}\.pdf$/.test(path);
 const encodedPath = path => path.split('/').map(encodeURIComponent).join('/');
 
 export function createSupabaseMaterialsBucket({ url, secretKey, name = 'learning-materials', fetchImpl = globalThis.fetch, timeoutMs = 60000 }) {
@@ -75,7 +75,7 @@ export function createSupabaseMaterialsBucket({ url, secretKey, name = 'learning
   }
   return { name, provider: 'supabase', getMetadata, file,
     async getFiles({ prefix, maxResults = 100, pageToken } = {}) {
-      if (!['syllabi/', 'syllabus_modules/'].includes(prefix)) throw storageError('storage/invalid-path');
+      if (!['syllabi/', 'syllabus_modules/', 'learning_activities/'].includes(prefix)) throw storageError('storage/invalid-path');
       const data = await (await request(`/object/list-v2/${bucketName}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prefix, limit: Math.min(100, Math.max(1, maxResults)), with_delimiter: false, sortBy: { column: 'name', order: 'asc' }, ...(pageToken ? { cursor: pageToken } : {}) }) })).json();
       if (!Array.isArray(data.objects) || (data.hasNext && (!data.nextCursor || data.nextCursor === pageToken))) throw storageError('storage/invalid-response');

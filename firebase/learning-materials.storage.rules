@@ -7,3 +7,6 @@ match /syllabi/{path=**} {
 match /syllabus_modules/{path=**} {
   allow read, write: if false;
 }
+match /learning_activities/{path=**} {
+  allow read, write: if false;
+}
