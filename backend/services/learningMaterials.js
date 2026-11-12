@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { OFFICIAL_SYLLABUS, OFFICIAL_SYLLABUS_KEY, officialSection } from '../../shared/officialSyllabus.js';
 
 // Opaque content version: adding/reordering activities must not revoke PDF views.
 export const documentVersion = record => createHash('sha256').update(record.storagePath || '').digest('hex');
@@ -85,6 +86,7 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
       syllabusId: data.syllabusId, moduleNumber: data.moduleNumber, moduleCount: data.moduleCount || 0,
       fileName: data.fileName, fileSize: data.fileSize, createdAt: date(data.createdAt), updatedAt: date(data.updatedAt),
       documentVersion: documentVersion(data),
+      officialSyllabusKey: data.officialSyllabusKey || null, officialSectionId: data.officialSectionId || null,
       published: data.published !== false, announcement: data.announcement || '', objectives: data.objectives || '',
       ...(user.role !== 'student' ? { revision: data.revision, cleanupPending: !!data.pendingFileDeletes?.length } : {}) };
   };
@@ -164,6 +166,7 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
     managers(user);
     const isModule = name === 'syllabus_modules';
     const creating = !id;
+    if (body.officialSyllabusKey && body.officialSyllabusKey !== OFFICIAL_SYLLABUS_KEY) fail(400, 'Unknown official syllabus.');
     const docRef = creating ? col(name).doc() : ref(name, id);
     const title = text(body.title, 'Title', 180);
     const description = text(body.description ?? '', 'Description', 2500, false);
@@ -205,6 +208,10 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
           if (creating && siblings.size >= 200) fail(400, 'A syllabus can contain up to 200 modules.');
           if (siblings.docs.some(item => item.id !== docRef.id && usable(item.data()) && item.data().moduleNumber === moduleNumber)) fail(409, 'That module number is already used. Choose another number or use the reorder arrows.');
         } else if (!creating) check(current, user, true);
+        const officialKey = isModule ? parent.officialSyllabusKey : old?.officialSyllabusKey || (creating ? body.officialSyllabusKey : null);
+        if (!creating && !isModule && body.officialSyllabusKey && body.officialSyllabusKey !== old.officialSyllabusKey) fail(400, 'Create an official course separately; existing course information is preserved.');
+        const official = isModule && officialKey ? officialSection(old?.officialSectionId) : null;
+        if (officialKey && ((!isModule && title !== OFFICIAL_SYLLABUS.title) || (isModule && (creating || !official || title !== official.title || moduleNumber !== old.moduleNumber)))) fail(400, 'Official course titles, lesson order and schedule cannot be changed. Edit instructor notes and resources instead.');
         const pending = [...new Set([...(old?.pendingFileDeletes || []), ...(storagePath && old?.storagePath ? [old.storagePath] : [])])];
         if (pending.length > 50) fail(409, 'Retry pending file cleanup before replacing this document again.');
         const data = { title, description, updatedAt: timestamp(), revision: (old?.revision || 0) + 1, pendingFileDeletes: pending,
@@ -212,9 +219,17 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
           objectives: text(body.objectives ?? old?.objectives ?? '', 'Learning objectives', 2500, false),
           ...(!isModule ? { announcement: text(body.announcement ?? old?.announcement ?? '', 'Announcement', 2500, false) } : {}),
           ...(isModule ? { syllabusId: parentId, moduleNumber } : { instructorId }),
+          ...(!isModule && officialKey ? { officialSyllabusKey: officialKey } : {}),
           ...(creating ? { status: 'active', createdAt: timestamp(), [isModule ? 'uploadedBy' : 'createdBy']: user.id, ...(!isModule ? { moduleCount: 0 } : {}) } : {}),
           ...(storagePath ? { storagePath, fileName: validatePdf(file), fileSize: file.buffer.length, contentType: 'application/pdf' } : {}) };
         if (creating) tx.create(docRef, data); else tx.update(docRef, data);
+        if (creating && !isModule && officialKey) {
+          OFFICIAL_SYLLABUS.sections.forEach((section, index) => tx.create(col('syllabus_modules').doc(`${docRef.id}--${section.id}`), {
+            syllabusId: docRef.id, officialSectionId: section.id, moduleNumber: index + 1, title: section.title, description: '', objectives: '',
+            status: 'active', published: true, revision: 1, uploadedBy: user.id, createdAt: timestamp(), updatedAt: timestamp(), pendingFileDeletes: []
+          }));
+          tx.update(docRef, { moduleCount: OFFICIAL_SYLLABUS.sections.length });
+        }
         if (parentRef) tx.update(parentRef, { moduleCount: (parent.moduleCount || 0) + (creating ? 1 : 0), updatedAt: timestamp(), revision: parent.revision + 1 });
       });
     } catch (error) {
@@ -236,6 +251,8 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
       const doc = await tx.get(docRef);
       if (!doc.exists) fail(404, 'Material not found.');
       const data = doc.data();
+      if (name === 'syllabi' && data.officialSyllabusKey) { check(doc, user, true, true); fail(409, 'The official syllabus structure is preserved. Unpublish the course instead.'); }
+      if (name === 'syllabus_modules' && data.officialSectionId) fail(409, 'Official syllabus sections are preserved. Unpublish the section instead.');
       const activities = await tx.get(col('learning_activities').where(name === 'syllabi' ? 'syllabusId' : 'moduleId', '==', id));
       if (activities.size) fail(409, 'Delete the learning activities and finish their file cleanup before deleting this section.');
       if (name === 'syllabi') {
@@ -261,6 +278,7 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
     const parentRef = ref('syllabi', id);
     await db.runTransaction(async tx => {
       const parent = check(await tx.get(parentRef), user, true);
+      if (parent.officialSyllabusKey) fail(400, 'Official syllabus sections keep their prescribed order. Activities can be reordered within each lesson.');
       revision(parent, body.revision);
       const docs = await tx.get(col('syllabus_modules').where('syllabusId', '==', id));
       const active = docs.docs.filter(doc => usable(doc.data()));

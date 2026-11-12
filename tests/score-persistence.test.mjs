@@ -74,6 +74,7 @@ test('practice completion opens the saved report and quiz submission exits befor
   // No quiz data, database client, or storage dependency is provided: touching
   // any save path would throw instead of returning from the review guard.
   const quiz = actualFunction('handlePostDockingQuizSubmit', 'function handleQuizResultsClose()', {
+    activeCoursePractical: { value: null },
     isTrainingReviewMode: { value: true }
   });
   await quiz({});

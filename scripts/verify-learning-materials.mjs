@@ -93,6 +93,8 @@ try {
     await send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,x:target.x,y:target.y});
     await send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,x:target.x,y:target.y});
   }
+  async function courseOverview(){await waitFor('document.querySelector(".lc-course") && !document.querySelector(".lc-detail") && !document.querySelector(".lm-reader")');if(await evaluate('[...document.querySelectorAll("button")].some(b=>b.textContent.trim()==="Back to Course")'))await click('Back to Course');await waitFor('document.querySelectorAll(".lm-module").length === 2');}
+  async function customCourse(){await waitFor(`document.querySelector('[data-field="course-structure"]')`);await fill('[data-field="course-structure"]','');}
   const click = text => pointerClick(`[...document.querySelectorAll('button')].find(b=>b.textContent.trim()===${JSON.stringify(text)})`);
   const fill = (selector,value) => evaluate(`(() => {const input=document.querySelector(${JSON.stringify(selector)});input.value=${JSON.stringify(value)};input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
   async function attach(path=pdfPath){const {root}=await send('DOM.getDocument');const {nodeId}=await send('DOM.querySelector',{nodeId:root.nodeId,selector:'input[type=file]'});await send('DOM.setFileInputFiles',{nodeId,files:[path]});}
@@ -104,7 +106,7 @@ try {
   await waitFor('document.querySelector(".lm-grid .lm-card")');
   assert.equal(await evaluate('[...document.querySelectorAll("button")].some(b=>/Create syllabus|Edit|Delete|Add module/.test(b.textContent))'),false);
   await screenshot('student-library-desktop');await click('View syllabus');
-  await waitFor('document.querySelectorAll(".lm-module").length===2');
+  await courseOverview();
   assert.equal(await evaluate('document.querySelectorAll(".lc-section").length'),3);
   await screenshot('student-course-desktop');
   await click('Collapse all');assert.equal(await evaluate('[...document.querySelectorAll(".lc-section-toggle")].every(b=>b.getAttribute("aria-expanded")==="false")'),true);await click('Expand all');
@@ -116,25 +118,25 @@ try {
   await evaluate(`document.querySelector('[aria-label="Zoom in"]').click()`);await waitFor('document.querySelector("output").textContent==="125%"');
   await screenshot('student-reader-desktop');
   for(const width of [768,375]){await viewport(width);await pause();assert.equal(await noOverflow(),true,`PDF reader overflow at ${width}`);await screenshot('student-reader-'+width);}
-  await click('Back to Module');await waitFor('document.querySelectorAll(".lm-module").length===2');
+  await click('Back to Module');await courseOverview();
   await waitFor('document.querySelector(".lc-section .lc-status summary").textContent.includes("Done")');
   const practical=`[...document.querySelectorAll('.lc-activity-open')].find(b=>b.textContent.includes('Practical Activity'))`;
   await pointerClick(practical);await click('Start Simulation');await waitFor('window.fixture.launches.includes("navigation")');
   assert.equal((await fixture.course.course({id:'sa',role:'student',instructorid:'a'},syllabusId)).progress[simulationId].status,'In Progress');
-  await click('Back to Module');await waitFor('document.querySelectorAll(".lm-module").length===2');
+  await click('Back to Module');await courseOverview();
   await pointerClick(`[...document.querySelectorAll('.lc-activity-open')].find(b=>b.textContent.includes('Introduction to navigation'))`);
   await waitFor('document.querySelector(".lm-pdf-page canvas")?.width>0');assert.equal(await evaluate('document.querySelector(".lc-objectives").textContent.includes("Identify safe")'),true);await click('Back to Module');
-  await waitFor('document.querySelectorAll(".lm-module").length===2');
+  await courseOverview();
   for(const width of [768,375]){await viewport(width);assert.equal(await noOverflow(),true,`Course overflow at ${width}`);await screenshot('student-course-'+width);}
   await pointerClick('document.querySelector(".lc-status summary")');assert.equal(await evaluate('document.querySelector(".lc-status[open] .lc-requirements").textContent.includes("View the document")'),true);
   await click('All syllabi');await waitFor('document.querySelector(".lm-grid")');
   assert.equal(await noOverflow(),true);await screenshot('student-library-mobile');
   await viewport(1365);await evaluate('window.fixture.login("instructor")');await waitFor('document.querySelector(".lm-grid") && [...document.querySelectorAll("button")].some(b=>b.textContent.includes("Create syllabus"))');
   await click('Create syllabus');await waitFor('document.querySelector(".lm-modal input")');
-  await fill('.lm-form input:not([type])','Browser uploaded syllabus');await fill('.lm-form textarea','A real multipart upload from the browser.');await attach();await screenshot('instructor-upload-dialog');
+  await customCourse();await fill('.lm-form input:not([type])','Browser uploaded syllabus');await fill('.lm-form textarea','A real multipart upload from the browser.');await attach();await screenshot('instructor-upload-dialog');
   await click('Save document');await waitFor('!document.querySelector(".lm-modal") && document.querySelectorAll(".lm-grid .lm-card").length===2');
   const newId=Object.keys(fixture.records.syllabi).find(id=>fixture.records.syllabi[id].title==='Browser uploaded syllabus');assert.ok(newId);assert.ok(fixture.files.has(fixture.records.syllabi[newId].storagePath));
-  await click('View syllabus');await waitFor('document.querySelectorAll(".lm-module").length===2');
+  await click('View syllabus');await courseOverview();
   await evaluate(`document.querySelector('[aria-label="Move module 2 up"]').click()`);
   await waitFor('document.querySelector(".lm-module h3")?.textContent.includes("Docking and Anchoring")');
   await click('Add module');await fill('.lm-form input:not([type])','Browser module');await attach();await click('Save document');await waitFor('!document.querySelector(".lm-modal") && document.querySelectorAll(".lm-module").length===3');
@@ -147,7 +149,7 @@ try {
   const uploaded=Object.values(fixture.records.learning_activities).find(a=>a.title==='Browser presentation');assert.equal(uploaded.published,false);assert.equal(uploaded.sourceFileName,'navigation-lesson.pptx');
   await pointerClick(`document.querySelector('[aria-label="Edit activity Browser presentation"]')`);await waitFor('document.querySelector(".lc-publish input")');await pointerClick('document.querySelector(".lc-publish input")');await click('Save document');await waitFor('!document.querySelector(".lm-modal")');
   await pointerClick(`[...document.querySelectorAll('.lc-activity-open')].find(b=>b.textContent.includes('Browser presentation'))`);await waitFor('document.querySelector(".lm-pdf-page canvas")?.width>0');
-  assert.equal(await evaluate('document.querySelector(".lc-objectives").textContent.includes("safe passage")'),true);await pointerClick(`document.querySelector('[aria-label="Next slide"]')`);await waitFor(`Number(document.querySelector('[aria-label="Slide number"]').value)===2`);await screenshot('presentation-lesson-viewer');await click('Back to Module');await waitFor('document.querySelectorAll(".lm-module").length===2');
+  assert.equal(await evaluate('document.querySelector(".lc-objectives").textContent.includes("safe passage")'),true);await pointerClick(`document.querySelector('[aria-label="Next slide"]')`);await waitFor(`Number(document.querySelector('[aria-label="Slide number"]').value)===2`);await screenshot('presentation-lesson-viewer');await click('Back to Module');await courseOverview();
   await addLesson();await fill('.lm-form input:not([type])','Browser practical');await fill('.lm-form select','simulation');
   await evaluate(`(()=>{const selects=document.querySelectorAll('.lm-form select');selects[1].value='navigation';selects[1].dispatchEvent(new Event('change',{bubbles:true}));const number=document.querySelector('.lm-form input[type=number]');number.value='85';number.dispatchEvent(new Event('input',{bubbles:true}));})()`);
   await pointerClick('document.querySelector(".lc-publish input")');await click('Save document');await waitFor('!document.querySelector(".lm-modal") && document.body.textContent.includes("Browser practical")');
@@ -155,7 +157,7 @@ try {
   await click('Preview as student');assert.equal(await evaluate('document.querySelectorAll(".lc-section-tools,.lc-add-activity").length'),0);await click('Exit student preview');
   await screenshot('instructor-course-desktop');
   await evaluate('window.fixture.login("admin")');await waitFor('document.querySelector(".lm-filters select") && document.querySelectorAll(".lm-grid .lm-card").length===2');
-  await click('Create syllabus');await fill('.lm-form input:not([type])','Admin assigned syllabus');await fill('.lm-form select','b');await attach();await click('Save document');await waitFor('!document.querySelector(".lm-modal") && document.querySelectorAll(".lm-grid .lm-card").length===3');
+  await click('Create syllabus');await customCourse();await fill('.lm-form input:not([type])','Admin assigned syllabus');await fill('[data-field="assigned-instructor"]','b');await attach();await click('Save document');await waitFor('!document.querySelector(".lm-modal") && document.querySelectorAll(".lm-grid .lm-card").length===3');
   await fill('.lm-filters select','b');await waitFor('document.querySelectorAll(".lm-grid .lm-card").length===1');await screenshot('admin-filtered-library');
   await viewport(375);await click('Create syllabus');await waitFor('document.querySelector(".lm-modal")');assert.equal(await noOverflow(),true);assert.equal(await evaluate('document.querySelector(".lm-modal").getBoundingClientRect().right <= innerWidth'),true);await screenshot('admin-upload-mobile');await click('Cancel');
   await evaluate('window.fixture.login("student")');await waitFor('document.querySelectorAll(".lm-grid .lm-card").length===2');

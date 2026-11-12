@@ -5,7 +5,7 @@ export const SIMULATION_TUTORIAL_STEPS = [
     title: 'Welcome aboard, Cadet', label: 'Your first voyage', target: '[data-tour="student-header"]',
     description: 'Your instructor has approved your enrollment. Get familiar with the simulation before your first voyage.',
     instructions: [
-      'Open Missions in the sidebar and choose an available mission from your instructor.',
+      'Open Syllabus & Lessons in the sidebar, select your course and lesson, then choose an assigned practical simulation.',
       'Read the mission briefing, objectives and required steps before starting.',
       'A locked mission may require an earlier mission or a later opening date. Ask your instructor if no mission is available.',
     ],
@@ -53,7 +53,7 @@ export const SIMULATION_TUTORIAL_STEPS = [
     instructions: [
       'Approach the assigned docking area slowly and bring the boat to a stop.',
       'Stop the engine and use the anchor when the current mission step asks you to.',
-      'When the mission-complete screen offers a quiz, select Take Quiz and submit your answers. Check Training Records for your results.',
+      'After validated completion and docking, an assigned quiz opens automatically. If there is no quiz, your simulation results appear directly. Use Back to Lesson to return.',
     ],
     tip: 'Complete the required simulation steps before taking the quiz. Your instructor sets the mission requirements.',
   },

@@ -19,6 +19,7 @@
       :quiz="postDockingQuizData || {}" 
       :isVisible="showPostDockingQuiz"
       :isSubmitting="isPostDockingQuizSubmitting"
+      :error-message="activeCoursePractical ? courseCompletionError : ''"
       @close="handlePostDockingQuizClose"
       @submit="handlePostDockingQuizSubmit"
     />
@@ -586,6 +587,7 @@
         
         <div class="quiz-editor-content">
           <!-- Questions Section -->
+          <div class="quiz-editor-section"><label>Passing score (%)<input class="quiz-input" type="number" min="0" max="100" v-model.number="quizEditorModal.quiz.passScore" placeholder="70" /></label><label><input type="checkbox" :checked="quizEditorModal.quiz.published !== false" @change="quizEditorModal.quiz.published = $event.target.checked" /> Publish quiz for its assigned mission</label><p>Students take this quiz after validated simulation completion and docking. Unpublished quizzes are skipped.</p></div>
           <div class="quiz-editor-section">
             <div class="quiz-section-header">
               <h3>❓ Questions</h3>
@@ -1665,21 +1667,13 @@
             <button
               type="button"
               class="hub-nav-item"
-              :class="{ 'hub-nav-item--active': hubTab === 'missions' }"
-              @click="selectHubTab('missions'); closeStudentMenu()"
-            >
-              <span class="hub-nav-icon">🧭</span> Missions
-            </button>
-            <button
-              type="button"
-              class="hub-nav-item"
               :class="{ 'hub-nav-item--active': hubTab === 'leaderboards' }"
               @click="selectHubTab('leaderboards'); closeStudentMenu()"
             >
               <span class="hub-nav-icon">🏆</span> Leaderboards
             </button>
             <button type="button" class="hub-nav-item" :class="{ 'hub-nav-item--active': hubTab === 'materials' }" @click="selectHubTab('materials'); closeStudentMenu()">
-              <BookOpen :size="20" class="hub-nav-icon" aria-hidden="true" /> Learning Materials
+              <BookOpen :size="20" class="hub-nav-icon" aria-hidden="true" /> Syllabus &amp; Lessons
             </button>
           </nav>
 
@@ -1704,9 +1698,8 @@
             <h1 class="missions-hub-title">
               <template v-if="hubTab === 'overview'">Overview</template>
               <template v-else-if="hubTab === 'certificates'">Training Records</template>
-              <template v-else-if="hubTab === 'missions'">Missions</template>
               <template v-else-if="hubTab === 'leaderboards'">Leaderboards</template>
-              <template v-else-if="hubTab === 'materials'">Learning Materials</template>
+              <template v-else-if="hubTab === 'materials'">Syllabus &amp; Lessons</template>
               <template v-else>Navigation Training</template>
             </h1>
             <p v-if="hubTab === 'overview'" class="missions-hub-welcome">
@@ -1721,9 +1714,6 @@
               <template v-else-if="hubTab === 'certificates'">
                 View your complete training history and performance records
               </template>
-              <template v-else-if="hubTab === 'missions'">
-                Complete missions to earn XP, badges, and certificates
-              </template>
               <template v-else-if="hubTab === 'leaderboards'">
                 See how you rank against other students
               </template>
@@ -1736,7 +1726,7 @@
           </button>
         </header>
 
-        <LearningMaterials v-if="hubTab === 'materials' && !isStudentPending" :key="currentUser.id" :current-user="currentUser" role="student" :prepare-access="prepareLearningMaterialsAccess" :initial-course-id="courseNavigation.studentId === currentUser.id ? courseNavigation.syllabusId : ''" @navigate-course="rememberCourse" @launch-simulation="launchCourseSimulation" @launch-quiz="launchCourseQuiz" />
+        <LearningMaterials v-if="hubTab === 'materials' && !isStudentPending" :key="currentUser.id" :current-user="currentUser" role="student" :prepare-access="prepareLearningMaterialsAccess" :initial-course-id="courseNavigation.studentId === currentUser.id ? courseNavigation.syllabusId : ''" :initial-lesson-id="courseNavigation.studentId === currentUser.id ? courseNavigation.lessonId : ''" @navigate-course="rememberCourse" @launch-simulation="launchCourseSimulation" />
 
         <section v-show="hubTab === 'overview'" class="motivation-panel" id="hub-badges" aria-label="Your progress and rewards">
           <!-- Student Profile Card - Horizontal Layout -->
@@ -1961,102 +1951,6 @@
             </div>
           </div>
         </section>
-
-        <div v-show="hubTab === 'missions'" class="training-grid" id="hub-missions">
-          <article
-            v-for="module in trainingModules.filter(m => m.id !== 'm1-mission4' || progressData.courseSettings?.isMission4Published)"
-            :key="module.id"
-            class="training-card"
-            :class="{
-              'training-card--completed': isModuleFullyComplete(module.id),
-              'training-card--locked': isModuleLockedForStudent(module.id)
-            }"
-          >
-            <div class="training-card-top">
-              <div class="training-badges">
-                <span class="training-level-badge">{{ displayModuleLevel(module.id) }}</span>
-                <!-- Removed training-category badge -->
-                <span
-                  class="training-difficulty"
-                  :class="trainingDifficultyClass(module.difficulty)"
-                >{{ module.difficulty }}</span>
-              </div>
-              <span
-                v-if="isModuleFullyComplete(module.id)"
-                class="training-completed-badge"
-              >{{ getMissionsForModule(module.id).length > 1 ? 'All missions passed' : 'Mission passed' }}</span>
-              <span
-                v-else-if="getModuleMissionProgress(module.id).passed > 0"
-                class="training-progress-badge"
-              >{{ getModuleMissionProgress(module.id).passed }}/{{ getModuleMissionProgress(module.id).total }} passed</span>
-            </div>
-
-            <h3 class="training-card-title">{{ module.title }}</h3>
-            <p v-if="moduleLockMessage(module.id)" class="training-lock-notice">{{ moduleLockMessage(module.id) }}</p>
-            <p class="training-card-desc">{{ module.description }}</p>
-
-            <!-- Mission Schedule (Open Date & Deadline) -->
-            <div v-if="getModuleSchedule(module.id).openDate || getModuleSchedule(module.id).deadline" class="mission-schedule">
-              <div v-if="getModuleSchedule(module.id).openDate" class="mission-schedule-item">
-                <span class="mission-schedule-label">📅 Opens:</span>
-                <span class="mission-schedule-value">{{ formatMissionDate(getModuleSchedule(module.id).openDate) }}</span>
-              </div>
-              <div v-if="getModuleSchedule(module.id).deadline" class="mission-schedule-item">
-                <span class="mission-schedule-label">⏰ Deadline:</span>
-                <span class="mission-schedule-value">{{ formatMissionDate(getModuleSchedule(module.id).deadline) }}</span>
-              </div>
-              <div v-if="getMissionAvailabilityStatus(module.id).status !== 'available'" class="mission-schedule-status">
-                <span :class="'mission-status-' + getMissionAvailabilityStatus(module.id).status">
-                  {{ getMissionAvailabilityStatus(module.id).message }}
-                </span>
-              </div>
-            </div>
-
-            <div class="training-meta">
-              <span class="training-duration">Est. {{ module.duration }}</span>
-              <span class="training-reward">+{{ module.xpReward ?? 100 }} XP</span>
-            </div>
-
-            <!-- Mission Steps (Automatically generated from checkpoints) -->
-            <div v-if="module.steps && module.steps.length > 0" class="training-mission-steps">
-              <h4>Mission Steps ({{ module.steps.length }})</h4>
-              <ol>
-                <li v-for="(step, i) in module.steps" :key="i">{{ step.instruction }}</li>
-              </ol>
-            </div>
-
-            <div class="hub-mission-list">
-              <div
-                v-for="mission in getMissionsForModule(module.id)"
-                :key="mission.id"
-                class="hub-mission-row"
-                :class="[missionCardClass(mission), { 'hub-mission-row--locked': isMissionLocked(mission) }]"
-              >
-                <div class="hub-mission-info">
-                  <span class="hub-mission-code">{{ mission.id }}</span>
-                  <span class="hub-mission-name">{{ mission.title }}</span>
-                  <span class="hub-mission-pass">Pass {{ mission.passScore }}%</span>
-                  <span
-                    v-if="getMissionResult(mission)"
-                    class="hub-mission-result"
-                    :class="getMissionResult(mission).passed ? 'hub-mission-result--pass' : 'hub-mission-result--fail'"
-                  >
-                    {{ getMissionResult(mission).score }}% {{ getMissionResult(mission).passed ? 'PASS' : 'FAIL' }}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  class="hub-mission-start"
-                  :disabled="isMissionLocked(mission)"
-                  @click="startMissionSimulation(mission)"
-                >
-                  {{ missionActionLabel(mission) }}
-                </button>
-              </div>
-            </div>
-
-          </article>
-        </div>
 
         <!-- Leaderboards Section -->
         <section v-show="hubTab === 'leaderboards'" class="leaderboards-section" id="hub-leaderboards">
@@ -2894,9 +2788,12 @@
       <p class="helm-bridge-hint">C — camera · R — rain · WASD — helm · mouse — look</p>
     </div>
 
-    <!-- Take Quiz Button - CENTER OVERLAY (appears when anchor deployed AND engine OFF) -->
+    <div v-if="activeCoursePractical && !missionCompleteModal && !showPostDockingQuiz && ['SAVING_SIMULATION', 'MISSION_COMPLETED', 'QUIZ_CHECKING', 'QUIZ_LOOKUP_FAILED', 'SAVE_FAILED'].includes(courseCompletionState)" class="report-mission-overlay">
+      <div class="report-mission-card"><h2>{{ courseCompletionError ? 'Completion needs attention' : courseCompletionState === 'SAVING_SIMULATION' ? 'Saving simulation results…' : 'Checking your assigned quiz…' }}</h2><p role="status">{{ courseCompletionError || 'Your simulation performance is saved before the optional quiz begins.' }}</p><button v-if="courseCompletionError" type="button" class="report-mission-btn-large" @click="continueCourseCompletion">Retry this stage</button><button v-if="courseCompletionError && trainingRunMetrics.integratedSaved" type="button" class="report-mission-btn-large" @click="viewSavedCourseSimulation">View saved simulation result</button></div>
+    </div>
+    <!-- Legacy reporting remains available to existing practice/review flows. -->
     <transition name="fade">
-      <div v-if="anchor.deployed && activeTrainingModule && !isTrainingReviewMode && !missionReadyToReport && !activeMissionQuizSubmission && !showPostDockingQuiz && !engineRunning" class="report-mission-overlay">
+      <div v-if="!activeCoursePractical && anchor.deployed && activeTrainingModule && !isTrainingReviewMode && !missionReadyToReport && !activeMissionQuizSubmission && !showPostDockingQuiz && !engineRunning" class="report-mission-overlay">
         <div class="report-mission-card" style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.15)); border-color: rgba(59, 130, 246, 0.6);">
           <div class="report-icon">📝</div>
           <h2 style="color: #3b82f6;">Mission Complete!</h2>
@@ -2926,7 +2823,7 @@
     
     <!-- Report Mission Button - CENTER OVERLAY (appears when mission is ready to report) -->
     <transition name="fade">
-      <div v-if="missionReadyToReport && anchor.deployed && !showPostDockingQuiz && !engineRunning && !missionCompleteModal" class="report-mission-overlay">
+      <div v-if="(!activeCoursePractical || isTrainingReviewMode) && missionReadyToReport && anchor.deployed && !showPostDockingQuiz && !engineRunning && !missionCompleteModal" class="report-mission-overlay">
         <div class="report-mission-card">
           <div class="report-icon">📝</div>
           <h2>{{ isTrainingReviewMode ? 'Mission Report' : 'Mission Complete!' }}</h2>
@@ -2980,6 +2877,7 @@
           <p class="mission-complete-code">{{ missionCompleteModal.id }}</p>
 
           <ul class="mission-result-breakdown">
+            <li v-for="(label, key) in missionCompleteModal.performanceMetrics ? { steeringPrecision: 'Steering Precision', courseAccuracy: 'Course Accuracy', dockingAccuracy: 'Docking Accuracy', timeEfficiency: 'Time Efficiency', safetyCompliance: 'Safety Compliance' } : {}" :key="key"><span>{{ label }}</span><strong>{{ missionCompleteModal.performanceMetrics[key] == null ? 'Not recorded' : Math.round(missionCompleteModal.performanceMetrics[key] * 10) / 10 + '%' }}</strong></li>
             <li v-if="missionCompleteModal.elapsedLabel">
               <span>Time</span>
               <strong>{{ missionCompleteModal.elapsedLabel }}</strong>
@@ -3002,7 +2900,7 @@
             </li>
             <li v-if="missionCompleteModal.quizScore !== undefined">
               <span>Quiz score</span>
-              <strong>{{ missionCompleteModal.quizCorrect }}/{{ missionCompleteModal.quizTotal }}</strong>
+              <strong>{{ missionCompleteModal.fromLesson ? missionCompleteModal.quizScore + '% · ' : '' }}{{ missionCompleteModal.quizCorrect }}/{{ missionCompleteModal.quizTotal }}{{ missionCompleteModal.quizPassed !== undefined ? (missionCompleteModal.quizPassed ? ' · PASS' : ' · FAIL') : '' }}</strong>
             </li>
           </ul>
 
@@ -3015,9 +2913,12 @@
               : 'You finished the run but did not meet the pass score. Retry the mission to improve your result.' }}
           </p>
           <div class="mission-complete-actions">
-            <button type="button" class="mission-complete-btn" @click="dismissMissionCompleteModal">
-              {{ missionCompleteModal.passed ? 'Back to missions' : 'Retry later' }}
+            <button v-if="missionCompleteModal.fromLesson || activeCoursePractical" type="button" class="mission-complete-btn" @click="backToOriginLesson">Back to Lesson</button>
+            <button v-else type="button" class="mission-complete-btn" @click="dismissMissionCompleteModal">
+              {{ missionCompleteModal.passed ? 'Back to syllabus' : 'Retry later' }}
             </button>
+            <button v-if="missionCompleteModal.fromLesson" type="button" class="mission-complete-btn" @click="backToOriginLesson(); selectHubTab('certificates')">View Results</button>
+            <button v-if="missionCompleteModal.fromLesson && isTrainingReviewMode && !missionCompleteModal.quizPending" type="button" class="mission-complete-btn" @click="missionCompleteModal = null; courseCompletionState = 'IN_PROGRESS'; trainingRunMetrics.resumeCompletion = false">Continue practice</button>
           </div>
         </div>
       </div>
@@ -3639,6 +3540,9 @@ import { ref, computed, defineAsyncComponent, onMounted, onUnmounted, watch, nex
 import { BookOpen, LibraryBig } from '@lucide/vue';
 const LearningMaterials = defineAsyncComponent(() => import('./components/materials/LearningMaterials.vue'));
 import { deriveProgression, studentTotalXp } from '../shared/progression.js';
+import { createMissionCompletionFlow } from './helpers/missionCompletionFlow.js';
+import { validDockingCompletion } from '../shared/simulationPerformance.js';
+import { calculateSafetyCompliance } from './helpers/missionScoring.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Sky } from 'three/examples/jsm/objects/Sky.js';
@@ -4559,10 +4463,14 @@ async function prepareLearningMaterialsAccess(options = {}) {
 }
 
 // Retain the student's course while the existing 3D simulator owns the screen.
-const courseNavigation = ref({ studentId: '', syllabusId: '' });
+const courseNavigation = ref({ studentId: '', syllabusId: '', lessonId: '' });
+const activeCoursePractical = ref(null);
+const courseCompletionState = ref('NOT_STARTED'), courseCompletionError = ref('');
+let courseCompletionFlow = null;
+const courseCompletionPaused = computed(() => ['SAVING_SIMULATION', 'MISSION_COMPLETED', 'QUIZ_CHECKING', 'QUIZ_LOOKUP_FAILED', 'QUIZ_PENDING', 'QUIZ_IN_PROGRESS', 'RESULTS', 'SAVE_FAILED'].includes(courseCompletionState.value));
 const courseQuizSaving = ref(false), courseQuizError = ref('');
-function rememberCourse(syllabusId) { courseNavigation.value = { studentId: currentUser.value?.id || '', syllabusId }; }
-async function launchCourseSimulation({ target, fail }) {
+function rememberCourse(route) { courseNavigation.value = { studentId: currentUser.value?.id || '', ...(typeof route === 'string' ? { syllabusId: route, lessonId: '' } : route) }; }
+async function launchCourseSimulation({ target, activityId, syllabusId, lessonId, simulationResult, fail }) {
   const studentId = currentUser.value?.id;
   try {
     if (userRole.value !== 'student' || !studentId) throw new Error('Please sign in as a student.');
@@ -4571,8 +4479,90 @@ async function launchCourseSimulation({ target, fail }) {
     const mission = findMissionForModule(target.id);
     if (!mission || !trainingModules.value.some(module => module.id === target.id)) throw new Error('The assigned mission is unavailable. Refresh the course or contact your instructor.');
     if (isMissionLocked(mission)) throw new Error(getMissionAvailabilityStatus(target.id).message || 'This mission is locked. Complete its prerequisites first.');
+    activeCoursePractical.value = { activityId, syllabusId, lessonId, studentId };
+    courseCompletionFlow?.dispose(); courseCompletionFlow = null; courseCompletionState.value = 'IN_PROGRESS'; courseCompletionError.value = '';
     await startMissionSimulation(mission);
+    if (simulationResult && studentId === currentUser.value?.id && activeTrainingModule.value?.id === target.id) {
+      trainingRunMetrics.value.integratedSaved = { data: simulationResult, skipped: true, xpAwarded: 0, totalXp: demoStudent.value.xp };
+      trainingRunMetrics.value.resumeCompletion = true;
+    }
   } catch (error) { fail(error); }
+}
+
+function courseDockingEvidence() {
+  const run = trainingRunMetrics.value, module = activeTrainingModule.value;
+  return { objectivesComplete: trainingRunFinished.value, completedSteps: run?.stepsCompleted || 0,
+    totalSteps: run?.totalSteps || module?.steps?.length || 0, anchored: anchor.value.deployed,
+    engineStopped: !engineRunning.value && !engineStarting.value, inPort: isBoatInPortZone.value, speedKnots: stats.value.speedKnots };
+}
+async function continueCourseCompletion() {
+  const origin = activeCoursePractical.value, module = activeTrainingModule.value, run = trainingRunMetrics.value;
+  if (!origin || !module || origin.studentId !== currentUser.value?.id || (isTrainingReviewMode.value && !run.resumeCompletion)) return;
+  const evidence = run.resumeCompletion ? run.integratedSaved.data.completion : courseDockingEvidence();
+  if (!validDockingCompletion(evidence)) return;
+  if (!courseCompletionFlow) {
+    const current = () => activeCoursePractical.value === origin && activeTrainingModule.value === module && trainingRunMetrics.value === run && currentUser.value?.id === origin.studentId && userRole.value === 'student';
+    const mission = activeMission.value || findMissionForModule(module.id);
+    courseCompletionFlow = createMissionCompletionFlow({
+      onState: snapshot => { if (current()) { courseCompletionState.value = snapshot.state; courseCompletionError.value = snapshot.error; } },
+      saveSimulation: async completion => {
+        if (run.resumeCompletion && run.integratedSaved) return run.integratedSaved;
+        const report = run.simulationPerformanceReport ||= performanceManager.isActive ? performanceManager.completeMission() : performanceManager.getPerformanceReport();
+        const scores = run.simulationRawScores ||= { steering: performanceManager.state.steeringScore, course: performanceManager.state.courseScore, docking: performanceManager.state.dockingScore, time: performanceManager.state.timeScore, safety: calculateSafetyCompliance(run) };
+        const saved = await firebaseApi.completeLearningSimulation(origin.activityId, { completion, scores });
+        if (!current()) throw new Error('Student session changed.');
+        if (!saved.data) throw new Error('The simulation result was not saved. Try again.');
+        run.integratedSaved = saved;
+        module.completed = saved.data.passed;
+        try {
+          recordMissionSession({ studentId: origin.studentId, studentName: currentUser.value.name, missionId: mission.id,
+            missionTitle: saved.data.missionTitle || module.title, moduleId: module.id, passScore: mission.passScore ?? 70,
+            score: saved.data.score, passed: saved.data.passed, completedAt: saved.data.completedAt, performanceMetrics: saved.data.performanceMetrics }, progressData.value);
+          if (!saved.skipped) processMissionRewards(origin.studentId, progressData.value, { score: saved.data.score, passed: saved.data.passed, missionXpReward: saved.xpAwarded || 0 });
+          const profile = progressData.value.studentProfiles?.[origin.studentId];
+          if (profile) profile.xp = saved.totalXp;
+          if (!saved.skipped && saved.data.passed && module.badgeReward) instructorAwardBadge(progressData.value, { studentId: origin.studentId, badgeId: module.badgeReward, instructorId: 'system', instructorName: 'HelmQuest', note: `Earned by completing mission: ${module.title}` });
+          saveProgress(progressData.value);
+        } catch (error) { console.warn('Saved simulation is available remotely; local projection will refresh:', error); }
+        return saved;
+      },
+      findQuiz: async () => {
+        if (run.integratedSaved?.skipped && run.integratedSaved.data?.scoringVersion !== 'simulation-v1') return { quiz: null, saved: null };
+        return firebaseApi.getLearningMissionQuiz(origin.activityId);
+      },
+      saveQuiz: (quiz, answers) => firebaseApi.submitLearningMissionQuiz(origin.activityId, { quizId: quiz.id, answers }),
+      onQuiz: quiz => { if (current()) { postDockingQuizData.value = normalizeQuizData(quiz); showPostDockingQuiz.value = true; postDockingQuizTriggered.value = true; } },
+      onResults: ({ simulation, quiz, quizResult }) => {
+        if (!current()) return;
+        showPostDockingQuiz.value = false; postDockingQuizData.value = null;
+        const saved = simulation.data, metrics = saved.performanceMetrics || {};
+        if (quizResult) {
+          progressData.value.quizSubmissions = restoreQuizSubmissions(progressData.value.quizSubmissions, [quizResult], origin.studentId);
+          try { saveProgress(progressData.value); } catch { /* remote save remains authoritative */ }
+        }
+        missionCompleteModal.value = { id: mission.id, title: saved.missionTitle || module.title, score: saved.score, passed: saved.passed,
+          passScore: saved.passScore ?? mission.passScore ?? 70, performanceMetrics: metrics, xpEarned: simulation.xpAwarded, totalXp: simulation.totalXp,
+          elapsedLabel: formatElapsedDuration((run.endedAt || performance.now()) - run.startedAt), stepsLabel: `${run.stepsCompleted}/${run.totalSteps}`,
+          quizScore: quizResult ? quizResult['Quiz-score-percentage'] ?? quizResult.score : undefined,
+          quizCorrect: quizResult ? quizResult['raw-score'] ?? quizResult.correctAnswers ?? 0 : undefined,
+          quizTotal: quizResult?.totalQuestions, quizPassed: quizResult?.passed, quizApplicable: !!quiz, fromLesson: true };
+        syncUiCursor();
+      }
+    });
+  }
+  await courseCompletionFlow.finish(evidence);
+}
+function backToOriginLesson() {
+  const origin = activeCoursePractical.value;
+  if (origin?.studentId === currentUser.value?.id) { courseNavigation.value = { ...origin }; hubTab.value = 'materials'; }
+  missionCompleteModal.value = null;
+  exitTraining();
+}
+function viewSavedCourseSimulation() {
+  const saved = trainingRunMetrics.value?.integratedSaved;
+  if (!saved?.data) return;
+  missionCompleteModal.value = { id: saved.data.missionId, title: saved.data.missionTitle, score: saved.data.score, passed: saved.data.passed,
+    passScore: saved.data.passScore, performanceMetrics: saved.data.performanceMetrics, isSavedReport: true, fromLesson: true, quizPending: true };
 }
 function showCourseQuizResult(quiz, saved) {
   const detailed = Array.isArray(saved.answers) && Array.isArray(saved.validation);
@@ -4613,7 +4603,7 @@ async function submitCourseQuizSession() {
 }
 
 function selectHubTab(tab) {
-  hubTab.value = tab;
+  hubTab.value = ['missions', 'quizzes'].includes(tab) ? 'materials' : tab;
   
   // Fetch leaderboard data when switching to leaderboards tab
   if (tab === 'leaderboards') {
@@ -4629,25 +4619,25 @@ function selectHubTab(tab) {
 async function openStudentTour() {
   await closeStudentMenu(false);
   showTutorial();
-  selectHubTab(tutorialStepIndex.value === 0 ? 'overview' : 'missions');
+  selectHubTab(tutorialStepIndex.value === 0 ? 'overview' : 'materials');
 }
 
 async function advanceStudentTour() {
   nextTutorialCard();
-  if (activeScreen.value === 'dashboard') selectHubTab('missions');
+  if (activeScreen.value === 'dashboard') selectHubTab('materials');
   if (tutorialCompleted.value) await restoreStudentTourFocus();
 }
 
 function previousStudentTourStep() {
   previousTutorialCard();
-  if (activeScreen.value === 'dashboard') selectHubTab(tutorialStepIndex.value === 0 ? 'overview' : 'missions');
+  if (activeScreen.value === 'dashboard') selectHubTab(tutorialStepIndex.value === 0 ? 'overview' : 'materials');
 }
 
 async function chooseMissionForTour() {
-  selectHubTab('missions');
+  selectHubTab('materials');
   waitForTutorialSimulation();
   await nextTick();
-  const target = document.querySelector('#hub-missions .hub-mission-start:not(:disabled)');
+  const target = document.querySelector('.lc-activity-open:not(:disabled), .lm-grid .lm-primary');
   (target || document.querySelector('.student-tour-trigger'))?.focus();
 }
 
@@ -8343,6 +8333,9 @@ async function startCreatingQuiz(moduleId = quizManagerModal.value?.moduleId, mi
   const newQuiz = {
     title: quizTitle,
     description: '',
+    published: false,
+    status: 'draft',
+    passScore: 70,
     moduleId: moduleId,
     questions: [createBlankQuestion()],
     createdAt: new Date().toISOString(),
@@ -8754,6 +8747,9 @@ async function saveQuiz() {
     }
     
     // Validation
+    if (!Number.isFinite(Number(quiz.passScore ?? 70)) || Number(quiz.passScore ?? 70) < 0 || Number(quiz.passScore ?? 70) > 100) {
+      alert('Set a passing score between 0 and 100.'); quizSaving.value = false; return;
+    }
     if (quiz.questions.length === 0) {
       if (!confirm('This quiz has no questions. Save anyway?')) {
         quizSaving.value = false;
@@ -8830,6 +8826,9 @@ async function saveQuiz() {
     console.log('[SAVE QUIZ] Saving to Firestore...');
     const firestoreData = {
       title: quiz.title,
+      passScore: Number(quiz.passScore ?? 70),
+      published: quiz.published !== false,
+      status: quiz.published === false ? 'draft' : 'active',
       description: quiz.description || '',
       moduleId: moduleId,
       questions: quiz.questions,
@@ -9376,6 +9375,7 @@ function closeQuizResults() {
  */
 function handlePostDockingQuizClose() {
   if (isPostDockingQuizSubmitting.value) return;
+  if (activeCoursePractical.value) { backToOriginLesson(); return; }
   showPostDockingQuiz.value = false;
   postDockingQuizData.value = null;
 }
@@ -9541,6 +9541,12 @@ async function checkForPostDockingQuiz() {
  * @see {@link QuizResultsModal} for results display
  */
 async function handlePostDockingQuizSubmit(answers) {
+  if (activeCoursePractical.value && courseCompletionFlow) {
+    if (isPostDockingQuizSubmitting.value) return;
+    isPostDockingQuizSubmitting.value = true;
+    try { await courseCompletionFlow.submit(answers); } finally { isPostDockingQuizSubmitting.value = false; }
+    return;
+  }
   if (isTrainingReviewMode.value) return;
   if (isPostDockingQuizSubmitting.value) return;
   // Validate quiz data exists
@@ -12409,6 +12415,7 @@ function resetTrainingRunState() {
 }
 
 function exitTraining() {
+  resetCourseCompletion();
   performanceManager.cancelMission();
   clearWaypointMarkers();
   dismissTrainingNotification();
@@ -12596,7 +12603,7 @@ function checkTrainingStep() {
     trainingRunMetrics.value.endedAt = performance.now();
     trainingRunMetrics.value.stepsCompleted = totalSteps;
 
-    if (module.id === 'm1-mission1') {
+    if (module.id === 'm1-mission1' && !activeCoursePractical.value) {
       startGearQuiz(module);
       return;
     }
@@ -15556,6 +15563,7 @@ function setupInputs() {
   window.addEventListener("keydown", (event) => {
     if (activeScreen.value !== 'simulation') return;
     if (tutorialVisible.value) return;
+    if (showPostDockingQuiz.value || courseCompletionPaused.value) return;
     // If final exit confirmation is visible, handle it first
     if (exitFinalConfirmVisible.value) {
       if ((event.code === 'Enter' || event.key === 'Enter') && !event.repeat) {
@@ -16382,6 +16390,26 @@ const tutorialVisible = computed(() => tutorialEligible.value && tutorialOpen.va
   && !showCinematicLoading.value && !showMissionBriefing.value
   && (activeScreen.value !== 'simulation' || !simulationNeedsLandscape.value) && !controlsGuideVisible.value && !gearInfoPopup.value
   && !showPostDockingQuiz.value && !showQuizResults.value && !exitConfirmVisible.value && !exitFinalConfirmVisible.value);
+
+function resetCourseCompletion() {
+  courseCompletionFlow?.dispose(); courseCompletionFlow = null;
+  courseCompletionState.value = 'NOT_STARTED'; courseCompletionError.value = ''; activeCoursePractical.value = null;
+}
+watch([() => currentUser.value?.id, userRole], () => { resetCourseCompletion(); if (missionCompleteModal.value?.fromLesson) missionCompleteModal.value = null; });
+watch([trainingRunFinished, () => anchor.value.deployed, engineRunning, activeScreen,
+  () => trainingRunMetrics.value.resumeCompletion,
+  () => trainingRunFinished.value && anchor.value.deployed && Math.abs(stats.value.speedKnots) <= 2], () => {
+  if (activeCoursePractical.value && activeScreen.value === 'simulation') continueCourseCompletion();
+});
+watch([showPostDockingQuiz, courseCompletionState, simulationRunning], ([visible]) => {
+  if (activeScreen.value === 'simulation' && (visible || courseCompletionPaused.value)) {
+    simulationRunning.value = false;
+    Object.keys(keyStates).forEach(key => { keyStates[key] = false; });
+  }
+});
+watch([showPostDockingQuiz, courseCompletionState], ([visible]) => {
+  if (!visible && !courseCompletionPaused.value && activeScreen.value === 'simulation' && !simulationNeedsLandscape.value && !tutorialVisible.value) simulationRunning.value = true;
+});
 
 watch(activeScreen, screen => { if (screen === 'simulation') resumeTutorialInSimulation(); });
 

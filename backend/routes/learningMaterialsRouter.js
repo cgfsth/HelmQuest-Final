@@ -41,6 +41,9 @@ export function createLearningMaterialsRouter({ service, course, authenticate })
     router.post('/activities/:id/progress', action(req => course.record(req.materialsUser, req.params.id, req.body)));
     router.post('/activities/:id/launch', action(req => course.launch(req.materialsUser, req.params.id)));
     router.post('/activities/:id/submit-quiz', action(req => course.submitQuiz(req.materialsUser, req.params.id, req.body)));
+    router.post('/activities/:id/complete-simulation', action(req => course.completeSimulation(req.materialsUser, req.params.id, req.body)));
+    router.get('/activities/:id/mission-quiz', action(req => course.practicalQuiz(req.materialsUser, req.params.id)));
+    router.post('/activities/:id/mission-quiz', action(req => course.submitPracticalQuiz(req.materialsUser, req.params.id, req.body)));
   }
   for (const [endpoint, collection] of [['syllabi', 'syllabi'], ['modules', 'syllabus_modules']]) {
     router.get(`/${endpoint}/:id/pdf`, bounded, action(async (req, res) => {

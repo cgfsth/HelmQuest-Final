@@ -143,16 +143,11 @@ test('a failed metadata commit cleans the uploaded activity file; a lost acknowl
   const saved = Object.values(f.records.learning_activities)[0]; expect(f.files.has(saved.storagePath)).toBe(true);
 });
 
-test('course quizzes are graded on the server and saved via the existing result service', async () => {
-  const { id } = await add({ type: 'quiz', targetId: 'quiz', completionRule: 'pass', passScore: 80 }, null);
-  const launch = await request(f.app).post(`/learning-materials/activities/${id}/launch`).set(headers('sa', 'student')).expect(200);
-  expect(JSON.stringify(launch.body)).not.toMatch(/correctAnswer|isCorrect/);
-  const response = await request(f.app).post(`/learning-materials/activities/${id}/submit-quiz`).set(headers('sa', 'student')).send({ studentId: 'sb', score: 100, answers: ['False', 'Starboard'] }).expect(200);
-  expect(response.body.data).toMatchObject({ studentId: 'sa', score: 50, passed: false, moduleId, 'raw-score': 1 });
-  expect(savedInputs).toHaveLength(1); expect((await f.course.course(student, syllabusId)).progress[id].status).toBe('In Progress');
-  const again = await request(f.app).post(`/learning-materials/activities/${id}/submit-quiz`).set(headers('sa', 'student')).send({ answers: ['True', 'Starboard'] }).expect(200);
-  expect(again.body.skipped).toBe(true); expect(again.body.data.score).toBe(50);
-  await request(f.app).post(`/learning-materials/activities/${id}/submit-quiz`).set(headers('sb', 'student')).send({ answers: ['True', 'Starboard'] }).expect(404);
+test('legacy quiz links remain manageable but are hidden from students and cannot launch separately', async () => {
+  const { id } = await add({ type: 'quiz', targetId: 'quiz', published: true }, null);
+  expect((await f.course.course(student, syllabusId)).activities.some(a => a.type === 'quiz')).toBe(false);
+  expect((await f.course.course(owner, syllabusId)).activities.some(a => a.id === id)).toBe(true);
+  await request(f.app).post('/learning-materials/activities/' + id + '/launch').set(headers('sa', 'student')).expect(409);
 });
 
 test('presentation conversion uses an isolated profile, disabled macros, timeout and private local files', async () => {

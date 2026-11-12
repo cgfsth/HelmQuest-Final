@@ -3,6 +3,9 @@ import { MaterialsError, MaterialsStorageError, canReadSyllabus, canManageSyllab
 import { canonicalMissionId, hasMissionCompletion } from './missionRewards.js';
 import { missionOwner } from '../../shared/missionAccess.js';
 import { createPresentationPreview } from './presentationPreview.js';
+import { OFFICIAL_SYLLABUS, OFFICIAL_SYLLABUS_KEY } from '../../shared/officialSyllabus.js';
+import { simulationPerformance, validDockingCompletion } from '../../shared/simulationPerformance.js';
+import { selectMissionQuiz, gradeMissionQuiz } from '../../shared/missionQuiz.js';
 
 const fail = (status, message) => { throw new MaterialsError(status, message); };
 const validId = id => typeof id === 'string' && /^[\w-]{1,128}$/.test(id);
@@ -17,7 +20,7 @@ const summary = doc => {
   const d = doc.data();
   return { id: doc.id, syllabusId: d.syllabusId, moduleId: d.moduleId, type: d.type, title: d.title, description: d.description,
     objectives: d.objectives, instructions: d.instructions, order: d.order, published: d.published !== false, completionRule: d.completionRule,
-    passScore: d.passScore, targetId: d.targetId, targetTitle: d.targetTitle, availableFrom: d.availableFrom, availableUntil: d.availableUntil,
+    passScore: d.passScore, targetId: d.targetId, targetTitle: d.targetTitle, quizPolicy: d.quizPolicy || 'inherit', quizId: d.quizId || '', availableFrom: d.availableFrom, availableUntil: d.availableUntil,
     fileName: d.fileName, sourceFileName: d.sourceFileName, documentVersion: documentVersion(d), revision: d.revision, updatedAt: date(d.updatedAt) };
 };
 
@@ -30,7 +33,7 @@ export function activityCompletion(activity, { viewed = false, started = false, 
   return { status: done ? 'Done' : viewed || started || results.length ? 'In Progress' : 'To do', requirements };
 }
 
-export function createCourseActivitiesService({ db, bucket, timestamp, materials, convert = createPresentationPreview(), saveQuizResult }) {
+export function createCourseActivitiesService({ db, bucket, timestamp, materials, convert = createPresentationPreview(), saveQuizResult, saveMissionResult }) {
   const col = name => db.collection(name);
   const ref = (name, id) => { if (!validId(id)) fail(404, 'Content not found.'); return col(name).doc(id); };
   async function context(user, syllabusId, moduleId = null, write = false) {
@@ -69,7 +72,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     const docs = await col('learning_activities').where('syllabusId', '==', id).get();
     await context(user, id);
     const modules = new Set(detail.modules.map(m => m.id));
-    const activities = docs.docs.filter(doc => { const d = doc.data(); return d.status === 'active' && (!d.moduleId || modules.has(d.moduleId)) && (user.role !== 'student' || d.published !== false); }).map(summary).sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+    const activities = docs.docs.filter(doc => { const d = doc.data(); return d.status === 'active' && (!d.moduleId || modules.has(d.moduleId)) && (user.role !== 'student' || (d.published !== false && d.type !== 'quiz')); }).map(summary).sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
     let progress = {};
     if (user.role === 'student') {
       const [views, missionScores, quizScores] = await Promise.all(['learning_activity_progress', 'mission_score', 'quiz_score'].map(name => col(name).where('studentId', '==', user.id).get()));
@@ -87,7 +90,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     }
     const choices = user.role !== 'student' ? { catalog: await catalog(user, id) } : {};
     await context(user, id);
-    return { ...detail, activities, progress, ...choices, cleanupPending: !!detail.cleanupPending || (user.role !== 'student' && docs.docs.some(doc => doc.data().status === 'deleting' || doc.data().pendingFileDeletes?.length)) };
+    return { ...detail, activities, progress, ...choices, official: detail.syllabus.officialSyllabusKey === OFFICIAL_SYLLABUS_KEY ? OFFICIAL_SYLLABUS : null, cleanupPending: !!detail.cleanupPending || (user.role !== 'student' && docs.docs.some(doc => doc.data().status === 'deleting' || doc.data().pendingFileDeletes?.length)) };
   }
   async function save(user, syllabusId, moduleId, id, body, file) {
     if (!['instructor', 'admin'].includes(user.role)) fail(403, 'Students have read-only access.');
@@ -106,12 +109,15 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     for (const field of ['availableFrom', 'availableUntil']) { const value = body[field]; if (value && !Number.isFinite(Date.parse(value))) fail(400, 'Choose a valid activity date.'); dates[field] = value ? new Date(value).toISOString() : null; }
     if (dates.availableFrom && dates.availableUntil && dates.availableFrom >= dates.availableUntil) fail(400, 'The closing time must be after the opening time.');
     let targetId = null, targetTitle = '';
+    const quizPolicy = type === 'simulation' ? body.quizPolicy || existing?.data.quizPolicy || 'inherit' : 'none';
+    if (!['inherit', 'none', 'assigned'].includes(quizPolicy)) fail(400, 'Choose a valid mission quiz assignment.');
     if (!isFile(type)) {
       const choices = await catalog(user, syllabusId);
       const chosen = (type === 'simulation' ? choices.missions : choices.quizzes).find(item => item.id === body.targetId);
       if (!chosen) fail(400, 'Choose an existing mission or quiz belonging to this course instructor.');
       targetId = body.targetId;
       targetTitle = chosen.title;
+      if (quizPolicy === 'assigned' && !choices.quizzes.some(q => q.id === body.quizId)) fail(400, 'Choose a quiz belonging to this instructor.');
       if (file) fail(400, 'Linked activities do not accept files.');
     } else if (!existing && !file) fail(400, 'Upload a learning document.');
     if (type === 'pdf' && file) validatePdf(file);
@@ -135,6 +141,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
         const pending = [...new Set([...(old?.pendingFileDeletes || []), ...(storagePath && old?.storagePath ? [old.storagePath] : [])])];
         if (pending.length > 50) fail(409, 'Retry pending file cleanup before replacing this document.');
         const data = { title, description, objectives, instructions, type, syllabusId, moduleId: moduleId || null, targetId, targetTitle, completionRule, passScore,
+          quizPolicy, quizId: quizPolicy === 'assigned' ? body.quizId : '',
           ...dates, published: body.published === true || body.published === 'true', status: 'active', revision: (old?.revision || 0) + 1,
           order: old?.order ?? siblings.docs.filter(d => (d.data().moduleId || null) === (moduleId || null)).length,
           updatedAt: timestamp(), pendingFileDeletes: pending,
@@ -225,6 +232,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
   async function launch(user, id) {
     if (user.role !== 'student') fail(403, 'Use a student account to start an activity.');
     const { data, syllabus } = await activity(user, id); available(data);
+    if (data.type === 'quiz') fail(409, 'Quizzes are available after completing and docking in the assigned practical simulation.');
     if (!['simulation', 'quiz'].includes(data.type)) fail(400, 'This activity opens in the document viewer.');
     const doc = await ref(data.type === 'simulation' ? 'missions' : 'quiz', data.targetId).get();
     if (!doc.exists || (data.type === 'simulation' && missionOwner(doc.data()) !== syllabus.instructorId)) fail(404, 'The linked activity is unavailable.');
@@ -246,7 +254,12 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
         });
       }
     }
-    return { type: data.type, target, activityId: id };
+    let simulationResult = null;
+    if (data.type === 'simulation') {
+      const records = await col('mission_score').where('studentId', '==', user.id).get();
+      simulationResult = records.docs.map(doc => doc.data()).find(r => canonicalMissionId(r.missionId) === canonicalMissionId(data.targetId) && r.scoringVersion === 'simulation-v1' && r.completion?.verified) || null;
+    }
+    return { type: data.type, target, activityId: id, simulationResult };
   }
   async function submitQuiz(user, id, body) {
     const launched = await launch(user, id);
@@ -270,5 +283,57 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     if (!saved.data) fail(409, 'This quiz could not be saved. Refresh the course and check its completion status.');
     return { ...saved, quiz };
   }
-  return { course, catalog, save, remove, reorder, pdf, record, launch, submitQuiz };
+  async function practical(user, id) {
+    if (user.role !== 'student') fail(403, 'Use an approved student account.');
+    const item = await activity(user, id);
+    if (item.data.type !== 'simulation') fail(404, 'Practical activity not found.');
+    available(item.data);
+    const mission = await ref('missions', item.data.targetId).get();
+    if (!mission.exists || missionOwner(mission.data()) !== item.syllabus.instructorId) fail(404, 'Assigned mission not found.');
+    return { ...item, mission };
+  }
+  async function completeSimulation(user, id, body) {
+    const item = await practical(user, id);
+    if (!validDockingCompletion(body.completion)) fail(409, 'Complete all mission objectives, dock in the assigned port, stop the engine and deploy the anchor first.');
+    let performance;
+    try { performance = simulationPerformance(body.scores || {}, Number(item.mission.data().pass_score ?? item.mission.data().passScore ?? 70)); }
+    catch (error) { fail(400, error.message); }
+    if (!saveMissionResult) fail(503, 'Mission saving is not configured.');
+    return saveMissionResult({ studentId: user.id, missionId: item.data.targetId, missionTitle: item.mission.data().mission_title || item.mission.data().title || item.data.title,
+      ...performance, completion: { ...body.completion, verified: true }, lessonId: item.data.moduleId, syllabusId: item.data.syllabusId, activityId: id, completedAt: new Date() });
+  }
+  async function practicalQuiz(user, id, { includeAnswers = false } = {}) {
+    const item = await practical(user, id);
+    const records = await col('mission_score').where('studentId', '==', user.id).get();
+    const results = records.docs.map(doc => ({ ...doc.data(), id: doc.id })).filter(r => canonicalMissionId(r.missionId) === canonicalMissionId(item.data.targetId));
+    const simulation = results.find(r => r.scoringVersion === 'simulation-v1' && r.completion?.verified) || null;
+    if (!simulation) fail(409, 'Save the completed simulation before checking its quiz.');
+    const [quizDocs, assignmentDocs, scores] = await Promise.all([col('quiz').get(), col('quiz_assignments').get(), col('quiz_score').where('studentId', '==', user.id).get()]);
+    const quiz = selectMissionQuiz({ missionId: item.data.targetId, instructorId: item.syllabus.instructorId,
+      quizzes: quizDocs.docs.map(d => ({ ...d.data(), id: d.id })), assignments: assignmentDocs.docs.map(d => d.data()), policy: item.data.quizPolicy || 'inherit', quizId: item.data.quizId });
+    const saved = quiz ? scores.docs.map(d => ({ ...d.data(), id: d.id })).find(r => r.quizId === quiz.id) || null : null;
+    if (quiz) quiz.questions = quiz.questions.map((question, index) => {
+      const normalized = { ...question, id: question.id ?? String(index) };
+      if (includeAnswers || saved) return normalized;
+      const { correctAnswer, ...visible } = normalized;
+      if (Array.isArray(visible.options)) visible.options = visible.options.map(({ isCorrect, ...option }) => option);
+      return visible;
+    });
+    // No missing/failed query is converted into a no-quiz result.
+    await practical(user, id);
+    return { simulation, quiz, saved };
+  }
+  async function submitPracticalQuiz(user, id, body) {
+    const current = await practicalQuiz(user, id, { includeAnswers: true });
+    if (!current.quiz || current.quiz.id !== body.quizId) fail(409, 'The assigned quiz changed. Check the mission quiz again.');
+    if (current.saved) return { data: current.saved, skipped: true, scoreId: current.saved.id };
+    const item = await practical(user, id);
+    let grade;
+    try { grade = gradeMissionQuiz(current.quiz, body.answers); } catch (error) { fail(400, error.message); }
+    if (!saveQuizResult) fail(503, 'Quiz saving is not configured.');
+    return saveQuizResult({ studentId: user.id, studentName: user.name || '', instructorId: item.syllabus.instructorId,
+      missionId: item.data.targetId, moduleId: item.data.targetId, quizId: current.quiz.id, quizTitle: current.quiz.title || 'Quiz',
+      ...grade, status: 'graded', completedAt: new Date() }, { allowAfterSimulation: true });
+  }
+  return { course, catalog, save, remove, reorder, pdf, record, launch, submitQuiz, completeSimulation, practicalQuiz, submitPracticalQuiz };
 }

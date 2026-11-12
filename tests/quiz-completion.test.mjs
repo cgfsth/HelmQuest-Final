@@ -18,11 +18,12 @@ function actualFunction(name) {
   const prefix = source.slice(start - 6, start) === 'async ' ? start - 6 : start;
   return source.slice(prefix, source.indexOf('\n}', start) + 2);
 }
-const overlay = source.slice(source.indexOf('<!-- Take Quiz Button - CENTER OVERLAY'), source.indexOf('<!-- Sinking Crash Alarm Overlay'));
+const overlay = source.slice(source.indexOf('<!-- Legacy reporting remains available'), source.indexOf('<!-- Sinking Crash Alarm Overlay'));
 const render = new Function('Vue', compile(`<div>${overlay}</div>`, { mode: 'function', prefixIdentifiers: true }).code)(Vue);
 function page(api = {}) {
   const alerts = [], notifications = [], reports = [];
   const deps = {
+    activeCoursePractical: Vue.ref(null), courseCompletionFlow: null,
     ref: Vue.ref, computed: Vue.computed, watch: Vue.watch, nextTick: Vue.nextTick,
     findCompletedQuizSubmission, quizScoreCounts, restoreQuizSubmissions,
     currentUser: Vue.ref({ id: 'student' }), activeTrainingModule: Vue.ref({ id: 'module' }),

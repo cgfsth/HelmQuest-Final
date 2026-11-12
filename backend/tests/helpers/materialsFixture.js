@@ -4,7 +4,7 @@ import { createMaterialsAccess } from '../../middleware/materialsAccess.js';
 import { createLearningMaterialsRouter } from '../../routes/learningMaterialsRouter.js';
 import { createCourseActivitiesService } from '../../services/courseActivities.js';
 
-export function materialsFixture({ middleware, bucketOverride, convert, saveQuizResult } = {}) {
+export function materialsFixture({ middleware, bucketOverride, convert, saveQuizResult, saveMissionResult } = {}) {
   const records = { instructor: { a: { name: 'Captain Helen', status: 'active' }, b: { name: 'Captain Marcus', status: 'active' }, admin: { name: 'Admin', role: 'admin', status: 'active' } },
     students: { sa: { status: 'active', instructorid: 'a' }, sb: { status: 'active', instructorId: 'b' }, pending: { status: 'pending', instructorid: 'a' }, unassigned: { status: 'active' } },
     syllabi: { placeholder: { title: '' } }, syllabus_modules: { placeholder: { title: '' } }, training_modules: { untouched: { title: 'Simulation' } } };
@@ -58,7 +58,7 @@ export function materialsFixture({ middleware, bucketOverride, convert, saveQuiz
     getMetadata: async () => [files.get(path)],
   }), getFiles: async ({ prefix }) => [[...files.keys()].filter(path => path.startsWith(prefix)).map(path => bucket.file(path)), null] };
   const service = createLearningMaterialsService({ db, bucket: () => bucketOverride || bucket, timestamp: () => { state.timestamps++; return new Date('2026-11-10T00:00:00Z'); } });
-  const course = createCourseActivitiesService({ db, bucket: () => bucketOverride || bucket, timestamp: () => new Date('2026-11-12T00:00:00Z'), materials: service, convert, saveQuizResult });
+  const course = createCourseActivitiesService({ db, bucket: () => bucketOverride || bucket, timestamp: () => new Date('2026-11-12T00:00:00Z'), materials: service, convert, saveQuizResult, saveMissionResult });
   const app = express(); app.use(express.json()); if (middleware) app.use(middleware); app.use('/learning-materials', createLearningMaterialsRouter({ service, course, authenticate: createMaterialsAccess({ db }) }));
   return { app, service, course, db, bucket, records, files, events, state };
 }

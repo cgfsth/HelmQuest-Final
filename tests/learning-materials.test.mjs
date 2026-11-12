@@ -85,7 +85,7 @@ test('new Vue screens compile and all three portals mount the scoped shared libr
   }
   const app = readFileSync(new URL('../src/App.vue',import.meta.url),'utf8');
   const admin = readFileSync(new URL('../src/components/admin/AdminDashboard.vue',import.meta.url),'utf8');
-  assert.match(app,/<BookOpen[^>]+aria-hidden="true" \/> Learning Materials/);
+  assert.match(app,/<BookOpen[^>]+aria-hidden="true" \/> Syllabus &amp; Lessons/);
   assert.match(app,/<LearningMaterials[^>]+instructorTab === 'materials'[^>]+role="instructor"/);
   assert.match(app,/<LearningMaterials[^>]+hubTab === 'materials' && !isStudentPending[^>]+role="student"/);
   assert.match(admin,/<LearningMaterials[^>]+role="admin"/);

@@ -15,9 +15,9 @@ const panelStart = source.indexOf('<div v-show="trainingRecordsTab === \'quizzes
 const panelEnd = source.indexOf('\n              </div>', panelStart);
 const { code } = compile(source.slice(panelStart, panelEnd), { mode: 'function', prefixIdentifiers: true });
 const render = new Function('Vue', code)(Vue);
-const cardStart = source.indexOf('<article\n            v-for="module in trainingModules.filter');
-const cardEnd = source.indexOf('</article>', cardStart) + '</article>'.length;
-const cardRender = new Function('Vue', compile(source.slice(cardStart, cardEnd), { mode: 'function', prefixIdentifiers: true }).code)(Vue);
+const missionPanelStart = source.indexOf('<div v-show="trainingRecordsTab === \'missions\'"');
+const missionPanelEnd = source.indexOf('<!-- Quiz Results Tab -->', missionPanelStart);
+const missionRender = new Function('Vue', compile(source.slice(missionPanelStart, missionPanelEnd), { mode: 'function', prefixIdentifiers: true }).code)(Vue);
 const mission = { id: 'CUSTOM-custom-mission-1', moduleId: 'custom-mission-1', title: 'Saved mission', passScore: 50 };
 const module = { id: mission.moduleId, title: mission.title, difficulty: 'Beginner', steps: [], xpReward: 100 };
 
@@ -33,18 +33,9 @@ function page(api) {
     ${source.slice(fetchStart, fetchEnd)}
     return { firestoreMissionScores, firestoreQuizSubmissions, loadingTrainingRecords,
       missionRecordsError, quizRecordsError, trainingRecordsTab, fetchStudentTrainingRecords };`)(...Object.values(dependencies)));
-  const cardBindings = new Function(...Object.keys(dependencies), `
-    ${source.slice(source.indexOf('function getMissionResult(mission)'), source.indexOf('/**\n * Build a synthetic mission record'))}
-    ${source.slice(source.indexOf('function getModuleMissionProgress(moduleId)'), source.indexOf('async function startMissionSimulation(mission)'))}
-    return { getMissionResult, missionCardClass, missionActionLabel, getModuleMissionProgress, isModuleFullyComplete };
-  `)(...Object.values(dependencies));
   return { ...dependencies, ...bindings, scope,
-    cardHtml: () => renderToString(Vue.createSSRApp({ render: cardRender, setup: () => ({
-      ...dependencies, ...cardBindings,
-      isModuleLockedForStudent: () => false, displayModuleLevel: () => 'Training module',
-      trainingDifficultyClass: () => '', moduleLockMessage: () => '', getModuleSchedule: () => ({}),
-      startMissionSimulation() {}
-    }) })),
+    recordsHtml: () => renderToString(Vue.createSSRApp({ render: missionRender, setup: () => ({ ...bindings,
+      formatCertificateDate: value => value || '', getScoreClass: value => value >= 80 ? 'score-excellent' : 'score-poor' }) })),
     html: () => renderToString(Vue.createSSRApp({ render, setup: () => ({ ...bindings,
       formatCertificateDate: value => value || '', getScoreClass: value => value >= 80 ? 'score-excellent' : 'score-poor' }) })) };
 }
@@ -139,23 +130,21 @@ test('reopening Training Records requests fresh results', () => {
   assert.equal(requests, 3);
 });
 
-test('a fresh browser displays a database pass on the actual mission card before Start is clicked', async () => {
+test('a fresh browser retains the saved mission result in Training Records after mission navigation is removed', async () => {
   const saved = { studentId: 'student', missionId: mission.id, score: 80, passed: true, completedAt: '2026-10-05T04:55:20Z' };
   const view = page({ getMissionScores: async () => ({ scores: [saved] }), getQuizScores: async () => ({ scores: [] }) });
   try {
     assert.equal(view.progressData.value.sessions.length, 0);
     await view.fetchStudentTrainingRecords();
-    const html = await view.cardHtml();
-    assert.match(html, /Mission passed/);
-    assert.match(html, /80% PASS/);
-    assert.match(html, /Practice review/);
-    assert.match(html, /training-card--completed/);
+    const html = await view.recordsHtml();
+    assert.match(html, /80%/);
+    assert.match(html, /2026-10-05T04:55:20Z/);
     assert.doesNotMatch(html, />\s*Start/);
     assert.deepEqual(view.progressData.value.completedModules.student, [module.id]);
   } finally { view.scope.stop(); }
 });
 
-test('the actual card shows the latest saved failure as Retry, replacing stale local completion', async () => {
+test('saved failures remain visible in Results and replace stale browser completion', async () => {
   const scores = [
     { missionId: module.id, score: 20, passed: false, completedAt: '2026-10-05T02:00:00Z' },
     { missionId: mission.id, score: 40, passed: false, completedAt: '2026-10-05T03:00:00Z' }
@@ -164,9 +153,9 @@ test('the actual card shows the latest saved failure as Retry, replacing stale l
   try {
     view.progressData.value.sessions = [{ studentId: 'student', missionId: mission.id, score: 100, passed: true }];
     await view.fetchStudentTrainingRecords();
-    const html = await view.cardHtml();
-    assert.match(html, /40% FAIL/);
-    assert.match(html, /Retry/);
+    const html = await view.recordsHtml();
+    assert.match(html, /40%/);
+    assert.equal(getLatestMissionResult('student', mission.id, view.progressData.value).score, 40);
     assert.doesNotMatch(html, /Mission passed|Practice review/);
     assert.equal(view.progressData.value.sessions.length, 1);
     assert.deepEqual(view.progressData.value.completedModules.student, []);
@@ -191,7 +180,7 @@ test('repeated refresh keeps the earned pass across aliases and does not change 
     assert.equal(view.progressData.value.sessions.length, 2);
     assert.equal(view.progressData.value.studentProfiles.student.xp, 110);
     assert.deepEqual(view.progressData.value.completedModules.other, ['other-module']);
-    assert.match(await view.cardHtml(), /80% PASS/);
+    assert.match(await view.recordsHtml(), /80%/);
   } finally { view.scope.stop(); }
 });
 
@@ -204,11 +193,11 @@ test('a failed mission fetch keeps existing progress and shows an error; an auth
   try {
     view.progressData.value.sessions = [{ studentId: 'student', missionId: mission.id, score: 80, passed: true }];
     await view.fetchStudentTrainingRecords();
-    assert.match(await view.cardHtml(), /Practice review/);
+    assert.equal(getLatestMissionResult('student', mission.id, view.progressData.value).passed, true);
     assert.match(view.missionRecordsError.value, /Unable to load/);
     offline = false;
     await view.fetchStudentTrainingRecords();
-    assert.match(await view.cardHtml(), />\s*Start/);
+    assert.match(await view.recordsHtml(), /No completed missions yet/);
     assert.equal(view.progressData.value.sessions.length, 0);
   } finally { view.scope.stop(); }
 });

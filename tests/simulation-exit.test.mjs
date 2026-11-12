@@ -18,6 +18,7 @@ function simulation({ review = false, quickSail = false } = {}) {
     authForm: { value: { email: 'student@example.test', password: '', remember: true } },
     activeScreen: { value: 'simulation' }, simulationRunning: { value: true },
     simulationNeedsLandscape: { value: false },
+    activeCoursePractical: { value: null }, courseCompletionFlow: null, courseCompletionState: { value: 'IN_PROGRESS' }, courseCompletionError: { value: '' }, courseCompletionPaused: { value: false },
     tutorialVisible: { value: false },
     isQuickSailMode: { value: quickSail },
     exitConfirmVisible: { value: false }, exitFinalConfirmVisible: { value: false },
@@ -43,7 +44,7 @@ function simulation({ review = false, quickSail = false } = {}) {
     document: { getElementById() { return null; } },
   };
   vm.createContext(context);
-  for (const name of ['showExitConfirm', 'confirmExit', 'cancelExitConfirm', 'confirmFinalExit', 'cancelFinalExit', 'exitTraining', 'goToScreen', 'setupInputs']) {
+  for (const name of ['showExitConfirm', 'confirmExit', 'cancelExitConfirm', 'confirmFinalExit', 'cancelFinalExit', 'resetCourseCompletion', 'exitTraining', 'goToScreen', 'setupInputs']) {
     vm.runInContext(appFunction(name), context);
   }
   context.setupInputs();

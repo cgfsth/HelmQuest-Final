@@ -22,6 +22,7 @@
         <div v-else class="quiz-content" :aria-busy="isSubmitting">
           <!-- Quiz Header -->
           <div class="quiz-header">
+            <p v-if="errorMessage" class="submission-error" role="alert">{{ errorMessage }}</p>
             <h3 class="quiz-title">{{ quiz?.title || 'Quiz' }}</h3>
             <p class="quiz-description">{{ quiz?.description || 'Complete the following questions.' }}</p>
           </div>
@@ -157,6 +158,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
  * Component Props
  */
 const props = defineProps({
+  errorMessage: { type: String, default: '' },
   quiz: {
     type: Object,
     required: true,

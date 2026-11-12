@@ -105,7 +105,7 @@ export async function saveMissionResult(input) {
   });
 }
 
-export async function saveQuizResult(input) {
+export async function saveQuizResult(input, { allowAfterSimulation = false } = {}) {
   return db.runTransaction(async transaction => {
     // Quiz IDs are stable even when the module/context supplied by a client changes.
     const keys = input.quizId ? { studentId: input.studentId, quizId: input.quizId }
@@ -116,13 +116,13 @@ export async function saveQuizResult(input) {
     if (existing) {
       return { ...response, data: existing.data(), skipped: true, reason: 'quiz_already_completed' };
     }
-    if (input.missionId) {
+    if (input.missionId && !allowAfterSimulation) {
       const mission = await missionResult(transaction, input.studentId, input.missionId);
       if (missionIsLocked(mission.existing)) {
         return { ...response, scoreId: existing?.id ?? null, data: existing?.data() ?? null,
           skipped: true, reason: 'mission_already_passed' };
       }
-    } else if (input.moduleId) {
+    } else if (input.moduleId && !allowAfterSimulation) {
       // Old clients sent moduleId only. Resolve every matching mission, without
       // assuming the moduleId is itself the persisted mission ID.
       const missions = await transaction.get(db.collection('missions').where('moduleId', '==', input.moduleId));

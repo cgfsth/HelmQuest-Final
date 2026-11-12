@@ -366,49 +366,20 @@ function calculateTimeEfficiency(telemetry) {
  * @param {Object} telemetry - Must contain safety violation data
  * @returns {number} Score between 0-100
  */
-function calculateSafetyCompliance(telemetry) {
-  const { safety = {}, procedure = {} } = telemetry;
-  const { 
-    violations = [],           // Array of violation objects
-    collisions = [],           // Legacy collision array
-    unsafeActions = 0          // Legacy unsafe action count
-  } = safety;
-  
+export function calculateSafetyCompliance(telemetry) {
+  // Restore the documented existing collision penalties from
+  // SAFETY_COMPLIANCE_INTEGRATION_COMPLETE.md; no new overall weight is added.
+  const penalties = { BUOY_COLLISION: 10, PORT_COLLISION: 15, SHORE_COLLISION: 15 };
+  const safety = telemetry.safety || {};
+  if (telemetry.procedure?.safetyConcerns > 0) return null;
+  // recordCollision writes both arrays. Prefer structured violations so one
+  // collision is never charged twice. Unknown policies remain unscored.
+  const events = safety.violations?.length ? safety.violations : (safety.collisions || []).map(event => ({ ...event, type: String(event.type || '').toUpperCase().replace(/_COLLISION$/, '') + '_COLLISION' }));
+  // recordSafetyViolation also increments unsafeActions for the same event.
+  // Only an unexplained additional action lacks an existing penalty policy.
+  if ((safety.unsafeActions || 0) > events.length) return null;
   let score = 100;
-  
-  // Process structured violations array
-  if (Array.isArray(violations)) {
-    violations.forEach(violation => {
-      const penalty = SAFETY_PENALTIES[violation.type] || SAFETY_PENALTIES.GENERAL_VIOLATION;
-      score -= penalty;
-    });
-  }
-  
-  // Process legacy collision data
-  if (Array.isArray(collisions)) {
-    collisions.forEach(collision => {
-      let penaltyType = 'GENERAL_VIOLATION';
-      if (collision.type) {
-        const typeUpper = collision.type.toUpperCase();
-        if (typeUpper.includes('BUOY')) penaltyType = 'BUOY_COLLISION';
-        else if (typeUpper.includes('PORT') || typeUpper.includes('DOCK')) penaltyType = 'PORT_COLLISION';
-        else if (typeUpper.includes('SHORE') || typeUpper.includes('LAND')) penaltyType = 'SHORE_COLLISION';
-      }
-      const penalty = SAFETY_PENALTIES[penaltyType];
-      score -= penalty;
-    });
-  }
-  
-  // Process legacy unsafe action count
-  if (unsafeActions > 0) {
-    score -= unsafeActions * SAFETY_PENALTIES.GENERAL_VIOLATION;
-  }
-  
-  // Also check procedure violations (legacy compatibility)
-  if (procedure.safetyConcerns) {
-    score -= procedure.safetyConcerns * SAFETY_PENALTIES.GENERAL_VIOLATION;
-  }
-  
+  for (const event of events) { if (!(event.type in penalties)) return null; score -= penalties[event.type]; }
   return clampScore(score);
 }
 

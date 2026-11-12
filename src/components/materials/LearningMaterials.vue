@@ -42,7 +42,7 @@
         </div>
         <div v-else-if="!selected" class="lm-empty"><BookOpen :size="36" /><h3>{{ search || filter ? 'No matching syllabi' : 'No syllabi yet' }}</h3><p>{{ manager ? 'Create a syllabus and upload its PDF to start your course library.' : 'Your instructor’s uploaded course materials will appear here.' }}</p></div>
         <p v-else-if="preview && selected.published === false" class="lm-empty">This course is unpublished. Students will see it after you publish it.</p>
-        <CourseOutline v-else :syllabus="selected" :modules="modules" :activities="activities" :progress="preview ? {} : courseProgress" :manager="manager && !preview" :preview="preview" :busy="busy" @open="openActivity" @edit-section="edit" @remove-section="confirmDelete" @add-activity="addActivity" @edit-activity="item => edit('activity', item)" @remove-activity="item => confirmDelete('activity', item)" @move-activity="moveActivity" @move-module="move" />
+        <CourseOutline v-else :syllabus="selected" :official="official" :focused-lesson-id="lessonId" :modules="modules" :activities="activities" :progress="preview ? {} : courseProgress" :manager="manager && !preview" :preview="preview" :busy="busy" @select-lesson="selectLesson" @open="openActivity" @edit-section="edit" @remove-section="confirmDelete" @add-activity="addActivity" @edit-activity="item => edit('activity', item)" @remove-activity="item => confirmDelete('activity', item)" @move-activity="moveActivity" @move-module="move" />
       </template>
     </template>
     <Teleport to="body">
@@ -51,17 +51,20 @@
           <template v-if="editor">
             <div class="lm-toolbar"><h2 id="lm-dialog-title">{{ editor.id ? 'Edit' : 'Create' }} {{ editor.kind === 'activity' ? 'learning activity' : editor.kind === 'module' ? 'module' : 'syllabus' }}</h2><button type="button" aria-label="Close dialog" :disabled="busy" @click="closeModal"><X :size="20" /></button></div>
             <form class="lm-form" @submit.prevent="save">
-              <label>Title<input v-model="form.title" required maxlength="180" :disabled="busy" autofocus /></label>
+              <label v-if="editor.kind === 'syllabus'">Course structure<select v-model="form.officialSyllabusKey" data-field="course-structure" :disabled="busy || !!editor.id" @change="setCourseTemplate"><option :value="OFFICIAL_SYLLABUS_KEY">Official FISH ELECT 6 · First Semester 2026–2027</option><option value="">Existing custom course</option></select></label>
+              <p v-if="form.officialSyllabusKey || editor.officialSectionId" class="lm-alert">Official academic titles, outcomes and week schedule are preserved. Edit instructor notes and uploaded resources separately.</p>
+              <label>Title<input v-model="form.title" required maxlength="180" :disabled="busy" :readonly="!!form.officialSyllabusKey || !!editor.officialSectionId" autofocus /></label>
               <label>Description<textarea v-model="form.description" rows="3" maxlength="2500" :disabled="busy" /></label>
-              <label v-if="editor.kind === 'activity'">Activity type<select v-model="form.type" :disabled="busy || !!editor.id"><option value="pdf">PDF learning material</option><option value="presentation">PowerPoint lesson</option><option v-if="form.moduleId" value="simulation">Practical simulation</option><option v-if="form.moduleId" value="quiz">Quiz</option></select></label>
+              <label v-if="editor.kind === 'activity'">Activity type<select v-model="form.type" :disabled="busy || !!editor.id"><option value="pdf">PDF learning material</option><option value="presentation">PowerPoint lesson</option><option v-if="form.moduleId" value="simulation">Practical simulation</option><option v-if="editor.id && form.type === 'quiz'" value="quiz">Legacy quiz link (not shown to students)</option></select></label>
               <label>Learning objectives<textarea v-model="form.objectives" rows="3" maxlength="2500" :disabled="busy" placeholder="What should students learn?" /></label>
               <label v-if="editor.kind === 'syllabus'">Instructor announcement<textarea v-model="form.announcement" rows="3" maxlength="2500" :disabled="busy" /></label>
-              <label v-if="editor.kind === 'syllabus' && role === 'admin'">Assigned instructor<select v-model="form.instructorId" required :disabled="busy"><option value="" disabled>Select an instructor</option><option v-for="item in instructors" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
-              <label v-if="editor.kind === 'module'">Module number<input v-model.number="form.moduleNumber" type="number" min="1" max="999" required :disabled="busy" /></label>
+              <label v-if="editor.kind === 'syllabus' && role === 'admin'">Assigned instructor<select v-model="form.instructorId" data-field="assigned-instructor" required :disabled="busy"><option value="" disabled>Select an instructor</option><option v-for="item in instructors" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
+              <label v-if="editor.kind === 'module'">Module number<input v-model.number="form.moduleNumber" type="number" min="1" max="999" required :disabled="busy" :readonly="!!editor.officialSectionId" /></label>
               <template v-if="editor.kind === 'activity' && ['simulation', 'quiz'].includes(form.type)">
                 <label>{{ form.type === 'simulation' ? 'Assigned mission' : 'Assigned quiz' }}<select v-model="form.targetId" required :disabled="busy"><option value="" disabled>Select an existing {{ form.type === 'simulation' ? 'mission' : 'quiz' }}</option><option v-for="item in form.type === 'simulation' ? catalog.missions : catalog.quizzes" :key="item.id" :value="item.id">{{ item.title }}</option></select></label>
                 <p v-if="!(form.type === 'simulation' ? catalog.missions : catalog.quizzes).length" class="lm-alert">Create a {{ form.type === 'simulation' ? 'mission in Mission Management' : 'quiz in Quiz Management' }} first, then link it here.</p>
                 <label>Activity instructions<textarea v-model="form.instructions" rows="4" maxlength="5000" :disabled="busy" /></label>
+                <template v-if="form.type === 'simulation'"><p class="lm-alert">{{ PRACTICAL_ALIGNMENT[modules.find(m => m.id === form.moduleId)?.officialSectionId]?.guidance || 'Choose a mission whose actual objectives match this lesson.' }}</p><label>Quiz after successful docking<select v-model="form.quizPolicy" :disabled="busy"><option value="inherit">Use the mission’s assigned quiz, if published</option><option value="none">No quiz — show simulation results</option><option value="assigned">Assign a specific instructor quiz</option></select></label><label v-if="form.quizPolicy === 'assigned'">Assigned quiz<select v-model="form.quizId" required :disabled="busy"><option value="" disabled>Choose a quiz</option><option v-for="quiz in catalog.quizzes" :key="quiz.id" :value="quiz.id">{{ quiz.title }}</option></select></label></template>
                 <label>Completion requirement<select v-model="form.completionRule" :disabled="busy"><option value="complete">Complete the activity</option><option value="pass">Complete and meet the passing requirement</option></select></label>
                 <label v-if="form.completionRule === 'pass'">Passing score (%)<input v-model="form.passScore" type="number" min="0" max="100" step="0.1" placeholder="Use the mission / quiz passing result" :disabled="busy" /></label>
               </template>
@@ -88,14 +91,16 @@ import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch }
 import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, ChevronRight, Eye, FileText, FolderOpen, Pencil, Plus, RefreshCw, Search, Trash2, Upload, X } from '@lucide/vue';
 import * as api from '../../api/firebaseApi.js';
 import CourseOutline from './CourseOutline.vue';
+import { OFFICIAL_SYLLABUS, OFFICIAL_SYLLABUS_KEY, PRACTICAL_ALIGNMENT } from '../../../shared/officialSyllabus.js';
 import './materials.css';
 import './course.css';
 const PdfDocumentViewer = defineAsyncComponent(() => import('./PdfDocumentViewer.vue'));
-const props = defineProps({ currentUser: { type: Object, required: true }, role: { type: String, required: true }, initialCourseId: { type: String, default: '' }, prepareAccess: { type: Function, default: async () => {} } });
+const props = defineProps({ currentUser: { type: Object, required: true }, role: { type: String, required: true }, initialCourseId: { type: String, default: '' }, initialLessonId: { type: String, default: '' }, prepareAccess: { type: Function, default: async () => {} } });
 const emit = defineEmits(['navigate-course', 'launch-simulation', 'launch-quiz']);
 const manager = computed(() => ['instructor', 'admin'].includes(props.role));
 const syllabi = ref([]), modules = ref([]), instructors = ref([]), selected = ref(null), document = ref(null);
 const activities = ref([]), courseProgress = ref({}), catalog = ref({ missions: [], quizzes: [] }), preview = ref(false), activityDetail = ref(null);
+const official = ref(null), lessonId = ref(props.initialLessonId || '');
 const loading = ref(false), busy = ref(false), ready = ref(false), error = ref(''), notice = ref(''), cleanupPending = ref(false);
 const search = ref(''), filter = ref(''), editor = ref(null), removal = ref(null), modal = ref(null), modalError = ref('');
 const form = ref({}), file = ref(null), progress = ref(0);
@@ -116,7 +121,7 @@ async function load(id = null) {
     }
     const result = id ? await api.getLearningCourse(id, { signal }) : await api.listLearningSyllabi({ signal });
     if (ticket !== generation || signal.aborted) return;
-    if (id) { selected.value = result.syllabus; modules.value = result.modules; activities.value = result.activities; courseProgress.value = result.progress; catalog.value = result.catalog || { missions: [], quizzes: [] }; emit('navigate-course', id); }
+    if (id) { selected.value = result.syllabus; modules.value = result.modules; activities.value = result.activities; courseProgress.value = result.progress; official.value = result.official || null; catalog.value = result.catalog || { missions: [], quizzes: [] }; if (!result.modules.some(m => m.id === lessonId.value)) lessonId.value = ''; emit('navigate-course', { syllabusId: id, lessonId: lessonId.value }); }
     else { selected.value = null; syllabi.value = result.syllabi; }
     cleanupPending.value = !!result.cleanupPending || !!result.syllabus?.cleanupPending;
     ready.value = true;
@@ -125,9 +130,11 @@ async function load(id = null) {
 }
 const open = id => load(id);
 const refresh = () => load(selected.value?.id);
-function back() { selected.value = null; modules.value = []; activities.value = []; preview.value = false; notice.value = ''; emit('navigate-course', ''); load(); }
+function back() { selected.value = null; lessonId.value = ''; modules.value = []; activities.value = []; preview.value = false; notice.value = ''; emit('navigate-course', { syllabusId: '', lessonId: '' }); load(); }
+function selectLesson(id) { lessonId.value = id; emit('navigate-course', { syllabusId: selected.value.id, lessonId: id }); }
 function openActivity(item) {
   error.value = '';
+  if (item.moduleId) selectLesson(item.moduleId);
   if (['simulation', 'quiz'].includes(item.type)) { activityDetail.value = item; return; }
   document.value = { kind: item.legacy ? item.kind : 'activity', id: item.documentId || item.id, title: item.title, objectives: item.objectives || '', presentation: item.type === 'presentation', revision: item.revision, documentVersion: item.documentVersion };
 }
@@ -147,7 +154,7 @@ async function startActivity() {
     const result = await api.launchLearningActivity(item.id, { signal: operation.signal });
     if (ticket !== identity || operation.signal.aborted) return;
     const fail = err => { if (ticket === identity) { error.value = err?.message || 'This activity could not be opened.'; busy.value = false; } };
-    emit(result.type === 'simulation' ? 'launch-simulation' : 'launch-quiz', { target: result.target, activityId: item.id, fail });
+    emit(result.type === 'simulation' ? 'launch-simulation' : 'launch-quiz', { target: result.target, simulationResult: result.simulationResult, activityId: item.id, syllabusId: selected.value.id, lessonId: item.moduleId, fail });
   } catch (err) { if (ticket === identity && !operation.signal.aborted) error.value = err.message; }
   finally { if (ticket === identity && mutation === operation) busy.value = false; }
 }
@@ -157,11 +164,14 @@ function edit(kind, item = {}) {
   editor.value = { ...item, kind }; modalError.value = ''; file.value = null; progress.value = 0;
   const localDate = value => { if (!value) return ''; const d = new Date(value); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
   form.value = { title: item.title || '', description: item.description || '', instructorId: item.instructorId || (props.role === 'instructor' ? props.currentUser.id : ''), moduleNumber: item.moduleNumber || Math.max(0, ...modules.value.map(module => module.moduleNumber)) + 1, revision: item.revision,
+    ...(kind === 'syllabus' ? { officialSyllabusKey: item.id ? item.officialSyllabusKey || '' : OFFICIAL_SYLLABUS_KEY } : {}),
     objectives: item.objectives || '', announcement: item.announcement || '', published: item.id ? item.published !== false : kind !== 'activity',
-    ...(kind === 'activity' ? { moduleId: item.moduleId || '', type: item.type || 'pdf', targetId: item.targetId || '', instructions: item.instructions || '', completionRule: item.completionRule || 'pass', passScore: item.passScore ?? '', availableFrom: localDate(item.availableFrom), availableUntil: localDate(item.availableUntil) } : {}) };
+    ...(kind === 'activity' ? { moduleId: item.moduleId || '', type: item.type || 'pdf', targetId: item.targetId || '', instructions: item.instructions || '', completionRule: item.completionRule || 'pass', passScore: item.passScore ?? '', quizPolicy: item.quizPolicy || 'inherit', quizId: item.quizId || '', availableFrom: localDate(item.availableFrom), availableUntil: localDate(item.availableUntil) } : {}) };
+  if (kind === 'syllabus' && !item.id) setCourseTemplate();
   beginModal();
 }
 function addActivity(moduleId) { edit('activity', { moduleId }); }
+function setCourseTemplate() { if (editor.value?.id) return; form.value.title = form.value.officialSyllabusKey ? OFFICIAL_SYLLABUS.title : ''; }
 function confirmDelete(kind, item) { if (!manager.value) return; removal.value = { ...item, kind }; modalError.value = ''; beginModal(); }
 function closeModal(force = false) {
   if (busy.value && force !== true) return;
@@ -201,7 +211,7 @@ async function save() {
 }
 async function moveActivity(item, delta) {
   if (busy.value || !manager.value) return;
-  const phase = type => type === 'simulation' ? 1 : type === 'quiz' ? 2 : 0;
+  const phase = type => type === 'presentation' ? 0 : type === 'pdf' ? 1 : type === 'simulation' ? 2 : 3;
   const group = activities.value.filter(a => a.moduleId === item.moduleId).sort((a, b) => phase(a.type) - phase(b.type) || a.order - b.order);
   const index = group.findIndex(a => a.id === item.id), other = index + delta;
   if (other < 0 || other >= group.length) return;
@@ -240,7 +250,7 @@ async function retryCleanup() {
   finally { if (mutation === operation && ticket === identity) busy.value = false; }
 }
 watch(() => [props.currentUser.id, props.role], () => {
-  identity++; generation++; controller?.abort(); mutation?.abort(); closeModal(true); document.value = null; activityDetail.value = null; selected.value = null; syllabi.value = []; modules.value = []; activities.value = []; courseProgress.value = {}; preview.value = false; instructors.value = []; ready.value = false; busy.value = false; notice.value = ''; load(props.initialCourseId || null);
+  identity++; generation++; controller?.abort(); mutation?.abort(); closeModal(true); document.value = null; activityDetail.value = null; selected.value = null; lessonId.value = props.initialLessonId || ''; syllabi.value = []; modules.value = []; activities.value = []; courseProgress.value = {}; preview.value = false; instructors.value = []; ready.value = false; busy.value = false; notice.value = ''; load(props.initialCourseId || null);
 }, { immediate: true });
 onBeforeUnmount(() => { identity++; generation++; controller?.abort(); mutation?.abort(); if (previousOverflow !== undefined) window.document.body.style.overflow = previousOverflow; });
 </script>

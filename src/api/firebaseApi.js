@@ -66,6 +66,9 @@ export const getLearningCourse = (id, options = {}) => apiFetch(`${materialsPath
 export const recordLearningActivity = (id, fields = {}, options = {}) => apiFetch(`${materialsPath}/activities/${materialId(id)}/progress`, { method: 'POST', body: JSON.stringify(fields), timeoutMs: 20000, ...options });
 export const launchLearningActivity = (id, options = {}) => apiFetch(`${materialsPath}/activities/${materialId(id)}/launch`, { method: 'POST', body: '{}', timeoutMs: 30000, ...options });
 export const submitLearningQuiz = (id, answers, options = {}) => apiFetch(`${materialsPath}/activities/${materialId(id)}/submit-quiz`, { method: 'POST', body: JSON.stringify({ answers }), timeoutMs: 30000, ...options });
+export const completeLearningSimulation = (id, fields, options = {}) => apiFetch(`${materialsPath}/activities/${materialId(id)}/complete-simulation`, { method: 'POST', body: JSON.stringify(fields), timeoutMs: 30000, ...options });
+export const getLearningMissionQuiz = (id, options = {}) => apiFetch(`${materialsPath}/activities/${materialId(id)}/mission-quiz`, { timeoutMs: 30000, ...options });
+export const submitLearningMissionQuiz = (id, fields, options = {}) => apiFetch(`${materialsPath}/activities/${materialId(id)}/mission-quiz`, { method: 'POST', body: JSON.stringify(fields), timeoutMs: 30000, ...options });
 export const reorderLearningActivities = (id, fields, options = {}) => apiFetch(`${materialsPath}/syllabi/${materialId(id)}/activity-order`, { method: 'POST', body: JSON.stringify(fields), timeoutMs: 30000, ...options });
 const materialEndpoint = kind => kind === 'activity' ? 'activities' : kind === 'module' ? 'modules' : 'syllabi';
 export const getMaterialsInstructors = (options = {}) => apiFetch(`${materialsPath}/instructors`, { timeoutMs: 30000, ...options });

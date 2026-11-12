@@ -4,11 +4,15 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "test:courses": "node --test tests/course-interface.test.mjs",
+    "test:courses": "node --test tests/course-interface.test.mjs tests/mission-completion-flow.test.mjs",
+    "verify:syllabus": "node scripts/verify-syllabus-interface.mjs",
+    "verify:rendering": "node scripts/verify-rendering-prototype.mjs",
+    "verify:build": "node scripts/verify-built-entrypoints.mjs",
     "test:materials": "node --test tests/learning-materials.test.mjs",
     "verify:materials": "node scripts/verify-learning-materials.mjs",
     "dev": "vite",
     "build": "vite build",
+    "postbuild": "node scripts/verify-built-entrypoints.mjs",
     "preview": "vite preview",
     "optimize:models": "node scripts/optimize-models.mjs",
     "test:progression": "node --test tests/progression.test.mjs tests/progression-dashboard.test.mjs"
@@ -23,6 +27,9 @@
     "vite": "^5.2.0"
   },
   "dependencies": {
+    "@babylonjs/core": "^9.36.0",
+    "@babylonjs/loaders": "^9.36.0",
+    "@babylonjs/materials": "^9.36.0",
     "@lucide/vue": "^1.71.0",
     "@tweenjs/tween.js": "^23.1.2",
     "ammo.js": "^0.0.10",

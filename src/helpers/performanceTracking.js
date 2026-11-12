@@ -9,6 +9,7 @@
 
 import * as THREE from 'three';
 import { crossTrackDistance, isFinitePosition } from './navigationMetrics.js';
+import { SIMULATION_WEIGHTS } from '../../shared/simulationPerformance.js';
 
 // ============================================================================
 // CONFIGURATION - Adjustable scoring parameters
@@ -119,12 +120,7 @@ export const PERFORMANCE_CONFIG = {
   },
   
   // Overall Score Weights
-  overall: {
-    steeringWeight: 0.35,
-    courseWeight: 0.35,
-    dockingWeight: 0.20,
-    timeWeight: 0.10
-  },
+  overall: SIMULATION_WEIGHTS,
   
   // Anti-exploit Configuration
   antiExploit: {
@@ -352,9 +348,9 @@ export class PerformanceManager {
       scores: {
         steering: Math.round(this.state.steeringScore),
         course: Math.round(this.state.courseScore),
-        docking: this.state.dockingScore ? Math.round(this.state.dockingScore) : null,
-        time: this.state.timeScore ? Math.round(this.state.timeScore) : null,
-        overall: this.state.overallScore ? Math.round(this.state.overallScore) : null
+        docking: this.state.dockingScore != null ? Math.round(this.state.dockingScore) : null,
+        time: this.state.timeScore != null ? Math.round(this.state.timeScore) : null,
+        overall: this.state.overallScore != null ? Math.round(this.state.overallScore) : null
       },
       
       // Statistics
@@ -415,6 +411,7 @@ export class PerformanceManager {
   
   // Calculate final time efficiency score
   finalizeTimeScore() {
+    if (this.state.timeScore !== null && this.state.timeScore !== undefined) return;
     // This will be implemented with mission expected time data
     // For now, placeholder
     this.state.timeScore = 85;

@@ -1,0 +1,270 @@
+{
+  "measuredAt": "2026-11-12T14:37:01.754Z",
+  "results": [
+    {
+      "engine": "three",
+      "quality": "low",
+      "loadMs": 1208.8000001907349,
+      "frames": 27,
+      "fps": 1.345566358847597,
+      "p95FrameMs": 1432.7000000000007,
+      "jsHeapBytes": 30068537,
+      "assets": {
+        "vessel": {
+          "url": "/assets/optimized/SmallBoat.7f0adb947298.glb",
+          "loadMs": 282.59999990463257,
+          "meshes": 1,
+          "materials": 1,
+          "animationGroups": 0,
+          "bounds": {
+            "x": 18,
+            "y": 6.780419835250001,
+            "z": 11.688711499726374
+          }
+        },
+        "harbor": {
+          "url": "/assets/optimized/seaside_wharf.d85a552bdcca.glb",
+          "loadMs": 307.80000019073486,
+          "meshes": 1,
+          "materials": 1,
+          "animationGroups": 0,
+          "bounds": {
+            "x": 154.76058229316084,
+            "y": 59.38657795953246,
+            "z": 320
+          }
+        }
+      },
+      "viewport": {
+        "width": 1280,
+        "height": 900,
+        "dpr": 1
+      },
+      "rendererScope": "Equivalent-asset prototype comparison; not a production feature-parity benchmark.",
+      "inputAndAnchorChecks": true,
+      "camerasAndNightChecks": true,
+      "graphicsBackend": "Hidden Edge with SwiftShader software WebGL; mobile is an emulated viewport."
+    },
+    {
+      "engine": "three",
+      "quality": "low",
+      "loadMs": 402.90000009536743,
+      "frames": 31,
+      "fps": 4.164763414568611,
+      "p95FrameMs": 448.40000000000055,
+      "jsHeapBytes": 43095071,
+      "assets": {
+        "vessel": {
+          "url": "/assets/optimized/SmallBoat.7f0adb947298.glb",
+          "loadMs": 289.89999985694885,
+          "meshes": 1,
+          "materials": 1,
+          "animationGroups": 0,
+          "bounds": {
+            "x": 18,
+            "y": 6.780419835250001,
+            "z": 11.688711499726374
+          }
+        },
+        "harbor": {
+          "url": "/assets/optimized/seaside_wharf.d85a552bdcca.glb",
+          "loadMs": 336.39999985694885,
+          "meshes": 1,
+          "materials": 1,
+          "animationGroups": 0,
+          "bounds": {
+            "x": 154.76058229316084,
+            "y": 59.38657795953246,
+            "z": 320
+          }
+        }
+      },
+      "viewport": {
+        "width": 375,
+        "height": 812,
+        "dpr": 1
+      },
+      "rendererScope": "Equivalent-asset prototype comparison; not a production feature-parity benchmark.",
+      "inputAndAnchorChecks": true,
+      "camerasAndNightChecks": true,
+      "graphicsBackend": "Hidden Edge with SwiftShader software WebGL; mobile is an emulated viewport."
+    },
+    {
+      "engine": "three",
+      "quality": "high",
+      "loadMs": 688.8000001907349,
+      "frames": 28,
+      "fps": 1.0463505646593454,
+      "p95FrameMs": 1999,
+      "jsHeapBytes": 56472467,
+      "assets": {
+        "vessel": {
+          "url": "/assets/optimized/SmallBoat.7f0adb947298.glb",
+          "loadMs": 235.09999990463257,
+          "meshes": 1,
+          "materials": 1,
+          "animationGroups": 0,
+          "bounds": {
+            "x": 18,
+            "y": 6.780419835250001,
+            "z": 11.688711499726374
+          }
+        },
+        "harbor": {
+          "url": "/assets/optimized/seaside_wharf.d85a552bdcca.glb",
+          "loadMs": 252.60000014305115,
+          "meshes": 1,
+          "materials": 1,
+          "animationGroups": 0,
+          "bounds": {
+            "x": 154.76058229316084,
+            "y": 59.38657795953246,
+            "z": 320
+          }
+        }
+      },
+      "viewport": {
+        "width": 1280,
+        "height": 900,
+        "dpr": 1
+      },
+      "rendererScope": "Equivalent-asset prototype comparison; not a production feature-parity benchmark.",
+      "inputAndAnchorChecks": true,
+      "camerasAndNightChecks": true,
+      "graphicsBackend": "Hidden Edge with SwiftShader software WebGL; mobile is an emulated viewport."
+    },
+    {
+      "engine": "babylon",
+      "quality": "low",
+      "loadMs": 3670.899999856949,
+      "frames": 26,
+      "fps": 0.9389227840013913,
+      "p95FrameMs": 1798.3999999999978,
+      "jsHeapBytes": 109489232,
+      "assets": {
+        "vessel": {
+          "url": "/assets/optimized/SmallBoat.7f0adb947298.glb",
+          "loadMs": 780.7999999523163,
+          "meshes": 1,
+          "materials": 1,
+          "animationGroups": 0,
+          "bounds": {
+            "x": 18,
+            "y": 6.78041983525004,
+            "z": 11.688711499726395
+          }
+        },
+        "harbor": {
+          "url": "/assets/optimized/seaside_wharf.d85a552bdcca.glb",
+          "loadMs": 824,
+          "meshes": 1,
+          "materials": 1,
+          "animationGroups": 0,
+          "bounds": {
+            "x": 154.76058229316084,
+            "y": 59.38657795953246,
+            "z": 320
+          }
+        }
+      },
+      "viewport": {
+        "width": 1280,
+        "height": 900,
+        "dpr": 1
+      },
+      "rendererScope": "Equivalent-asset prototype comparison; not a production feature-parity benchmark.",
+      "inputAndAnchorChecks": true,
+      "camerasAndNightChecks": true,
+      "graphicsBackend": "Hidden Edge with SwiftShader software WebGL; mobile is an emulated viewport."
+    },
+    {
+      "engine": "babylon",
+      "quality": "low",
+      "loadMs": 1287,
+      "frames": 28,
+      "fps": 2.7298893439354437,
+      "p95FrameMs": 399.7000000000007,
+      "jsHeapBytes": 147437623,
+      "assets": {
+        "vessel": {
+          "url": "/assets/optimized/SmallBoat.7f0adb947298.glb",
+          "loadMs": 410.7000000476837,
+          "meshes": 1,
+          "materials": 1,
+          "animationGroups": 0,
+          "bounds": {
+            "x": 18,
+            "y": 6.78041983525004,
+            "z": 11.688711499726395
+          }
+        },
+        "harbor": {
+          "url": "/assets/optimized/seaside_wharf.d85a552bdcca.glb",
+          "loadMs": 860.7999999523163,
+          "meshes": 1,
+          "materials": 1,
+          "animationGroups": 0,
+          "bounds": {
+            "x": 154.76058229316084,
+            "y": 59.38657795953246,
+            "z": 320
+          }
+        }
+      },
+      "viewport": {
+        "width": 375,
+        "height": 812,
+        "dpr": 1
+      },
+      "rendererScope": "Equivalent-asset prototype comparison; not a production feature-parity benchmark.",
+      "inputAndAnchorChecks": true,
+      "camerasAndNightChecks": true,
+      "graphicsBackend": "Hidden Edge with SwiftShader software WebGL; mobile is an emulated viewport."
+    },
+    {
+      "engine": "babylon",
+      "quality": "high",
+      "loadMs": 1745.9000000953674,
+      "frames": 26,
+      "fps": 0.6951976866815684,
+      "p95FrameMs": 2081.8999999999996,
+      "jsHeapBytes": 113862218,
+      "assets": {
+        "vessel": {
+          "url": "/assets/optimized/SmallBoat.7f0adb947298.glb",
+          "loadMs": 863.5,
+          "meshes": 1,
+          "materials": 1,
+          "animationGroups": 0,
+          "bounds": {
+            "x": 18,
+            "y": 6.78041983525004,
+            "z": 11.688711499726395
+          }
+        },
+        "harbor": {
+          "url": "/assets/optimized/seaside_wharf.d85a552bdcca.glb",
+          "loadMs": 996.8999998569489,
+          "meshes": 1,
+          "materials": 1,
+          "animationGroups": 0,
+          "bounds": {
+            "x": 154.76058229316084,
+            "y": 59.38657795953246,
+            "z": 320
+          }
+        }
+      },
+      "viewport": {
+        "width": 1280,
+        "height": 900,
+        "dpr": 1
+      },
+      "rendererScope": "Equivalent-asset prototype comparison; not a production feature-parity benchmark.",
+      "inputAndAnchorChecks": true,
+      "camerasAndNightChecks": true,
+      "graphicsBackend": "Hidden Edge with SwiftShader software WebGL; mobile is an emulated viewport."
+    }
+  ],
+  "productionMigration": "Not promoted: the prototype is an asset/renderer comparison, not full gameplay parity or real-mobile hardware validation."
+}

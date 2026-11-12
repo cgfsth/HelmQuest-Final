@@ -71,6 +71,7 @@ const { default: missionScoresRoutes } = await import('../routes/mission_scores.
 const { default: quizScoresRoutes } = await import('../routes/quiz_scores.js');
 const { default: quizzesRoutes } = await import('../routes/quizzes.js');
 const { reconcileStudentMissionXp } = await import('../services/reconcileMissionXp.js');
+const { saveQuizResult } = await import('../services/scorePersistence.js');
 const app = express();
 app.use(express.json());
 app.use('/students', studentsRoutes);
@@ -93,6 +94,18 @@ const quizPayload = (score = 50, completedAt = '2026-10-06T00:00:00Z') => ({
   studentId: 'student', missionId: 'mission', moduleId: 'module', quizId: 'quiz',
   'Quiz-score-percentage': score, 'raw-score': score / 10, totalQuestions: 10,
   passed: score >= 70, completedAt
+});
+
+test('trusted post-docking quiz persistence works after the saved simulation pass without changing rewards', async () => {
+  await request(app).post('/mission-scores').send(missionPayload(90, true)).expect(201);
+  const before = bucket('students').get('student').xp;
+  const ordinary = await saveQuizResult(quizPayload(80));
+  expect(ordinary.skipped).toBe(true);
+  const integrated = await saveQuizResult(quizPayload(80), { allowAfterSimulation: true });
+  expect(integrated.skipped).toBe(false); expect(integrated.data['Quiz-score-percentage']).toBe(80);
+  const duplicate = await saveQuizResult(quizPayload(100), { allowAfterSimulation: true });
+  expect(duplicate.skipped).toBe(true); expect(duplicate.data['Quiz-score-percentage']).toBe(80);
+  expect(bucket('students').get('student').xp).toBe(before); expect(bucket('quiz_score').size).toBe(1);
 });
 
 test('student quiz history reads without a compound index and includes legacy dates and zero scores', async () => {
