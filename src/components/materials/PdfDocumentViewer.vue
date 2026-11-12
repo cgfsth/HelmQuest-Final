@@ -72,12 +72,12 @@ onBeforeUnmount(() => { alive = false; controller?.abort(); resize?.disconnect()
 .lm-reader { min-width:0; }
 .lm-reader-heading { display:flex; align-items:flex-start; gap:18px; margin-bottom:20px; }
 .lm-reader-heading h2 { margin-top:5px; }
-.lm-reader-controls { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:12px; background:#12253a; border:1px solid var(--lm-border); border-radius:12px 12px 0 0; }
+.lm-reader-controls { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:12px; background:var(--lm-surface-raised); border:1px solid var(--lm-border); border-radius:12px 12px 0 0; }
 .lm-reader-controls label { display:flex; align-items:center; gap:7px; font-size:.84rem; }
 .lm-reader-controls input { width:60px; padding:10px 6px; text-align:center; }
 .lm-reader-controls .lm-actions { gap:7px; }
 .lm-reader-controls output { min-width:45px; text-align:center; font-size:.85rem; }
-.lm-reader-hint { padding:10px 12px; background:#0e1e30; font-size:.76rem; }
-.lm-reader-pages { position:relative; background:#080f1c; border:1px solid var(--lm-border); border-radius:0 0 12px 12px; height:72dvh; min-height:300px; max-height:1000px; overflow:auto; overscroll-behavior:contain; padding:20px; }
+.lm-reader-hint { padding:10px 12px; background:var(--lm-surface-soft); font-size:.76rem; }
+.lm-reader-pages { position:relative; background:var(--lm-reader-bg); border:1px solid var(--lm-border); border-radius:0 0 12px 12px; height:72dvh; min-height:300px; max-height:1000px; overflow:auto; overscroll-behavior:contain; padding:20px; }
 @media(max-width:600px) { .lm-reader-heading { flex-direction:column; gap:12px; } .lm-reader-controls { padding:10px; } .lm-reader-controls .lm-actions { gap:5px; } .lm-reader-controls button { padding:9px; } .lm-reader-pages { height:68dvh; } }
 </style>
