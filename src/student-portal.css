@@ -54,7 +54,9 @@
   }
 
   .student-dashboard-overlay .student-hub-shell .missions-main {
+    grid-column: 1;
     gap: 20px;
+    padding: 0;
   }
 
   .student-dashboard-overlay .student-mobile-toolbar {
@@ -121,7 +123,7 @@
     padding: max(16px, env(safe-area-inset-top)) 18px max(20px, env(safe-area-inset-bottom));
     gap: 16px;
     border-radius: 0 16px 16px 0;
-    background: linear-gradient(180deg, #0f1c30, #0a101c);
+    background: #071120;
     transform: translateX(-105%);
     visibility: hidden;
     pointer-events: none;

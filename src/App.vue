@@ -896,7 +896,7 @@
     </div>
 
     <!-- Dashboard — instructor console -->
-    <div v-if="activeScreen === 'dashboard' && userRole === 'instructor'" class="scene-overlay dashboard-overlay">
+    <div v-if="activeScreen === 'dashboard' && userRole === 'instructor'" class="scene-overlay dashboard-overlay instructor-dashboard-overlay">
       <div class="missions-hub missions-hub--with-sidebar" :class="{ 'missions-hub--sidebar-collapsed': sidebarCollapsed }">
         <!-- Left Sidebar -->
         <aside class="hub-sidebar" :class="{ 'hub-sidebar--collapsed': sidebarCollapsed }">
@@ -909,7 +909,7 @@
           </div>
 
           <div class="hub-sidebar-profile">
-            <div class="hub-sidebar-avatar">{{ (currentUser.name || 'I').charAt(0) }}</div>
+            <div class="hub-sidebar-avatar">{{ (currentUser.name || 'I').charAt(0).toUpperCase() }}</div>
             <strong class="hub-sidebar-name">{{ currentUser.name }}</strong>
             <span class="hub-sidebar-rank">Instructor</span>
           </div>
@@ -955,7 +955,7 @@
           </nav>
 
           <button type="button" class="hub-sidebar-logout" @click="signOut">
-            <span class="hub-nav-icon">⎋</span> Log out
+            <span class="hub-nav-icon" aria-hidden="true">⊘</span> Log out
           </button>
         </aside>
 
@@ -1632,12 +1632,12 @@
             <span class="hub-sidebar-logo">⚓</span>
             <div class="hub-sidebar-brand-text">
               <strong>HELMQUEST</strong>
-              <span>Training</span>
+              <span>Student</span>
             </div>
           </div>
 
           <div class="hub-sidebar-profile">
-            <div class="hub-sidebar-avatar">{{ (demoStudent.name || 'S').charAt(0) }}</div>
+            <div class="hub-sidebar-avatar">{{ (demoStudent.name || 'S').charAt(0).toUpperCase() }}</div>
             <strong class="hub-sidebar-name">{{ demoStudent.name }}</strong>
             <span class="hub-sidebar-student-id">{{ studentProfileExtras.studentId }}</span>
             <span class="hub-sidebar-rank">{{ demoStudent.rank }}</span>
@@ -1678,7 +1678,7 @@
           </nav>
 
           <button type="button" class="hub-sidebar-logout" @click="signOut">
-            <span class="hub-nav-icon">⎋</span> Log out
+            <span class="hub-nav-icon" aria-hidden="true">⊘</span> Log out
           </button>
         </aside>
 
@@ -18330,68 +18330,89 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   gap: 28px;
 }
 
-/* Sidebar layout for the student training hub */
+/* Match the admin console's full-height navigation in both training portals. */
+.scene-overlay.instructor-dashboard-overlay {
+  padding: 0;
+}
+
+@media (width >= 1024px) {
+  .scene-overlay.student-dashboard-overlay {
+    padding: 0;
+  }
+}
+
 .missions-hub--with-sidebar {
-  width: min(1400px, 95%);
-  max-width: 1600px;
+  width: 100%;
+  min-height: 100vh;
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
-  gap: 28px;
+  gap: 0;
   align-items: start;
 }
 
 .missions-main {
+  grid-column: 2;
   display: grid;
   gap: 28px;
   min-width: 0;
+  padding: 34px clamp(20px, 3vw, 44px) 40px;
 }
 
 .hub-sidebar {
-  position: sticky;
-  top: 0;
-  align-self: start;
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 3;
+  width: 260px;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 20px;
-  min-height: calc(100vh - 88px);
-  padding: 24px 18px;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.92), rgba(10, 16, 28, 0.92));
-  border: 1px solid rgba(56, 189, 248, 0.14);
-  border-radius: 18px;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(14px);
+  padding: 28px 18px 20px;
+  color: #e2e8f0;
+  background: rgba(7, 17, 32, 0.9);
+  border-right: 1px solid rgba(56, 189, 248, 0.18);
+  box-shadow: 12px 0 40px rgba(2, 6, 23, 0.22);
+  backdrop-filter: blur(16px);
+}
+
+.hub-sidebar > * {
+  flex-shrink: 0;
 }
 
 .hub-sidebar-brand {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  padding: 0 8px 18px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
 }
 
 .hub-sidebar-logo {
-  font-size: 30px;
-  filter: drop-shadow(0 2px 8px rgba(56, 189, 248, 0.5));
+  font-size: 2rem;
+  color: #38bdf8;
+  filter: drop-shadow(0 2px 8px rgba(56, 189, 248, 0.45));
 }
 
 .hub-sidebar-brand-text {
   display: flex;
   flex-direction: column;
-  line-height: 1.2;
+  line-height: 1.1;
 }
 
 .hub-sidebar-brand-text strong {
-  font-family: 'Rajdhani', 'Outfit', sans-serif;
-  font-size: 1.15rem;
+  font-size: 1.08rem;
   font-weight: 800;
-  letter-spacing: 1.5px;
+  letter-spacing: 0.09em;
   color: #f8fafc;
 }
 
 .hub-sidebar-brand-text span {
   font-size: 0.72rem;
-  letter-spacing: 2px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: #38bdf8;
 }
@@ -18401,34 +18422,37 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 6px;
-  padding: 18px 12px;
-  background: rgba(56, 189, 248, 0.06);
-  border: 1px solid rgba(56, 189, 248, 0.12);
+  gap: 5px;
+  padding: 18px 10px;
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.12), rgba(14, 116, 144, 0.08));
+  border: 1px solid rgba(56, 189, 248, 0.22);
   border-radius: 14px;
 }
 
 .hub-sidebar-avatar {
-  width: 56px;
-  height: 56px;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 3px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 800;
   color: #ffffff;
   background: linear-gradient(135deg, #0ea5e9, #38bdf8);
-  box-shadow: 0 4px 14px rgba(56, 189, 248, 0.4);
+  box-shadow: 0 5px 18px rgba(56, 189, 248, 0.3);
 }
 
 .hub-sidebar-name {
-  font-size: 1rem;
+  max-width: 100%;
+  font-size: 0.94rem;
+  overflow-wrap: anywhere;
   color: #f8fafc;
 }
 
 .hub-sidebar-rank {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: #94a3b8;
 }
 
@@ -18456,35 +18480,37 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 .hub-sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .hub-nav-item {
+  width: 100%;
+  min-height: 46px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border: none;
-  border-radius: 10px;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-radius: 9px;
   background: transparent;
   color: #cbd5e1;
-  font-size: 0.92rem;
-  font-weight: 600;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
   text-align: left;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
 }
 
-.hub-nav-item:hover {
-  background: rgba(56, 189, 248, 0.12);
+.hub-nav-item:hover,
+.hub-nav-item--active {
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.2), rgba(14, 165, 233, 0.12));
+  border-color: rgba(56, 189, 248, 0.26);
   color: #f8fafc;
-  transform: translateX(3px);
 }
 
 .hub-nav-item--active {
-  background: rgba(56, 189, 248, 0.18);
-  color: #f8fafc;
-  border-left: 3px solid #38bdf8;
+  box-shadow: inset 3px 0 #38bdf8;
 }
 
 .hub-nav-count {
@@ -18509,30 +18535,38 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 .hub-nav-icon {
+  flex-shrink: 0;
   font-size: 1.05rem;
 }
 
 .hub-sidebar-logout {
+  min-height: 46px;
   margin-top: auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 13px 16px;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: 10px;
-  background: rgba(239, 68, 68, 0.12);
-  color: #f87171;
-  font-size: 0.92rem;
-  font-weight: 700;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  border-radius: 9px;
+  background: rgba(127, 29, 29, 0.2);
+  color: #fca5a5;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 800;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .hub-sidebar-logout:hover {
-  background: rgba(239, 68, 68, 0.22);
-  border-color: rgba(239, 68, 68, 0.5);
-  color: #fca5a5;
+  background: rgba(185, 28, 28, 0.28);
+  color: #fee2e2;
+}
+
+.hub-nav-item:focus-visible,
+.hub-sidebar-logout:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 3px;
 }
 
 .hub-sidebar-toggle {
@@ -18568,10 +18602,6 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   flex: 1;
 }
 
-.missions-hub--sidebar-collapsed {
-  grid-template-columns: 1fr;
-}
-
 /* Stack sidebar on top on narrow screens */
 @media (max-width: 900px) {
   .missions-hub--with-sidebar {
@@ -18579,8 +18609,18 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   }
   .hub-sidebar {
     position: relative;
-    min-height: auto;
-    flex-direction: column;
+    inset: auto;
+    width: 100%;
+    padding: 16px 18px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(56, 189, 248, 0.18);
+  }
+  .missions-main {
+    grid-column: 1;
+    padding: 24px 18px 32px;
+  }
+  .hub-sidebar--collapsed {
+    display: none;
   }
   .hub-sidebar-logout {
     margin-top: 16px;
