@@ -16,6 +16,7 @@ function page(api, viewer = { id: 'a' }, role = 'instructor') {
   const dependencies = {
     currentUser: ref(viewer), userRole: ref(role), isAuthenticated: ref(true),
     trainingModules: ref([ma, mb, { id: 'unknown' }]),
+    missionCatalogLoading: ref(false), missionCatalogError: ref(''),
     progressData: ref({ courseSettings: { customMissions: [ma, mb, { id: 'unknown' }], moduleOrder: ['ma', 'mb', 'unknown'] } }),
     window: { firebaseApi: api }, canViewMission, missionOwner, getCourseSettings,
     ensureMissionBuoySteps() {}, saveProgress() {}, levelCreator: ref({}),
@@ -75,6 +76,18 @@ test('signed-out users do not restore cached missions or make a catalog request'
   await view.loadMissionDatesFromFirestore();
   assert.deepEqual(view.trainingModules.value, []);
   assert.equal(called, false);
+});
+
+test('catalog failures stop loading and show an error instead of pretending no missions exist', async () => {
+  const view = page({ getAllMissions: async () => { throw new Error('Offline'); } });
+  await view.loadMissionDatesFromFirestore();
+  assert.equal(view.missionCatalogLoading.value, false);
+  assert.match(view.missionCatalogError.value, /Unable to load your missions/);
+  assert.deepEqual(view.trainingModules.value, []);
+  view.window.firebaseApi.getAllMissions = async () => ({ missions: [ma] });
+  await view.loadMissionDatesFromFirestore();
+  assert.equal(view.missionCatalogError.value, '');
+  assert.deepEqual(view.trainingModules.value.map(m => m.id), ['ma']);
 });
 
 test('login passes the server-issued session on mission requests and clears it on logout or failed account switch', async () => {

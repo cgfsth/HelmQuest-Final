@@ -44,6 +44,7 @@
         <p v-else-if="preview && selected.published === false" class="lm-empty">This course is unpublished. Students will see it after you publish it.</p>
         <CourseOutline v-else :syllabus="selected" :official="official" :focused-lesson-id="lessonId" :modules="modules" :activities="activities" :progress="preview ? {} : courseProgress" :manager="manager && !preview" :preview="preview" :busy="busy" @select-lesson="selectLesson" @open="openActivity" @edit-section="edit" @remove-section="confirmDelete" @add-activity="addActivity" @edit-activity="item => edit('activity', item)" @remove-activity="item => confirmDelete('activity', item)" @move-activity="moveActivity" @move-module="move" />
       </template>
+      <slot v-if="!selected && role === 'student'" name="missions" />
     </template>
     <Teleport to="body">
       <div v-if="editor || removal" class="lm-modal-backdrop" @click.self="closeModal" @keydown.esc="closeModal">
