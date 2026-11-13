@@ -32,7 +32,7 @@ const leaderboardStart = source.lastIndexOf('<section', source.indexOf('id="hub-
 const leaderboardEnd = source.indexOf('</section>', leaderboardStart) + '</section>'.length;
 const overviewStart = source.lastIndexOf('<section', source.indexOf('id="hub-badges"', templateStart));
 const instructorStart = source.indexOf('<div class="missions-hub missions-hub--with-sidebar"');
-const instructorEnd = source.indexOf('<section v-show="instructorTab === \'missions\'"', instructorStart);
+const instructorEnd = source.indexOf('<!-- Pending Approvals -->', instructorStart);
 const template = (instructor ? source.slice(instructorStart, instructorEnd) : leaderboard
   ? source.slice(templateStart, overviewStart) + source.slice(leaderboardStart, leaderboardEnd)
   : source.slice(templateStart, templateEnd)).replace('<div v-else ', '<div ') + '</div></div>';

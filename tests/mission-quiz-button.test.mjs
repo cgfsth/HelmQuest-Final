@@ -16,7 +16,8 @@ const state = between('// Saved quizzes drive the instructor mission buttons', '
 const actions = between('// Get quiz button text dynamically', '// Open quiz editor modal with given quiz data');
 const lookup = between('async function getQuizForModuleFromFirestore', '// Normalize quiz data');
 const local = between('function getQuizForModuleFromLocalStorage', 'function editQuiz');
-const button = source.match(/<button type="button" class="instructor-mission-btn instructor-mission-btn--quiz"[\s\S]*?<\/button>/)[0];
+const rowSource = readFileSync(new URL('../src/components/materials/CourseActivityRow.vue', import.meta.url), 'utf8');
+const button = rowSource.match(/<button type="button" class="lc-mission-quiz"[\s\S]*?<\/button>/)[0];
 const render = new Function('Vue', compile(button, { mode: 'function', prefixIdentifiers: true }).code)(Vue);
 const saved = { id: 'saved-quiz', moduleId: 'mission', title: 'Existing quiz', questions: [{ id: 'q1', prompt: 'Keep this question' }] };
 function page(api) {
@@ -31,7 +32,7 @@ function page(api) {
     return { missionQuizzes, missionQuizzesLoading, missionQuizzesError, fetchMissionQuizzes,
       getQuizButtonText, startCreatingQuiz, getQuizForModuleFromLocalStorage };`)(...Object.values(deps)));
   return { ...deps, ...bindings, scope, opened, alerts,
-    html: module => renderToString(Vue.createSSRApp({ render, setup: () => ({ ...bindings, module }) })) };
+    html: module => renderToString(Vue.createSSRApp({ render, setup: () => ({ ...bindings, busy: false, activity: { targetId: module.id }, missionQuizLabel: bindings.getQuizButtonText }) })) };
 }
 
 test('saved backend quiz renders Update Quiz without any browser assignments; absent quiz renders Create Quiz', async () => {
@@ -45,19 +46,19 @@ test('saved backend quiz renders Update Quiz without any browser assignments; ab
   } finally { view.scope.stop(); }
 });
 
-test('opening mission management loads quiz labels automatically and refreshes after reopening', async () => {
+test('opening syllabus management loads module mission quiz labels and refreshes after reopening', async () => {
   let quizzes = [saved], calls = 0;
   const view = page({ getAllQuizzes: async () => { calls++; return { quizzes }; } });
   try {
     view.activeScreen.value = 'dashboard';
-    view.instructorTab.value = 'missions';
+    view.instructorTab.value = 'materials';
     await Vue.nextTick();
     await Vue.nextTick();
     assert.equal(view.getQuizButtonText('mission'), 'Update Quiz');
     view.instructorTab.value = 'overview';
     await Vue.nextTick();
     quizzes = [];
-    view.instructorTab.value = 'missions';
+    view.instructorTab.value = 'materials';
     await Vue.nextTick();
     await Vue.nextTick();
     assert.equal(view.getQuizButtonText('mission'), 'Create Quiz');

@@ -454,16 +454,18 @@
 
     <!-- Mission Editor Modal (Instructor) -->
     <div v-if="missionEditorModal" class="quiz-editor-overlay">
-      <div class="quiz-editor-card glass-card mission-editor-card">
-        <h2>{{ missionEditorModal.isNew ? '🧭 Create New Mission' : '✏️ Edit Mission' }}</h2>
+      <div class="quiz-editor-card glass-card mission-editor-card" role="dialog" aria-modal="true" aria-labelledby="mission-editor-title">
+        <h2 id="mission-editor-title">{{ missionEditorModal.isNew ? '🧭 Create New Mission' : '✏️ Edit Mission' }}</h2>
+        <p v-if="missionEditorModal.courseContext" class="mission-editor-context">{{ missionEditorModal.courseContext.syllabusTitle }} · {{ missionEditorModal.courseContext.moduleTitle }}</p>
 
-        <div class="quiz-editor-content">
+        <div class="quiz-editor-content" :inert="missionSaving">
           <!-- Basic Info -->
           <div class="quiz-editor-section">
             <label class="quiz-field">
               <span>Mission Title</span>
-              <input type="text" v-model="missionEditorModal.data.title" placeholder="e.g., Mission 5: Advanced Navigation" class="quiz-input" />
+              <input type="text" v-model="missionEditorModal.data.title" placeholder="e.g., Mission 5: Advanced Navigation" class="quiz-input" maxlength="180" />
             </label>
+            <label class="quiz-field"><span>Description</span><textarea v-model="missionEditorModal.data.description" class="quiz-textarea" rows="3" maxlength="2500" /></label>
             
             <!-- Boat Type Selection (Instructor) -->
             <label class="quiz-field">
@@ -523,6 +525,9 @@
               </div>
               <span class="field-hint">Minimum score required to pass this mission</span>
             </label>
+            <label class="quiz-field"><span>Open date (optional)</span><input type="datetime-local" v-model="missionEditorModal.data.openDate" class="quiz-input" /></label>
+            <label class="quiz-field"><span>Deadline (optional)</span><input type="datetime-local" v-model="missionEditorModal.data.deadline" class="quiz-input" /></label>
+            <label v-if="missionEditorModal.courseContext" class="quiz-field"><span><input type="checkbox" v-model="missionEditorModal.courseContext.published" /> Publish mission to students</span></label>
           </div>
 
           <!-- Buoy checkpoint content -->
@@ -571,6 +576,7 @@
           </div>
         </div>
 
+        <p v-if="missionEditorError" class="mission-editor-error" role="alert">{{ missionEditorError }}</p>
         <div class="quiz-editor-actions">
           <button class="quiz-save-btn" @click="saveMissionEditor()" :disabled="missionSaving">
             {{ missionSaving ? '💾 Saving...' : '💾 Save Mission' }}
@@ -926,15 +932,6 @@
             <button
               type="button"
               class="hub-nav-item"
-              :class="{ 'hub-nav-item--active': instructorTab === 'missions' }"
-              @click="selectInstructorTab('missions')"
-            >
-              <span class="hub-nav-icon">🧭</span> Missions
-              <span class="hub-nav-count">{{ trainingModules.length }}</span>
-            </button>
-            <button
-              type="button"
-              class="hub-nav-item"
               :class="{ 'hub-nav-item--active': instructorTab === 'students' }"
               @click="selectInstructorTab('students')"
             >
@@ -965,7 +962,6 @@
           <div class="instructor-console-intro">
             <h1 class="instructor-brand-tab">
               <span v-if="instructorTab === 'overview'">📊 Dashboard Overview</span>
-              <span v-else-if="instructorTab === 'missions'">🎯 Mission Management</span>
               <span v-else-if="instructorTab === 'students'">👥 Student Management</span>
               <span v-else-if="instructorTab === 'quizzes'">📝 Quiz Management</span>
               <span v-else-if="instructorTab === 'leaderboards'">🏆 Leaderboards</span>
@@ -974,7 +970,6 @@
             </h1>
             <p class="instructor-header-subtitle">
               <span v-if="instructorTab === 'overview'">Track your students and mission progress at a glance.</span>
-              <span v-else-if="instructorTab === 'missions'">Create, edit, and configure missions for your students.</span>
               <span v-else-if="instructorTab === 'students'">Manage student accounts, review progress, and approve signups.</span>
               <span v-else-if="instructorTab === 'quizzes'">Create and manage quizzes for mission assessments.</span>
               <span v-else-if="instructorTab === 'leaderboards'">View student rankings by performance and track class progress.</span>
@@ -993,7 +988,7 @@
           </button>
         </header>
 
-        <LearningMaterials v-if="instructorTab === 'materials'" :key="currentUser.id" :current-user="currentUser" role="instructor" :prepare-access="prepareLearningMaterialsAccess" />
+        <LearningMaterials v-if="instructorTab === 'materials'" :key="currentUser.id" :current-user="currentUser" role="instructor" :prepare-access="prepareLearningMaterialsAccess" :mission-quiz-label="getQuizButtonText" :mission-quizzes-loading="missionQuizzesLoading" @create-mission="openCourseMissionCreator" @edit-mission="openCourseMissionEditor" @edit-mission-quiz="({ missionId, title }) => startCreatingQuiz(missionId, title)" />
 
         <section v-show="instructorTab === 'overview'" class="instructor-overview" aria-label="Class overview">
           <div class="overview-toolbar">
@@ -1100,140 +1095,6 @@
             </div>
           </template>
         </section>
-        <section v-show="instructorTab === 'missions'" class="instructor-missions-panel">
-          <!-- Toolbar -->
-          <div class="instructor-missions-toolbar">
-            <div class="instructor-missions-heading">
-              <h2 class="instructor-panel-title">Mission Management</h2>
-              <p class="instructor-panel-note">
-                Create, edit, and configure the missions students see. Same layout as the student view, with full instructor controls.
-              </p>
-            </div>
-            <button type="button" class="instructor-create-mission-btn" @click="openMissionCreator()">
-              + Create New Mission
-            </button>
-          </div>
-
-          <!-- Global Toggles -->
-          <div class="instructor-global-toggles">
-            <label class="instructor-setting-toggle">
-              <input
-                type="checkbox"
-                :checked="courseSettingsView.sequentialUnlock"
-                @change="onSequentialUnlockChange"
-              />
-              <span>Unlock levels in order (complete previous level first)</span>
-            </label>
-            
-          </div>
-
-          <!-- Mission Cards (same style as student view) -->
-          <div class="training-grid">
-            <article
-              v-for="module in trainingModules"
-              :key="module.id"
-              class="training-card instructor-training-card"
-              :class="{ 'training-card--locked': isModuleLockedByInstructorNow(module.id) }"
-            >
-              <div class="training-card-top">
-                <div class="training-badges">
-                  <span class="training-level-badge">{{ displayModuleLevel(module.id) }}</span>
-                  <span class="training-category">{{ module.category }}</span>
-                  <span
-                    class="training-difficulty"
-                    :class="trainingDifficultyClass(module.difficulty)"
-                  >{{ module.difficulty }}</span>
-                </div>
-                <span
-                  v-if="isModuleLockedByInstructorNow(module.id)"
-                  class="training-progress-badge"
-                >🔒 Locked</span>
-              </div>
-
-              <h3 class="training-card-title">{{ module.title }}</h3>
-              <p class="training-card-desc">{{ module.description }}</p>
-
-              <div class="training-meta">
-                <span class="training-duration">Est. {{ module.duration }}</span>
-                <span class="training-reward">+{{ module.xpReward ?? 100 }} XP</span>
-              </div>
-
-              <div class="instructor-mission-steps-summary" v-if="module.missionSteps && module.missionSteps.length > 0">
-                <h4>Mission steps ({{ module.missionSteps.length }})</h4>
-                <ol>
-                  <li v-for="step in module.missionSteps" :key="step.id">{{ step.text }}</li>
-                </ol>
-              </div>
-              <div class="instructor-mission-steps-summary" v-else-if="module.steps && module.steps.length > 0">
-                <h4>Mission steps ({{ module.steps.length }})</h4>
-                <ol>
-                  <li v-for="(step, i) in module.steps" :key="i">{{ step.instruction }}</li>
-                </ol>
-              </div>
-
-              <!-- Instructor Controls -->
-              <div class="instructor-mission-controls">
-                <h4 class="instructor-controls-heading">⚙️ Instructor Controls</h4>
-
-                <div class="instructor-controls-row">
-                  <label class="instructor-mission-toggle">
-                    <input
-                      type="checkbox"
-                      :checked="isModuleLockedByInstructorNow(module.id)"
-                      @change="onModuleLockChange(module.id, $event.target.checked)"
-                    />
-                    <span>🔒 Lock (hide from students)</span>
-                  </label>
-                  <label class="instructor-mission-toggle">
-                    <input
-                      type="checkbox"
-                      :checked="isGearQuizRetakeAllowed"
-                      @change="onRetakeToggleChange($event.target.checked)"
-                    />
-                    <span>🔄 Allow retakes</span>
-                  </label>
-                </div>
-
-                <div class="instructor-controls-row">
-                  <label class="instructor-mission-date">
-                    <span>Open Date</span>
-                    <input
-                      type="datetime-local"
-                      :value="getModuleSchedule(module.id).openDate"
-                      @change="onModuleOpenDateChange(module.id, $event.target.value)"
-                    />
-                  </label>
-                  <label class="instructor-mission-date">
-                    <span>Deadline</span>
-                    <input
-                      type="datetime-local"
-                      :value="getModuleSchedule(module.id).deadline"
-                      @change="onModuleDeadlineChange(module.id, $event.target.value)"
-                    />
-                  </label>
-                </div>
-              </div>
-
-              <!-- Actions -->
-              <div class="instructor-mission-actions">
-                <button type="button" class="instructor-mission-btn instructor-mission-btn--edit" @click="openMissionEditor(module)">
-                  ✏️ Edit Mission
-                </button>
-                <button type="button" class="instructor-mission-btn instructor-mission-btn--quiz" :disabled="missionQuizzesLoading" @click="startCreatingQuiz(module.id, module.title)">
-                  📝 {{ getQuizButtonText(module.id) }}
-                </button>
-                <button
-                  type="button"
-                  class="instructor-mission-btn instructor-mission-btn--delete"
-                  @click="confirmDeleteMission(module)"
-                >
-                  🗑️ Delete
-                </button>
-              </div>
-            </article>
-          </div>
-        </section>
-
         <!-- Pending Approvals -->
         <section v-show="instructorTab === 'students' && pendingStudentSignups.length" class="instructor-panel instructor-pending-panel">
           <h2 class="instructor-panel-title">🕒 Pending Approvals ({{ pendingStudentSignups.length }})</h2>
@@ -1726,42 +1587,7 @@
           </button>
         </header>
 
-        <LearningMaterials v-if="hubTab === 'materials' && !isStudentPending" :key="currentUser.id" :current-user="currentUser" role="student" :prepare-access="prepareLearningMaterialsAccess" :initial-course-id="courseNavigation.studentId === currentUser.id ? courseNavigation.syllabusId : ''" :initial-lesson-id="courseNavigation.studentId === currentUser.id ? courseNavigation.lessonId : ''" @navigate-course="rememberCourse" @launch-simulation="launchCourseSimulation">
-          <template #missions>
-            <section class="student-syllabus-missions" id="hub-missions" aria-labelledby="syllabus-missions-title" :aria-busy="missionCatalogLoading">
-              <div class="lm-toolbar">
-                <div><p class="lm-eyebrow">PRACTICAL TRAINING</p><h2 id="syllabus-missions-title">Your missions</h2><p>Complete the missions shared by your instructor. Lesson activities are also available inside each syllabus.</p></div>
-                <button type="button" :disabled="missionCatalogLoading || !!startingSyllabusMission" @click="refreshStudentMissions">Refresh missions</button>
-              </div>
-              <p v-if="missionCatalogError || syllabusMissionError" class="lm-alert lm-error" role="alert">{{ missionCatalogError || syllabusMissionError }}</p>
-              <p v-if="missionCatalogLoading" class="lm-empty" role="status">Loading your missions…</p>
-              <div v-else-if="trainingModules.length" class="training-grid">
-                <article v-for="module in trainingModules" :key="module.id" class="training-card" :class="{ 'training-card--completed': isModuleFullyComplete(module.id), 'training-card--locked': isModuleLockedForStudent(module.id) }">
-                  <div class="training-card-top">
-                    <div class="training-badges"><span class="training-level-badge">{{ displayModuleLevel(module.id) }}</span><span class="training-difficulty" :class="trainingDifficultyClass(module.difficulty)">{{ module.difficulty }}</span></div>
-                    <span v-if="isModuleFullyComplete(module.id)" class="training-completed-badge">Mission passed</span>
-                  </div>
-                  <h3 class="training-card-title">{{ module.title }}</h3>
-                  <p class="training-card-desc">{{ module.description }}</p>
-                  <p v-if="moduleLockMessage(module.id)" class="training-lock-notice">{{ moduleLockMessage(module.id) }}</p>
-                  <div v-if="getModuleSchedule(module.id).openDate || getModuleSchedule(module.id).deadline" class="mission-schedule">
-                    <div v-if="getModuleSchedule(module.id).openDate" class="mission-schedule-item"><span class="mission-schedule-label">Opens:</span><span class="mission-schedule-value">{{ formatMissionDate(getModuleSchedule(module.id).openDate) }}</span></div>
-                    <div v-if="getModuleSchedule(module.id).deadline" class="mission-schedule-item"><span class="mission-schedule-label">Deadline:</span><span class="mission-schedule-value">{{ formatMissionDate(getModuleSchedule(module.id).deadline) }}</span></div>
-                  </div>
-                  <div class="training-meta"><span class="training-duration">Est. {{ module.duration }}</span><span class="training-reward">+{{ module.xpReward ?? 100 }} XP</span></div>
-                  <div v-if="module.steps?.length" class="training-mission-steps"><h4>Mission steps</h4><ol><li v-for="(step, index) in module.steps" :key="step.id || index">{{ step.instruction }}</li></ol></div>
-                  <div class="hub-mission-list">
-                    <div v-for="mission in getMissionsForModule(module.id)" :key="mission.id" class="hub-mission-row" :class="[missionCardClass(mission), { 'hub-mission-row--locked': isMissionLocked(mission) }]">
-                      <div class="hub-mission-info"><span class="hub-mission-pass">Pass {{ mission.passScore }}%</span><span v-if="getMissionResult(mission)" class="hub-mission-result" :class="getMissionResult(mission).passed ? 'hub-mission-result--pass' : 'hub-mission-result--fail'">{{ getMissionResult(mission).score }}% {{ getMissionResult(mission).passed ? 'PASS' : 'FAIL' }}</span></div>
-                      <button type="button" class="hub-mission-start" :disabled="isMissionLocked(mission) || !!startingSyllabusMission" @click="launchSyllabusMission(module.id)">{{ startingSyllabusMission === module.id ? 'Opening…' : missionActionLabel(mission) }}</button>
-                    </div>
-                  </div>
-                </article>
-              </div>
-              <p v-else-if="!missionCatalogError" class="lm-empty">Your instructor has not shared any missions yet.</p>
-            </section>
-          </template>
-        </LearningMaterials>
+        <LearningMaterials v-if="hubTab === 'materials' && !isStudentPending" :key="currentUser.id" :current-user="currentUser" role="student" :prepare-access="prepareLearningMaterialsAccess" :initial-course-id="courseNavigation.studentId === currentUser.id ? courseNavigation.syllabusId : ''" :initial-lesson-id="courseNavigation.studentId === currentUser.id ? courseNavigation.lessonId : ''" @navigate-course="rememberCourse" @launch-simulation="launchCourseSimulation" />
 
         <section v-show="hubTab === 'overview'" class="motivation-panel" id="hub-badges" aria-label="Your progress and rewards">
           <!-- Student Profile Card - Horizontal Layout -->
@@ -4252,6 +4078,7 @@ function logout() {
 // Mission editor modal state (instructor)
 const missionEditorModal = ref(null);
 const missionSaving = ref(false); // Track save state
+const missionEditorError = ref('');
 const BUILTIN_MISSION_IDS = new Set(['m1-mission1', 'm1-mission2', 'm1-mission3', 'm1-mission4']);
 
 // Boat selection modal state (student)
@@ -4637,38 +4464,9 @@ async function submitCourseQuizSession() {
   finally { courseQuizSaving.value = false; }
 }
 
-async function refreshStudentMissions() {
-  syllabusMissionError.value = '';
-  await Promise.all([loadMissionDatesFromFirestore(), fetchStudentTrainingRecords()]);
-}
-
-async function launchSyllabusMission(moduleId) {
-  if (startingSyllabusMission.value) return;
-  const studentId = currentUser.value?.id;
-  if (!studentId || userRole.value !== 'student' || isStudentPending.value) return;
-  startingSyllabusMission.value = moduleId;
-  syllabusMissionError.value = '';
-  try {
-    await loadMissionDatesFromFirestore();
-    if (currentUser.value?.id !== studentId || userRole.value !== 'student') return;
-    if (missionCatalogError.value) throw new Error(missionCatalogError.value);
-    const mission = findMissionForModule(moduleId);
-    if (!mission) throw new Error('This mission is no longer available. Refresh your missions.');
-    if (isMissionLocked(mission)) throw new Error(moduleLockMessage(moduleId) || 'This mission is locked.');
-    // Class missions use their existing scoring/quiz flow; lesson activities
-    // continue to use launchCourseSimulation and their course completion rules.
-    activeCoursePractical.value = null;
-    await startMissionSimulation(mission);
-  } catch (error) {
-    if (currentUser.value?.id === studentId && userRole.value === 'student') syllabusMissionError.value = error.message || 'Unable to open this mission. Try again.';
-  } finally {
-    if (startingSyllabusMission.value === moduleId) startingSyllabusMission.value = '';
-  }
-}
-
 function selectHubTab(tab) {
   hubTab.value = ['missions', 'quizzes'].includes(tab) ? 'materials' : tab;
-  if (hubTab.value === 'materials') refreshStudentMissions();
+  if (hubTab.value === 'materials') { loadMissionDatesFromFirestore(); fetchStudentTrainingRecords(); }
   
   // Fetch leaderboard data when switching to leaderboards tab
   if (tab === 'leaderboards') {
@@ -4717,7 +4515,7 @@ async function closeStudentTour() {
 }
 
 function selectInstructorTab(tab) {
-  instructorTab.value = tab;
+  instructorTab.value = ['missions', 'quizzes'].includes(tab) ? 'materials' : tab;
   // The Students-tab watcher loads enrolled and pending accounts together.
   
   // Load recent activities when opening the overview tab
@@ -6177,7 +5975,6 @@ const navigationMissions = [];
 // Core Navigation Skill Modules for Fisheries Students
 const trainingModules = ref([]);
 const missionCatalogLoading = ref(false), missionCatalogError = ref('');
-const startingSyllabusMission = ref(''), syllabusMissionError = ref('');
 
 const activeTrainingModule = ref(null);
 const currentTrainingStep = ref(0);
@@ -8243,7 +8040,7 @@ watch([() => currentUser.value?.id, userRole, activeScreen, instructorTab],
     missionQuizzesLoading.value = false;
     missionQuizzesError.value = false;
   }
-  if (role === 'instructor' && screen === 'dashboard' && tab === 'missions') fetchMissionQuizzes();
+  if (role === 'instructor' && screen === 'dashboard' && tab === 'materials') fetchMissionQuizzes();
 }, { immediate: true });
 
 function quizMatchesModule(quiz, moduleId) {
@@ -10708,7 +10505,6 @@ function signOut() {
   ++missionCatalogRequest;
   trainingModules.value = [];
   missionCatalogLoading.value = false; missionCatalogError.value = '';
-  startingSyllabusMission.value = ''; syllabusMissionError.value = '';
   // Reset all authentication state completely
   isAuthenticated.value = false;
   userRole.value = null;
@@ -10793,6 +10589,8 @@ function applySavedLevelCreator() {
  */
 function openMissionEditor(module) {
   if (!canManageMission(module, { ...currentUser.value, role: userRole.value })) return;
+  missionEditorError.value = '';
+  const localDate = value => { if (!value) return ''; const date = new Date(value); return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
   const existingAssignment = progressData.value.quizAssignments?.find(
     (a) => a.targetId === module.id && a.targetType === 'module'
   );
@@ -10827,6 +10625,8 @@ function openMissionEditor(module) {
       duration: module.duration,
       xpReward: xpReward, // Numeric value
       passScore: passScore, // Numeric value
+      openDate: localDate(getModuleSchedule(module.id).openDate),
+      deadline: localDate(getModuleSchedule(module.id).deadline),
       buoyCount: Array.isArray(module.buoys) ? module.buoys.length : 0,
       buoys: (module.buoys || []).map((buoy, index) => ({
         id: buoy.id || `${module.id}-buoy-${index + 1}`,
@@ -10865,20 +10665,24 @@ function openMissionEditor(module) {
 /**
  * Open the mission editor for creating a brand-new mission.
  */
-function openMissionCreator() {
+function openMissionCreator(courseContext = null) {
+  if (missionSaving.value || userRole.value !== 'instructor' || !currentUser.value?.id) return;
+  missionEditorError.value = '';
   const nextIdx = trainingModules.value.length + 1;
   const newId = `custom-mission-${Date.now()}`;
   missionEditorModal.value = {
     isNew: true,
     originalId: null,
+    courseContext,
     data: {
       id: newId,
-      title: `Mission ${nextIdx}: New Mission`,
-      description: '',
+      title: courseContext ? `${courseContext.moduleTitle} mission`.slice(0, 180) : `Mission ${nextIdx}: New Mission`,
+      description: courseContext?.description || '',
       difficulty: 'Beginner',
       duration: '5-10 minutes',
       xpReward: 100, // Numeric value
       passScore: 70, // Numeric value
+      openDate: '', deadline: '',
       buoyCount: 0,
       buoys: [],
       boatType: 'medium',
@@ -10889,6 +10693,26 @@ function openMissionCreator() {
       quiz: { id: null, enabled: false, title: '', description: '', questions: [] }
     }
   };
+}
+
+function openCourseMissionCreator(context) {
+  openMissionCreator({ ...context, published: true });
+}
+
+async function openCourseMissionEditor(context) {
+  const instructorId = currentUser.value?.id;
+  if (missionSaving.value || userRole.value !== 'instructor' || !instructorId) return;
+  await loadMissionDatesFromFirestore();
+  if (currentUser.value?.id !== instructorId || userRole.value !== 'instructor') return;
+  const mission = trainingModules.value.find(item => item.id === context.missionId);
+  if (missionCatalogError.value || !mission) { showAchievement(missionCatalogError.value || 'This mission is no longer available. Refresh the module.'); return; }
+  openMissionEditor(mission);
+  if (missionEditorModal.value) {
+    missionEditorModal.value.courseContext = context;
+    const localDate = value => { if (!value) return ''; const date = new Date(value); return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
+    if (context.availableFrom) missionEditorModal.value.data.openDate = localDate(context.availableFrom);
+    if (context.availableUntil) missionEditorModal.value.data.deadline = localDate(context.availableUntil);
+  }
 }
 
 function addMissionBuoy() {
@@ -10998,7 +10822,9 @@ async function saveMissionEditor() {
   }
   
   missionSaving.value = true;
-  const { isNew, data } = missionEditorModal.value;
+  missionEditorError.value = '';
+  const editor = missionEditorModal.value, instructorId = currentUser.value.id;
+  const { isNew, data } = editor;
 
   try {
     console.log('=== saveMissionEditor DEBUG ===');
@@ -11070,8 +10896,8 @@ async function saveMissionEditor() {
       })),
       completed: false,
       disableFishing: true,
-      opendate: getModuleSchedule(data.id).openDate || null,
-      deadline: getModuleSchedule(data.id).deadline || null
+      opendate: data.openDate ? new Date(data.openDate).toISOString() : null,
+      deadline: data.deadline ? new Date(data.deadline).toISOString() : null
     };
 
     ensureMissionBuoySteps(cleaned);
@@ -11115,7 +10941,16 @@ async function saveMissionEditor() {
         updatedAt: new Date().toISOString()
       };
 
-      if (window.firebaseApi && typeof window.firebaseApi.createMission === 'function') {
+      if (editor.courseContext) {
+        const context = editor.courseContext;
+        const saved = await firebaseApi.saveModuleMission(context.syllabusId, context.moduleId, {
+          missionId: cleaned.id, mission: firestoreMission, published: context.published,
+          activityId: context.activityId, revision: context.revision
+        });
+        if (currentUser.value?.id !== instructorId || userRole.value !== 'instructor' || missionEditorModal.value !== editor) return;
+        editor.isNew = false; editor.originalId = cleaned.id;
+        context.activityId = saved.activityId; context.revision = saved.revision;
+      } else if (window.firebaseApi && typeof window.firebaseApi.createMission === 'function') {
         if (isNew) {
           const response = await window.firebaseApi.createMission({ id: cleaned.id, ...firestoreMission });
           console.log('✅ Mission created in Firestore:', response);
@@ -11130,15 +10965,11 @@ async function saveMissionEditor() {
       throw new Error('Unable to save mission: ' + error.message);
     }
 
-    // Update local state
-    if (isNew) {
-      trainingModules.value.push(cleaned);
-    } else {
-      const idx = trainingModules.value.findIndex((m) => m.id === missionEditorModal.value.originalId);
-      if (idx >= 0) {
-        trainingModules.value[idx] = { ...trainingModules.value[idx], ...cleaned };
-      }
-    }
+    if (currentUser.value?.id !== instructorId || userRole.value !== 'instructor' || missionEditorModal.value !== editor) return;
+    // Update by ID so retrying a lost response cannot duplicate a mission card.
+    const idx = trainingModules.value.findIndex(m => m.id === cleaned.id);
+    if (idx >= 0) trainingModules.value[idx] = { ...trainingModules.value[idx], ...cleaned };
+    else trainingModules.value.push(cleaned);
 
     // Persist custom missions to progressData
     if (!progressData.value.courseSettings) progressData.value.courseSettings = {};
@@ -11162,6 +10993,8 @@ async function saveMissionEditor() {
 
     saveProgress(progressData.value);
     await persistMissionQuiz(cleaned.id, data.quiz);
+    await editor.courseContext?.onSaved?.();
+    if (currentUser.value?.id !== instructorId || missionEditorModal.value !== editor) return;
     
     showAchievement(isNew ? '✅ Mission created successfully!' : '✅ Mission updated successfully!');
     missionEditorModal.value = null;
@@ -11169,8 +11002,12 @@ async function saveMissionEditor() {
     
   } catch (error) {
     console.error('[SAVE MISSION] ❌ Failed:', error);
-    missionSaving.value = false;
-    showAchievement('❌ Failed to save mission: ' + error.message);
+    if (currentUser.value?.id === instructorId && missionEditorModal.value === editor) {
+      missionEditorError.value = error.message;
+      showAchievement('❌ Failed to save mission: ' + error.message);
+    }
+  } finally {
+    if (!missionEditorModal.value || missionEditorModal.value === editor) missionSaving.value = false;
   }
 }
 
@@ -11415,12 +11252,8 @@ async function loadMissionDatesFromFirestore() {
         }
         
         // Update from Firestore if dates exist
-        if (mission.opendate) {
-          progressData.value.moduleSchedule[mission.id].openDate = mission.opendate;
-        }
-        if (mission.deadline) {
-          progressData.value.moduleSchedule[mission.id].deadline = mission.deadline;
-        }
+        progressData.value.moduleSchedule[mission.id].openDate = mission.opendate || '';
+        progressData.value.moduleSchedule[mission.id].deadline = mission.deadline || '';
 
         const remoteBuoys = Array.isArray(mission.bouy)
           ? mission.bouy.map((buoy, index) => ({
@@ -18400,18 +18233,11 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   gap: 14px;
 }
 
+/* Mission editor context keeps the originating syllabus module visible. */
+.mission-editor-context { margin: 8px 0 16px; color: #7dd3fc; overflow-wrap: anywhere; }
+.mission-editor-error { padding: 12px; color: #fecaca; background: rgba(127, 29, 29, 0.25); border: 1px solid rgba(248, 113, 113, 0.4); border-radius: 8px; }
+
 /* —— Navigation missions dashboard —— */
-.student-syllabus-missions {
-  min-width: 0;
-  margin-top: 28px;
-  padding-top: 24px;
-  border-top: 1px solid rgba(56, 189, 248, 0.18);
-}
-
-.student-syllabus-missions .training-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-}
-
 .missions-hub {
   width: min(1180px, 100%);
   display: grid;

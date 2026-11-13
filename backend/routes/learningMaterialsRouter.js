@@ -29,6 +29,7 @@ export function createLearningMaterialsRouter({ service, course, authenticate })
   router.get('/syllabi/:id', action(req => service.detail(req.materialsUser, req.params.id)));
   if (course) {
     router.get('/syllabi/:id/course', action(req => course.course(req.materialsUser, req.params.id)));
+    router.post('/syllabi/:id/modules/:moduleId/missions', manager, action(req => course.saveModuleMission(req.materialsUser, req.params.id, req.params.moduleId, req.body)));
     router.post('/syllabi/:id/activities', manager, bounded, upload, action(req => course.save(req.materialsUser, req.params.id, req.body.moduleId || null, null, req.body, req.file)));
     router.post('/syllabi/:id/activity-order', manager, action(req => course.reorder(req.materialsUser, req.params.id, req.body)));
     router.put('/activities/:id', manager, bounded, upload, action(req => course.save(req.materialsUser, null, null, req.params.id, req.body, req.file)));

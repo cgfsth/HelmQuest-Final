@@ -7,6 +7,10 @@
       </span>
     </button>
     <div class="lc-activity-trailing">
+      <div v-if="manager && missionAuthoring && activity.type === 'simulation'" class="lc-mission-tools">
+        <button type="button" :disabled="busy" @click="$emit('edit-mission', activity)"><Pencil :size="15" /> Edit mission</button>
+        <button type="button" class="lc-mission-quiz" :disabled="busy || missionQuizzesLoading" @click="$emit('edit-mission-quiz', activity)">{{ missionQuizLabel(activity.targetId) }}</button>
+      </div>
       <details class="lc-status"><summary :class="'lc-status-' + state.status.toLowerCase().replaceAll(' ', '-')"><Check v-if="state.status === 'Done'" :size="14" /> {{ state.status }} <ChevronDown :size="14" /></summary><div class="lc-requirements"><strong>Completion requirements</strong><p v-for="(rule, index) in state.requirements" :key="index" :class="{ 'lc-requirement-done': rule.done }"><Check v-if="rule.done" :size="14" /><Circle v-else :size="12" />{{ rule.label }}</p><small v-if="preview">Student preview · progress is not recorded.</small></div></details>
       <div v-if="manager && !activity.legacy" class="lc-row-tools"><button type="button" :disabled="busy" :aria-label="'Edit activity ' + activity.title" @click="$emit('edit', activity)"><Pencil :size="15" /></button><button type="button" :disabled="busy || first" :aria-label="'Move activity ' + activity.title + ' up'" @click="$emit('move', activity, -1)"><ArrowUp :size="15" /></button><button type="button" :disabled="busy || last" :aria-label="'Move activity ' + activity.title + ' down'" @click="$emit('move', activity, 1)"><ArrowDown :size="15" /></button><button type="button" :disabled="busy" :aria-label="'Delete activity ' + activity.title" @click="$emit('remove', activity)"><Trash2 :size="15" /></button></div>
     </div>
@@ -15,8 +19,8 @@
 <script setup>
 import { computed } from 'vue';
 import { ArrowDown, ArrowUp, Check, ChevronDown, Circle, FileText, Pencil, Presentation, Ship, ClipboardList, Trash2 } from '@lucide/vue';
-const props = defineProps({ activity: { type: Object, required: true }, progress: Object, manager: Boolean, preview: Boolean, busy: Boolean, first: Boolean, last: Boolean });
-defineEmits(['open', 'edit', 'move', 'remove']);
+const props = defineProps({ activity: { type: Object, required: true }, progress: Object, missionAuthoring: Boolean, missionQuizLabel: { type: Function, default: () => 'Create / edit quiz' }, missionQuizzesLoading: Boolean, manager: Boolean, preview: Boolean, busy: Boolean, first: Boolean, last: Boolean });
+defineEmits(['edit-mission', 'edit-mission-quiz', 'open', 'edit', 'move', 'remove']);
 const icons = { pdf: FileText, presentation: Presentation, simulation: Ship, quiz: ClipboardList };
 const state = computed(() => props.progress || { status: 'To do', requirements: [
   { label: ['pdf', 'presentation'].includes(props.activity.type) ? props.activity.type === 'presentation' ? 'View the presentation' : 'View the document' : props.activity.type === 'simulation' ? 'Complete the assigned simulation' : 'Complete the quiz', done: false },

@@ -49,7 +49,7 @@ try {
   await browser.waitFor('document.querySelector(".lc-status summary")?.textContent.includes("Done")');
   for (const width of [768, 375]) { await browser.viewport(width); assert.equal(await browser.evaluate('document.documentElement.scrollWidth<=innerWidth'), true); await browser.screenshot('official-lesson-' + width); }
   await browser.evaluate('window.fixture.login("instructor")'); await browser.viewport(1365); await browser.waitFor('document.querySelectorAll(".lc-section").length===9');
-  assert.equal(await browser.evaluate('document.body.textContent.includes("No practical simulation assigned")'), true);
+  assert.equal(await browser.evaluate('document.body.textContent.includes("No mission assigned yet")'), true);
   await browser.clickExpression(`document.querySelector('[aria-labelledby="lc-title-${moduleId}"] .lc-lesson-details')`);
   await browser.click('Add lesson or activity'); await browser.waitFor('document.querySelector(".lm-form select")');
   await browser.fill('.lm-form input:not([type])', 'Instructor navigation presentation'); await browser.fill('.lm-form select', 'presentation'); await browser.attach(pdfPath);

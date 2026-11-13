@@ -63,6 +63,7 @@ export function listLearningSyllabi(options = {}) {
 }
 export const getLearningSyllabus = (id, options = {}) => apiFetch(`${materialsPath}/syllabi/${materialId(id)}`, { timeoutMs: 30000, ...options });
 export const getLearningCourse = (id, options = {}) => apiFetch(`${materialsPath}/syllabi/${materialId(id)}/course`, { timeoutMs: 30000, ...options });
+export const saveModuleMission = (syllabusId, moduleId, fields, options = {}) => apiFetch(`${materialsPath}/syllabi/${materialId(syllabusId)}/modules/${materialId(moduleId)}/missions`, { method: 'POST', body: JSON.stringify(fields), timeoutMs: 30000, ...options });
 export const recordLearningActivity = (id, fields = {}, options = {}) => apiFetch(`${materialsPath}/activities/${materialId(id)}/progress`, { method: 'POST', body: JSON.stringify(fields), timeoutMs: 20000, ...options });
 export const launchLearningActivity = (id, options = {}) => apiFetch(`${materialsPath}/activities/${materialId(id)}/launch`, { method: 'POST', body: '{}', timeoutMs: 30000, ...options });
 export const submitLearningQuiz = (id, answers, options = {}) => apiFetch(`${materialsPath}/activities/${materialId(id)}/submit-quiz`, { method: 'POST', body: JSON.stringify({ answers }), timeoutMs: 30000, ...options });

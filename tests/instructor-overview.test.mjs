@@ -8,7 +8,7 @@ import { buildInstructorOverview } from '../backend/services/instructorOverview.
 
 const source = readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const templateStart = source.indexOf('<section v-show="instructorTab === \'overview\'" class="instructor-overview"');
-const templateEnd = source.indexOf('<section v-show="instructorTab === \'missions\'"', templateStart);
+const templateEnd = source.indexOf('<!-- Pending Approvals -->', templateStart);
 const { code } = compile(source.slice(templateStart, templateEnd), { mode: 'function', prefixIdentifiers: true });
 const render = new Function('Vue', code)(Vue);
 const bindingStart = source.indexOf('// The instructor overview always uses');

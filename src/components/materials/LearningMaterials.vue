@@ -42,9 +42,8 @@
         </div>
         <div v-else-if="!selected" class="lm-empty"><BookOpen :size="36" /><h3>{{ search || filter ? 'No matching syllabi' : 'No syllabi yet' }}</h3><p>{{ manager ? 'Create a syllabus and upload its PDF to start your course library.' : 'Your instructor’s uploaded course materials will appear here.' }}</p></div>
         <p v-else-if="preview && selected.published === false" class="lm-empty">This course is unpublished. Students will see it after you publish it.</p>
-        <CourseOutline v-else :syllabus="selected" :official="official" :focused-lesson-id="lessonId" :modules="modules" :activities="activities" :progress="preview ? {} : courseProgress" :manager="manager && !preview" :preview="preview" :busy="busy" @select-lesson="selectLesson" @open="openActivity" @edit-section="edit" @remove-section="confirmDelete" @add-activity="addActivity" @edit-activity="item => edit('activity', item)" @remove-activity="item => confirmDelete('activity', item)" @move-activity="moveActivity" @move-module="move" />
+        <CourseOutline v-else :mission-authoring="role === 'instructor' && !preview" :mission-quiz-label="missionQuizLabel" :mission-quizzes-loading="missionQuizzesLoading" @create-mission="createModuleMission" @edit-mission="editModuleMission" @edit-mission-quiz="item => emit('edit-mission-quiz', { missionId: item.targetId, title: item.title })" :syllabus="selected" :official="official" :focused-lesson-id="lessonId" :modules="modules" :activities="activities" :progress="preview ? {} : courseProgress" :manager="manager && !preview" :preview="preview" :busy="busy" @select-lesson="selectLesson" @open="openActivity" @edit-section="edit" @remove-section="confirmDelete" @add-activity="addActivity" @edit-activity="item => edit('activity', item)" @remove-activity="item => confirmDelete('activity', item)" @move-activity="moveActivity" @move-module="move" />
       </template>
-      <slot v-if="!selected && role === 'student'" name="missions" />
     </template>
     <Teleport to="body">
       <div v-if="editor || removal" class="lm-modal-backdrop" @click.self="closeModal" @keydown.esc="closeModal">
@@ -63,7 +62,7 @@
               <label v-if="editor.kind === 'module'">Module number<input v-model.number="form.moduleNumber" type="number" min="1" max="999" required :disabled="busy" :readonly="!!editor.officialSectionId" /></label>
               <template v-if="editor.kind === 'activity' && ['simulation', 'quiz'].includes(form.type)">
                 <label>{{ form.type === 'simulation' ? 'Assigned mission' : 'Assigned quiz' }}<select v-model="form.targetId" required :disabled="busy"><option value="" disabled>Select an existing {{ form.type === 'simulation' ? 'mission' : 'quiz' }}</option><option v-for="item in form.type === 'simulation' ? catalog.missions : catalog.quizzes" :key="item.id" :value="item.id">{{ item.title }}</option></select></label>
-                <p v-if="!(form.type === 'simulation' ? catalog.missions : catalog.quizzes).length" class="lm-alert">Create a {{ form.type === 'simulation' ? 'mission in Mission Management' : 'quiz in Quiz Management' }} first, then link it here.</p>
+                <p v-if="!(form.type === 'simulation' ? catalog.missions : catalog.quizzes).length" class="lm-alert">{{ form.type === 'simulation' ? 'Use Create mission in this module to make and assign a new mission.' : 'Create a quiz from the module’s mission controls first.' }}</p>
                 <label>Activity instructions<textarea v-model="form.instructions" rows="4" maxlength="5000" :disabled="busy" /></label>
                 <template v-if="form.type === 'simulation'"><p class="lm-alert">{{ PRACTICAL_ALIGNMENT[modules.find(m => m.id === form.moduleId)?.officialSectionId]?.guidance || 'Choose a mission whose actual objectives match this lesson.' }}</p><label>Quiz after successful docking<select v-model="form.quizPolicy" :disabled="busy"><option value="inherit">Use the mission’s assigned quiz, if published</option><option value="none">No quiz — show simulation results</option><option value="assigned">Assign a specific instructor quiz</option></select></label><label v-if="form.quizPolicy === 'assigned'">Assigned quiz<select v-model="form.quizId" required :disabled="busy"><option value="" disabled>Choose a quiz</option><option v-for="quiz in catalog.quizzes" :key="quiz.id" :value="quiz.id">{{ quiz.title }}</option></select></label></template>
                 <label>Completion requirement<select v-model="form.completionRule" :disabled="busy"><option value="complete">Complete the activity</option><option value="pass">Complete and meet the passing requirement</option></select></label>
@@ -96,8 +95,8 @@ import { OFFICIAL_SYLLABUS, OFFICIAL_SYLLABUS_KEY, PRACTICAL_ALIGNMENT } from '.
 import './materials.css';
 import './course.css';
 const PdfDocumentViewer = defineAsyncComponent(() => import('./PdfDocumentViewer.vue'));
-const props = defineProps({ currentUser: { type: Object, required: true }, role: { type: String, required: true }, initialCourseId: { type: String, default: '' }, initialLessonId: { type: String, default: '' }, prepareAccess: { type: Function, default: async () => {} } });
-const emit = defineEmits(['navigate-course', 'launch-simulation', 'launch-quiz']);
+const props = defineProps({ currentUser: { type: Object, required: true }, role: { type: String, required: true }, missionQuizLabel: { type: Function, default: () => 'Create / edit quiz' }, missionQuizzesLoading: Boolean, initialCourseId: { type: String, default: '' }, initialLessonId: { type: String, default: '' }, prepareAccess: { type: Function, default: async () => {} } });
+const emit = defineEmits(['create-mission', 'edit-mission', 'edit-mission-quiz', 'navigate-course', 'launch-simulation', 'launch-quiz']);
 const manager = computed(() => ['instructor', 'admin'].includes(props.role));
 const syllabi = ref([]), modules = ref([]), instructors = ref([]), selected = ref(null), document = ref(null);
 const activities = ref([]), courseProgress = ref({}), catalog = ref({ missions: [], quizzes: [] }), preview = ref(false), activityDetail = ref(null);
@@ -133,6 +132,23 @@ const open = id => load(id);
 const refresh = () => load(selected.value?.id);
 function back() { selected.value = null; lessonId.value = ''; modules.value = []; activities.value = []; preview.value = false; notice.value = ''; emit('navigate-course', { syllabusId: '', lessonId: '' }); load(); }
 function selectLesson(id) { lessonId.value = id; emit('navigate-course', { syllabusId: selected.value.id, lessonId: id }); }
+function missionContext(moduleId, item = {}) {
+  const module = modules.value.find(module => module.id === moduleId);
+  if (props.role !== 'instructor' || preview.value || !selected.value || !module) return null;
+  const ticket = identity, syllabusId = selected.value.id;
+  return { syllabusId, syllabusTitle: selected.value.title, moduleId, moduleTitle: module.title, description: module.description || '',
+    missionId: item.targetId, activityId: item.id, revision: item.revision, published: item.published !== false,
+    availableFrom: item.availableFrom, availableUntil: item.availableUntil,
+    onSaved: async () => { if (ticket === identity && selected.value?.id === syllabusId) { notice.value = 'Mission saved in this module.'; await load(syllabusId); } } };
+}
+function createModuleMission(moduleId) {
+  const context = missionContext(moduleId);
+  if (context) emit('create-mission', context);
+}
+function editModuleMission(item) {
+  const context = missionContext(item.moduleId, item);
+  if (context) emit('edit-mission', context);
+}
 function openActivity(item) {
   error.value = '';
   if (item.moduleId) selectLesson(item.moduleId);

@@ -90,6 +90,16 @@ test('catalog failures stop loading and show an error instead of pretending no m
   assert.deepEqual(view.trainingModules.value.map(m => m.id), ['ma']);
 });
 
+test('clearing a mission schedule removes the cached date lock when the catalog refreshes', async () => {
+  let mission = { ...ma, opendate: '2026-12-01T00:00:00Z', deadline: '2026-12-15T00:00:00Z' };
+  const view = page({ getAllMissions: async () => ({ missions: [mission] }) });
+  await view.loadMissionDatesFromFirestore();
+  assert.equal(view.progressData.value.moduleSchedule.ma.openDate, mission.opendate);
+  mission = { ...ma, opendate: null, deadline: null };
+  await view.loadMissionDatesFromFirestore();
+  assert.deepEqual(view.progressData.value.moduleSchedule.ma, { openDate: '', deadline: '' });
+});
+
 test('login passes the server-issued session on mission requests and clears it on logout or failed account switch', async () => {
   const originalFetch = globalThis.fetch;
   const originalError = console.error;

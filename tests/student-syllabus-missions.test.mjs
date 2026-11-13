@@ -6,97 +6,99 @@ import * as Vue from 'vue';
 import { renderToString } from '@vue/server-renderer';
 import { compile } from '@vue/compiler-dom';
 import { parse } from '@vue/compiler-sfc';
-import { BookOpen, Search, RefreshCw, ArrowLeft, Eye, Plus, FolderOpen, ChevronRight, X, Upload } from '@lucide/vue';
+import { Anchor, ArrowDown, ArrowLeft, ArrowUp, BookOpen, ChevronDown, Megaphone, Pencil, Plus, Trash2 } from '@lucide/vue';
 
 const app = readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-const materials = readFileSync(new URL('../src/components/materials/LearningMaterials.vue', import.meta.url), 'utf8');
-const slotStart = app.indexOf('<section class="student-syllabus-missions"');
-const slotTemplate = app.slice(slotStart, app.indexOf('</section>', slotStart) + '</section>'.length);
-const render = template => new Function('Vue', compile(template, { mode: 'function', prefixIdentifiers: true }).code)(Vue);
-const mission = { id: 'harbor', title: 'Harbor Navigation', difficulty: 'Beginner', description: 'Follow the buoys and dock.', duration: '10 minutes', xpReward: 100 };
+const outline = readFileSync(new URL('../src/components/materials/CourseOutline.vue', import.meta.url), 'utf8');
+const materials = readFileSync(new URL('../src/components/materials/LearningMaterials.vue', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+const render = new Function('Vue', compile(parse(outline).descriptor.template.content, { mode: 'function', prefixIdentifiers: true }).code)(Vue);
+const modules = [{ id: 'first', title: 'Navigation', moduleNumber: 1 }, { id: 'second', title: 'Docking', moduleNumber: 2 }];
 
-async function library({ catalogError = '', modules = [mission], selected = null, materialsError = '', ready = true } = {}) {
-  const MissionSection = { render: render(slotTemplate), setup: () => ({
-    trainingModules: modules, missionCatalogLoading: false, missionCatalogError: catalogError,
-    startingSyllabusMission: '', syllabusMissionError: '', refreshStudentMissions() {},
-    isModuleFullyComplete: () => false, isModuleLockedForStudent: () => false,
-    displayModuleLevel: () => 'Level 1', trainingDifficultyClass: () => '', moduleLockMessage: () => '',
-    getModuleSchedule: () => ({}), getMissionsForModule: id => [{ id: `CUSTOM-${id}`, passScore: 70 }],
-    missionCardClass: () => '', isMissionLocked: () => false, getMissionResult: () => null,
-    missionActionLabel: () => 'Start →', launchSyllabusMission() {}
-  }) };
-  const Library = {
-    render: render(parse(materials).descriptor.template.content),
-    components: { BookOpen, Search, RefreshCw, ArrowLeft, Eye, Plus, FolderOpen, ChevronRight, X, Upload,
-      PdfDocumentViewer: { render: () => null }, CourseOutline: { render: () => Vue.h('div', 'Course lessons') } },
-    setup: () => ({ document: null, activityDetail: null, role: 'student', manager: false, selected,
-      busy: false, loading: false, ready, search: '', filter: '', visibleSyllabi: [],
-      error: materialsError, notice: '', cleanupPending: false, editor: null, removal: null,
-      preview: false, official: null, lessonId: '', modules: [], activities: [], courseProgress: {},
-      refresh() {}, back() {}, selectLesson() {}, openActivity() {}, edit() {}, confirmDelete() {}, addActivity() {}, moveActivity() {}, move() {} })
-  };
-  return renderToString(Vue.createSSRApp({ render: () => Vue.h(Library, {}, { missions: () => Vue.h(MissionSection) }) }));
+async function course(manager) {
+  return renderToString(Vue.createSSRApp({ render,
+    components: { Anchor, ArrowDown, ArrowLeft, ArrowUp, BookOpen, ChevronDown, Megaphone, Pencil, Plus, Trash2,
+      CourseActivityRow: { render: () => null }, OfficialSyllabusMatrix: { render: () => null } },
+    setup: () => ({ syllabus: { title: 'Maritime Training' }, visibleModules: modules, displayedModules: modules,
+      official: null, focusedLessonId: '', manager, missionAuthoring: manager, missionQuizzesLoading: false, missionQuizLabel: () => 'Create Quiz',
+      busy: false, collapsed: {}, allCollapsed: false, rows: () => [], officialSection: () => null, PRACTICAL_ALIGNMENT: {}, toggle() {}, toggleAll() {} })
+  }));
 }
 
-test('students can see and start class missions inside the syllabus library even without an uploaded syllabus', async () => {
-  const html = await library();
-  assert.match(html, /No syllabi yet/);
-  assert.match(html, /Your missions/);
-  assert.match(html, /Harbor Navigation/);
-  assert.match(html, /Start →/);
-  const studentNav = app.slice(app.indexOf('<nav class="hub-sidebar-nav" aria-label="Training sections"'), app.indexOf('<!-- Main content -->', app.indexOf('id="student-navigation"')));
-  assert.doesNotMatch(studentNav, /selectHubTab\('missions'\)/);
-  assert.match(studentNav, /selectHubTab\('materials'\)/);
+test('each instructor module has Create mission; students get course content without mission authoring or a separate sidebar tab', async () => {
+  assert.equal((await course(true)).match(/Create mission/g).length, 2);
+  assert.doesNotMatch(await course(false), /Create mission/);
+  const navStart = app.indexOf('<nav class="hub-sidebar-nav" aria-label="Instructor sections"');
+  assert.doesNotMatch(app.slice(navStart, app.indexOf('</nav>', navStart)), /selectInstructorTab\('missions'\)/);
+  assert.doesNotMatch(app, /instructorTab === 'missions'|template #missions/);
 });
 
-test('missions remain reachable when the document library fails; catalog failure has a retry instead of a false empty state', async () => {
-  assert.match(await library({ materialsError: 'Documents unavailable', ready: false }), /Harbor Navigation/);
-  const failed = await library({ catalogError: 'Unable to load your missions.', modules: [] });
-  assert.match(failed, /Unable to load your missions/);
-  assert.match(failed, /Refresh missions/);
-  assert.doesNotMatch(failed, /has not shared any missions/);
-  assert.match(await library({ modules: [] }), /has not shared any missions/);
-  assert.doesNotMatch(await library({ selected: { id: 'course', title: 'Navigation' } }), /Your missions/);
+function extract(source, name) {
+  let start = source.indexOf(`function ${name}(`);
+  if (source.slice(start - 6, start) === 'async ') start -= 6;
+  assert.ok(start >= 0, name);
+  return source.slice(start, source.indexOf('\n}', start) + 2);
+}
+
+test('module context carries the exact course, module and saved activity and ignores callbacks after navigating away', async () => {
+  const loaded = [], context = { props: { role: 'instructor' }, preview: Vue.ref(false), modules: Vue.ref(modules),
+    selected: Vue.ref({ id: 'course', title: 'Course' }), identity: 1, notice: Vue.ref(''), load: async id => loaded.push(id) };
+  vm.createContext(context); vm.runInContext(extract(materials, 'missionContext'), context);
+  const link = context.missionContext('second', { id: 'activity', targetId: 'existing', revision: 3 });
+  assert.equal(link.moduleId, 'second'); assert.equal(link.syllabusId, 'course');
+  assert.equal(link.activityId, 'activity'); assert.equal(link.missionId, 'existing');
+  await link.onSaved(); assert.deepEqual(loaded, ['course']);
+  context.identity++; await link.onSaved(); assert.equal(loaded.length, 1);
+  context.props.role = 'student'; assert.equal(context.missionContext('first'), null);
 });
 
-function launcher(overrides = {}) {
-  const launches = [];
-  const context = {
-    currentUser: Vue.ref({ id: 'student' }), userRole: Vue.ref('student'), isStudentPending: Vue.ref(false),
-    startingSyllabusMission: Vue.ref(''), syllabusMissionError: Vue.ref(''), missionCatalogError: Vue.ref(''),
-    activeCoursePractical: Vue.ref({ activityId: 'old-lesson' }), loadMissionDatesFromFirestore: async () => {},
-    findMissionForModule: id => id === mission.id ? mission : null, isMissionLocked: () => false,
-    moduleLockMessage: () => 'Not open yet', startMissionSimulation: async item => launches.push(item), ...overrides
-  };
-  const start = app.indexOf('async function launchSyllabusMission(');
+function editorPage(saveModuleMission) {
+  const notifications = [], refreshes = [];
+  const context = { currentUser: Vue.ref({ id: 'teacher' }), userRole: Vue.ref('instructor'),
+    missionEditorModal: Vue.ref(null), missionEditorError: Vue.ref(''), missionSaving: Vue.ref(false),
+    trainingModules: Vue.ref([]), progressData: Vue.ref({}), Date, console: { log() {}, error() {} },
+    firebaseApi: { saveModuleMission }, window: { firebaseApi: { createMission: () => assert.fail('Must save through the module API') } },
+    ensureMissionBuoySteps() {}, saveProgress() {}, persistMissionQuiz: async () => {}, showAchievement: text => notifications.push(text) };
   vm.createContext(context);
-  vm.runInContext(app.slice(start, app.indexOf('\n}', start) + 2), context);
-  return { context, launches, start: context.launchSyllabusMission };
+  vm.runInContext(['openMissionCreator', 'openCourseMissionCreator', 'addMissionBuoy', 'saveMissionEditor'].map(name => extract(app, name)).join('\n'), context);
+  context.openCourseMissionCreator({ syllabusId: 'course', syllabusTitle: 'Course', moduleId: 'second', moduleTitle: 'Docking', onSaved: async () => refreshes.push(true) });
+  context.addMissionBuoy();
+  return { context, refreshes, notifications };
 }
 
-test('mission launch refreshes access, clears old lesson context and preserves lock/deletion guards', async () => {
-  const page = launcher();
-  await page.start('harbor');
-  assert.equal(page.launches.length, 1);
-  assert.equal(page.launches[0], mission);
-  assert.equal(page.context.activeCoursePractical.value, null);
-  await page.start('deleted');
-  assert.equal(page.launches.length, 1);
-  assert.match(page.context.syllabusMissionError.value, /no longer available/);
-  page.context.isMissionLocked = () => true;
-  await page.start('harbor');
-  assert.equal(page.launches.length, 1);
-  assert.equal(page.context.syllabusMissionError.value, 'Not open yet');
+test('Save Mission uses the originating module API and refreshes that syllabus instead of creating an unlinked mission', async () => {
+  const requests = [];
+  const page = editorPage(async (...args) => { requests.push(args); return { activityId: 'linked', revision: 1 }; });
+  const id = page.context.missionEditorModal.value.data.id;
+  await page.context.saveMissionEditor();
+  assert.equal(requests.length, 1); assert.equal(requests[0][0], 'course'); assert.equal(requests[0][1], 'second');
+  assert.equal(requests[0][2].missionId, id); assert.equal(requests[0][2].published, true);
+  assert.equal(page.context.trainingModules.value.length, 1); assert.equal(page.refreshes.length, 1);
+  assert.equal(page.context.missionEditorModal.value, null);
 });
 
-test('double clicks and switching student accounts during mission refresh cannot launch twice or leak into a new account', async () => {
+test('failed module saves keep the editor and mission ID for retry; late saves cannot update another instructor', async () => {
+  let fail = true;
+  const page = editorPage(async () => { if (fail) throw new Error('Offline'); return { activityId: 'linked', revision: 1 }; });
+  const draft = page.context.missionEditorModal.value;
+  await page.context.saveMissionEditor();
+  assert.equal(page.context.missionEditorModal.value, draft);
+  assert.match(page.context.missionEditorError.value, /Offline/);
+  assert.equal(page.context.trainingModules.value.length, 0);
+  fail = false; await page.context.saveMissionEditor(); assert.equal(page.context.trainingModules.value.length, 1);
   let release;
-  const page = launcher({ loadMissionDatesFromFirestore: () => new Promise(resolve => { release = resolve; }) });
-  const pending = page.start('harbor');
-  await page.start('harbor');
-  page.context.currentUser.value = { id: 'other' };
-  release(); await pending;
-  assert.equal(page.launches.length, 0);
-  assert.equal(page.context.startingSyllabusMission.value, '');
-  assert.equal(page.context.syllabusMissionError.value, '');
+  const late = editorPage(() => new Promise(resolve => { release = resolve; }));
+  const pending = late.context.saveMissionEditor();
+  late.context.currentUser.value = { id: 'other' };
+  release({ activityId: 'linked', revision: 1 }); await pending;
+  assert.equal(late.context.trainingModules.value.length, 0); assert.equal(late.refreshes.length, 0);
+});
+
+test('editing a linked mission retains the activity schedule in the mission editor', async () => {
+  const context = { currentUser: Vue.ref({ id: 'teacher' }), userRole: Vue.ref('instructor'), missionSaving: Vue.ref(false),
+    missionCatalogError: Vue.ref(''), trainingModules: Vue.ref([{ id: 'existing' }]), missionEditorModal: Vue.ref(null),
+    loadMissionDatesFromFirestore: async () => {}, openMissionEditor: () => { context.missionEditorModal.value = { data: {} }; }, showAchievement() {} };
+  vm.createContext(context); vm.runInContext(extract(app, 'openCourseMissionEditor'), context);
+  await context.openCourseMissionEditor({ missionId: 'existing', availableFrom: '2026-12-01T08:00:00Z', availableUntil: '2026-12-10T08:00:00Z' });
+  assert.match(context.missionEditorModal.value.data.openDate, /^2026-12-01T/);
+  assert.match(context.missionEditorModal.value.data.deadline, /^2026-12-10T/);
 });

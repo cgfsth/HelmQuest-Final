@@ -92,6 +92,61 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     await context(user, id);
     return { ...detail, activities, progress, ...choices, official: detail.syllabus.officialSyllabusKey === OFFICIAL_SYLLABUS_KEY ? OFFICIAL_SYLLABUS : null, cleanupPending: !!detail.cleanupPending || (user.role !== 'student' && docs.docs.some(doc => doc.data().status === 'deleting' || doc.data().pendingFileDeletes?.length)) };
   }
+  async function saveModuleMission(user, syllabusId, moduleId, body) {
+    if (user.role !== 'instructor') fail(403, 'Only instructors can create module missions.');
+    if (!validId(body.missionId) || !moduleId) fail(400, 'Choose a module and a valid mission.');
+    const { parent } = await context(user, syllabusId, moduleId, true);
+    const input = body.mission || {};
+    const title = clean(input.mission_title, 180, true);
+    const duration = clean(input.estimated_duration, 100, true);
+    const description = clean(input.description || '', 2500);
+    if (!Number.isFinite(input.xp_reward) || input.xp_reward < 0 || !Number.isFinite(input.pass_score) || input.pass_score < 0 || input.pass_score > 100) fail(400, 'Provide valid XP and a passing score from 0 to 100.');
+    if (!Array.isArray(input.bouy) || !input.bouy.length || !Array.isArray(input.steps)) fail(400, 'Add at least one buoy checkpoint.');
+    if (!Array.isArray(input.learning_objectives) || input.learning_objectives.some(value => typeof value !== 'string') || input.learning_objectives.join('\n').length > 2500) fail(400, 'Provide valid learning objectives of 2500 characters or fewer.');
+    for (const value of [input.opendate, input.deadline]) if (value && !Number.isFinite(Date.parse(value))) fail(400, 'Choose valid mission dates.');
+    if (input.opendate && input.deadline && Date.parse(input.opendate) >= Date.parse(input.deadline)) fail(400, 'The deadline must be after the opening date.');
+    const missionRef = ref('missions', body.missionId);
+    const activityId = body.activityId || 'mission-' + createHash('sha256').update(JSON.stringify([syllabusId, moduleId, body.missionId])).digest('hex');
+    const activityRef = ref('learning_activities', activityId);
+    let savedRevision;
+    await db.runTransaction(async tx => {
+      const course = await tx.get(parent), module = await tx.get(ref('syllabus_modules', moduleId));
+      const mission = await tx.get(missionRef), linked = await tx.get(activityRef);
+      const siblings = await tx.get(col('learning_activities').where('syllabusId', '==', syllabusId));
+      if (!course.exists || course.data().status !== 'active' || !canManageSyllabus(course.data(), user) || course.data().instructorId !== user.id) fail(404, 'Course not found.');
+      if (!module.exists || module.data().status !== 'active' || module.data().syllabusId !== syllabusId) fail(404, 'Module not found.');
+      const old = linked.exists ? linked.data() : null;
+      if (body.activityId) {
+        if (!old || old.status !== 'active' || old.type !== 'simulation' || old.syllabusId !== syllabusId || old.moduleId !== moduleId || old.targetId !== body.missionId || !mission.exists || missionOwner(mission.data()) !== user.id) fail(404, 'Module mission not found.');
+        checkRevision(old, body.revision);
+      } else if (mission.exists || linked.exists) {
+        // The client keeps the same mission ID when retrying a lost response.
+        if (mission.exists && missionOwner(mission.data()) === user.id && old?.status === 'active' && old.syllabusId === syllabusId && old.moduleId === moduleId && old.targetId === body.missionId) {
+          savedRevision = old.revision; return;
+        }
+        fail(409, 'This mission already exists. Link it as an existing mission instead.');
+      }
+      const now = timestamp();
+      const missionData = { ...input, mission_title: title, description, estimated_duration: duration,
+        instructorId: user.id, instructorid: user.id, createdBy: mission.data()?.createdBy || user.id,
+        createdAt: mission.data()?.createdAt || now, updatedAt: now,
+        syllabusId: mission.data()?.syllabusId || syllabusId, syllabusModuleId: mission.data()?.syllabusModuleId || moduleId };
+      delete missionData.id;
+      savedRevision = (old?.revision || 0) + 1;
+      const activityData = { ...(old || {}), type: 'simulation', syllabusId, moduleId, title,
+        description, objectives: (input.learning_objectives || []).join('\n'), instructions: old?.instructions || '',
+        targetId: body.missionId, targetTitle: title, completionRule: old?.completionRule || 'pass', passScore: old?.passScore ?? null,
+        quizPolicy: old?.quizPolicy || 'inherit', quizId: old?.quizId || '',
+        availableFrom: input.opendate || null, availableUntil: input.deadline || null,
+        published: body.published !== false, status: 'active', revision: savedRevision,
+        order: old?.order ?? siblings.docs.filter(doc => doc.data().status === 'active' && doc.data().moduleId === moduleId).length,
+        createdBy: old?.createdBy || user.id, createdAt: old?.createdAt || now, updatedAt: now };
+      if (mission.exists) tx.update(missionRef, missionData); else tx.create(missionRef, missionData);
+      if (linked.exists) tx.update(activityRef, activityData); else tx.create(activityRef, activityData);
+      tx.update(parent, { revision: course.data().revision + 1, updatedAt: now });
+    });
+    return { missionId: body.missionId, activityId, revision: savedRevision };
+  }
   async function save(user, syllabusId, moduleId, id, body, file) {
     if (!['instructor', 'admin'].includes(user.role)) fail(403, 'Students have read-only access.');
     const existing = id ? await activity(user, id, true) : null;
@@ -335,5 +390,5 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
       missionId: item.data.targetId, moduleId: item.data.targetId, quizId: current.quiz.id, quizTitle: current.quiz.title || 'Quiz',
       ...grade, status: 'graded', completedAt: new Date() }, { allowAfterSimulation: true });
   }
-  return { course, catalog, save, remove, reorder, pdf, record, launch, submitQuiz, completeSimulation, practicalQuiz, submitPracticalQuiz };
+  return { course, catalog, saveModuleMission, save, remove, reorder, pdf, record, launch, submitQuiz, completeSimulation, practicalQuiz, submitPracticalQuiz };
 }

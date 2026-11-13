@@ -27,6 +27,9 @@
 .lc-expand-enter-active,.lc-expand-leave-active { transition:opacity .16s ease,transform .16s ease; }.lc-expand-enter-from,.lc-expand-leave-to { opacity:0; transform:translateY(-4px); }
 .lm .lc-section-toggle h3 { font-size:clamp(1rem,1.5vw,1.24rem); line-height:1.45; }
 .lc-section-content { border-top:1px solid var(--lm-border); padding:16px 0 20px; }
+.lm .lc-create-mission { margin-top:16px; }
+.lc-mission-tools { display:flex; gap:6px; flex-wrap:wrap; }
+.lm .lc-mission-tools button { font-size:.76rem; padding:8px 10px; }
 .lc-section-tools,.lc-row-tools { display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
 .lm .lc-section-tools button,.lm .lc-row-tools button { min-height:34px; padding:7px; font-size:.76rem; border-color:transparent; background:transparent; }
 .lc-activity { display:flex; align-items:center; gap:14px; border:1px solid var(--lm-border); border-radius:12px; background:var(--lm-surface); margin-top:10px; transition:border-color .18s,box-shadow .18s; min-width:0; }
