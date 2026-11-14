@@ -6,6 +6,7 @@ import * as Vue from 'vue';
 import { renderToString } from '@vue/server-renderer';
 import { compile } from '@vue/compiler-dom';
 import { parse } from '@vue/compiler-sfc';
+import { normalizeEncounter } from '../shared/vesselEncounter.js';
 import { Anchor, ArrowDown, ArrowLeft, ArrowUp, BookOpen, ChevronDown, Megaphone, Pencil, Plus, Trash2 } from '@lucide/vue';
 
 const app = readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
@@ -60,7 +61,7 @@ test('module context carries the exact course, module and saved activity and ign
 
 function editorPage(saveModuleMission) {
   const notifications = [], refreshes = [];
-  const context = { currentUser: Vue.ref({ id: 'teacher' }), userRole: Vue.ref('instructor'),
+  const context = { normalizeEncounter, currentUser: Vue.ref({ id: 'teacher' }), userRole: Vue.ref('instructor'),
     missionEditorModal: Vue.ref(null), missionEditorError: Vue.ref(''), missionSaving: Vue.ref(false),
     trainingModules: Vue.ref([]), progressData: Vue.ref({}), Date, console: { log() {}, error() {} },
     firebaseApi: { saveModuleMission }, window: { firebaseApi: { createMission: () => assert.fail('Must save through the module API') } },

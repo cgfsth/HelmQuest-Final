@@ -74,7 +74,7 @@ export const PRACTICAL_ALIGNMENT = {
   'lesson-1': { guidance: 'Primarily theoretical. Assign a mission only when its objectives support this lesson.', tags: [] },
   'lesson-2': { guidance: 'Use an introductory heading or vessel-control mission when its objectives match navigation terminology.', tags: ['heading', 'compass', 'steering'] },
   'lesson-3': { guidance: 'Review route, waypoint, latitude/longitude, distance and bearing objectives. The existing chart is a training display, not an assessment of every chart projection.', tags: ['waypoint', 'latitude', 'longitude', 'route', 'bearing', 'buoy'] },
-  'lesson-4': { guidance: 'Review collision avoidance, safe maneuvering and navigation-light objectives. A complete moving-vessel COLREG encounter evaluator is not implemented.', tags: ['collision', 'safety', 'maneuver', 'light'] },
+  'lesson-4': { guidance: 'Use anchored-vessel avoidance or basic red/green crossing exercises for collision avoidance, safe maneuvering and navigation-light objectives. Crossing exercises cover ordinary power-driven vessels in sight, not every COLREG encounter.', tags: ['collision', 'safety', 'maneuver', 'light'] },
   'lesson-5': { guidance: 'Existing vessel handling, anchoring, docking and lights may support selected objectives. Knot tying and nautical-flag exercises are not implemented.', tags: ['anchor', 'dock', 'handling', 'light'] },
   'lesson-6': { guidance: 'Use only a safety-related mission with matching objectives. Full SOLAS chapter assessment, lifeboat and rescue drills are not implemented.', tags: ['safety', 'emergency', 'weather', 'collision'] }
 };

@@ -278,9 +278,9 @@ class IntegratedPerformanceManager extends PerformanceManager {
     return {
       steering: Math.round(this.state.steeringScore),
       course: Math.round(this.state.courseScore),
-      docking: this.state.dockingScore ? Math.round(this.state.dockingScore) : null,
-      time: this.state.timeScore ? Math.round(this.state.timeScore) : null,
-      overall: this.state.overallScore ? Math.round(this.state.overallScore) : null
+      docking: this.state.dockingScore != null ? Math.round(this.state.dockingScore) : null,
+      time: this.state.timeScore != null ? Math.round(this.state.timeScore) : null,
+      overall: this.state.overallScore != null ? Math.round(this.state.overallScore) : null
     };
   }
   

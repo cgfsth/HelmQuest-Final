@@ -185,7 +185,7 @@ for (const review of [false, true]) {
       { id: 'port', x: 0, z: 0, radius: 40, label: 'Return to port' },
     ];
     const context = {
-      Math, boatObject: boat, tacticalChartCanvas: { value: canvas },
+      Math, vesselEncounterState: null, boatObject: boat, tacticalChartCanvas: { value: canvas },
       tacticalChartCanvasEl: null, tacticalChartCtx: null,
       helmRadarDisplay: null, helmRadarBoat: null, helmRadarSourceCanvas: null,
       helmRadarReady: { value: false },

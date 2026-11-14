@@ -139,7 +139,7 @@ function missionContext(moduleId, item = {}) {
   const module = modules.value.find(module => module.id === moduleId);
   if (props.role !== 'instructor' || preview.value || !selected.value || !module) return null;
   const ticket = identity, syllabusId = selected.value.id;
-  return { syllabusId, syllabusTitle: selected.value.title, moduleId, moduleTitle: module.title, description: module.description || '',
+  return { syllabusId, syllabusTitle: selected.value.title, moduleId, moduleTitle: module.title, officialSectionId: module.officialSectionId || '', description: module.description || '',
     missionId: item.targetId, activityId: item.id, revision: item.revision, published: item.published !== false,
     availableFrom: item.availableFrom, availableUntil: item.availableUntil,
     onSaved: async () => { if (ticket === identity && selected.value?.id === syllabusId) { notice.value = 'Mission saved in this module.'; await load(syllabusId); } } };

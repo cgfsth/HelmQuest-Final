@@ -160,7 +160,7 @@ test('restored quiz counts work without question data and retain a zero score', 
   assert.equal(entries[0].score, 0);
   assert.equal(findCompletedQuizSubmission(entries, { studentId: 'other', moduleId: 'module' }), null);
   const start = source.indexOf('  // Reuse the completed quiz on every mission retry');
-  const end = source.indexOf('  // Calculate mission score using NEW 4-METRIC SYSTEM', start);
+  const end = source.indexOf('  // Calculate the shared practical score', start);
   const counts = new Function('currentUser', 'progressData', 'module', 'mission', 'findCompletedQuizSubmission', 'quizScoreCounts',
     `${source.slice(start, end)}\nreturn { quizCorrect, quizTotal };`)(
       { value: { id: 'student' } }, { value: { quizSubmissions: entries } },

@@ -4,7 +4,8 @@ import { canonicalMissionId, hasMissionCompletion } from './missionRewards.js';
 import { missionOwner } from '../../shared/missionAccess.js';
 import { createPresentationPreview } from './presentationPreview.js';
 import { OFFICIAL_SYLLABUS, OFFICIAL_SYLLABUS_KEY } from '../../shared/officialSyllabus.js';
-import { simulationPerformance, validDockingCompletion } from '../../shared/simulationPerformance.js';
+import { simulationPerformance, validDockingCompletion, completedSimulationScores } from '../../shared/simulationPerformance.js';
+import { normalizeEncounter, validEncounterResult } from '../../shared/vesselEncounter.js';
 import { selectMissionQuiz, gradeMissionQuiz } from '../../shared/missionQuiz.js';
 
 const fail = (status, message) => { throw new MaterialsError(status, message); };
@@ -125,6 +126,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     if (!validId(body.missionId) || !moduleId) fail(400, 'Choose a module and a valid mission.');
     const { parent } = await context(user, syllabusId, moduleId, true);
     const input = body.mission || {};
+    try { input.encounter = normalizeEncounter(input.encounter); } catch (error) { fail(400, error.message); }
     const title = clean(input.mission_title, 180, true);
     const duration = clean(input.estimated_duration, 100, true);
     const description = clean(input.description || '', 2500);
@@ -388,17 +390,24 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     await requireViewedModulePdfs(user, item);
     if (!validDockingCompletion(body.completion)) fail(409, 'Complete all mission objectives, dock in the assigned port, stop the engine and deploy the anchor first.');
     let performance;
-    try { performance = simulationPerformance(body.scores || {}, Number(item.mission.data().pass_score ?? item.mission.data().passScore ?? 70)); }
-    catch (error) { fail(400, error.message); }
+    let encounter;
+    try {
+      const config = normalizeEncounter(item.mission.data().encounter);
+      encounter = body.encounter || null;
+      if (!validEncounterResult(config, encounter)) fail(409, 'Finish the assigned vessel-avoidance exercise before reporting.');
+      performance = simulationPerformance(completedSimulationScores(body.scores || {}, body.completion, encounter), Number(item.mission.data().pass_score ?? item.mission.data().passScore ?? 70));
+      if (!performance.assessmentComplete) fail(409, 'Some performance criteria were not recorded. Complete the practical exercise before reporting.');
+    }
+    catch (error) { if (error instanceof MaterialsError) throw error; fail(400, error.message); }
     if (!saveMissionResult) fail(503, 'Mission saving is not configured.');
     return saveMissionResult({ studentId: user.id, missionId: item.data.targetId, missionTitle: item.mission.data().mission_title || item.mission.data().title || item.data.title,
-      ...performance, completion: { ...body.completion, verified: true }, lessonId: item.data.moduleId, syllabusId: item.data.syllabusId, activityId: id, completedAt: new Date() });
+      ...performance, encounter, completion: { ...body.completion, verified: true }, lessonId: item.data.moduleId, syllabusId: item.data.syllabusId, activityId: id, completedAt: new Date() });
   }
   async function practicalQuiz(user, id, { includeAnswers = false } = {}) {
     const item = await practical(user, id);
     const records = await col('mission_score').where('studentId', '==', user.id).get();
     const results = records.docs.map(doc => ({ ...doc.data(), id: doc.id })).filter(r => canonicalMissionId(r.missionId) === canonicalMissionId(item.data.targetId));
-    const simulation = results.find(r => r.scoringVersion === 'simulation-v1' && r.completion?.verified) || null;
+    const simulation = results.find(r => ['simulation-v1', 'simulation-v2'].includes(r.scoringVersion) && r.completion?.verified) || null;
     if (!simulation) fail(409, 'Save the completed simulation before checking its quiz.');
     const [quizDocs, assignmentDocs, scores] = await Promise.all([col('quiz').get(), col('quiz_assignments').get(), col('quiz_score').where('studentId', '==', user.id).get()]);
     const quiz = selectMissionQuiz({ missionId: item.data.targetId, instructorId: item.syllabus.instructorId,

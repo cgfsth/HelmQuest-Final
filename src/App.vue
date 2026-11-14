@@ -14,6 +14,8 @@
       :step-index="tutorialStepIndex" :screen="activeScreen" :touch="simulationTouchEnabled"
       :storage-notice="tutorialStorageNotice"
       @next="advanceStudentTour" @back="previousStudentTourStep" @close="closeStudentTour" @choose-mission="chooseMissionForTour" />
+    <VesselEncounterPanel v-if="activeScreen === 'simulation' && !simulationNeedsLandscape && !tutorialVisible" :status="encounterStatus" />
+    <div v-if="activeScreen === 'simulation' && encounterSetupError" class="encounter-setup-error" role="alert">{{ encounterSetupError }} Exit and restart the mission to retry.</div>
     <InventoryModal/>
     <PostDockingQuizModal 
       :quiz="postDockingQuizData || {}" 
@@ -574,8 +576,17 @@
               </label>
             </div>
           </div>
+        <fieldset class="mission-encounter-editor" :disabled="missionSaving">
+          <legend>Navigation rules &amp; vessel safety exercise</legend>
+          <p>Common rubric: completion 40%, accuracy 40%, safety 20%. Select a vessel exercise that supports this lesson's objectives.</p>
+          <label class="quiz-field"><span>Other vessel</span><select class="quiz-input" v-model="missionEditorModal.data.encounter.type"><option value="none">No vessel exercise</option><option value="anchored">Anchored vessel — keep clear</option><option value="crossing-red">Crossing red sidelight — student gives way</option><option value="crossing-green">Crossing green sidelight — other vessel gives way</option></select></label>
+          <template v-if="missionEditorModal.data.encounter.type !== 'none'">
+            <label class="quiz-field"><span>Minimum hull clearance (metres)</span><input class="quiz-input" type="number" min="30" max="500" v-model.number="missionEditorModal.data.encounter.clearance" /></label>
+            <label class="quiz-field"><span>Warning distance (metres)</span><input class="quiz-input" type="number" :min="missionEditorModal.data.encounter.clearance * 3" max="3000" v-model.number="missionEditorModal.data.encounter.warningDistance" /></label>
+            <p>Training distances, not legal limits. Crossing exercises use ordinary power-driven vessels in sight. Stand-on students must still act to prevent collision.</p>
+          </template>
+        </fieldset>
         </div>
-
         <p v-if="missionEditorError" class="mission-editor-error" role="alert">{{ missionEditorError }}</p>
         <div class="quiz-editor-actions">
           <button class="quiz-save-btn" @click="saveMissionEditor()" :disabled="missionSaving">
@@ -2746,7 +2757,9 @@
           <p class="mission-complete-code">{{ missionCompleteModal.id }}</p>
 
           <ul class="mission-result-breakdown">
-            <li v-for="(label, key) in missionCompleteModal.performanceMetrics ? { steeringPrecision: 'Steering Precision', courseAccuracy: 'Course Accuracy', dockingAccuracy: 'Docking Accuracy', timeEfficiency: 'Time Efficiency', safetyCompliance: 'Safety Compliance' } : {}" :key="key"><span>{{ label }}</span><strong>{{ missionCompleteModal.performanceMetrics[key] == null ? 'Not recorded' : Math.round(missionCompleteModal.performanceMetrics[key] * 10) / 10 + '%' }}</strong></li>
+            <li v-for="(label, key) in missionCompleteModal.performanceMetrics ? (missionCompleteModal.performanceMetrics.objectiveCompletion != null ? { objectiveCompletion: 'Objective completion · 40%', taskAccuracy: 'Task accuracy · 40%', safetyCompliance: 'Safety compliance · 20%' } : { steeringPrecision: 'Steering Precision', courseAccuracy: 'Course Accuracy', dockingAccuracy: 'Docking Accuracy', timeEfficiency: 'Time Efficiency', safetyCompliance: 'Safety Compliance' }) : {}" :key="key"><span>{{ label }}</span><strong>{{ missionCompleteModal.performanceMetrics[key] == null ? 'Not assessed' : Math.round(missionCompleteModal.performanceMetrics[key] * 10) / 10 + '%' }}</strong></li>
+            <li v-if="missionCompleteModal.criticalSafetyFailure"><span>Vessel collision</span><strong>Safety requirement not met</strong></li>
+            <li v-else-if="missionCompleteModal.requiredExerciseFailed"><span>Vessel exercise</span><strong>Required clearance or response not met</strong></li>
             <li v-if="missionCompleteModal.elapsedLabel">
               <span>Time</span>
               <strong>{{ missionCompleteModal.elapsedLabel }}</strong>
@@ -3412,7 +3425,12 @@ const StudentSettings = defineAsyncComponent(() => import('./components/StudentS
 import { useSimulationPreferences } from './composables/useSimulationPreferences.js';
 import { deriveProgression, studentTotalXp } from '../shared/progression.js';
 import { createMissionCompletionFlow } from './helpers/missionCompletionFlow.js';
-import { validDockingCompletion } from '../shared/simulationPerformance.js';
+import { validDockingCompletion, simulationScoringInputs, simulationPerformance } from '../shared/simulationPerformance.js';
+import { normalizeEncounter } from '../shared/vesselEncounter.js';
+import { createVesselEncounter, updateVesselEncounter, vesselEncounterResult, vesselEncounterGuidance } from './helpers/vesselEncounter.js';
+import { createEncounterVesselVisual } from './helpers/encounterVesselVisual.js';
+import { createBuoyWaterCheck } from './helpers/missionBuoyPlacement.js';
+import VesselEncounterPanel from './components/VesselEncounterPanel.vue';
 import { calculateSafetyCompliance } from './helpers/missionScoring.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -4385,9 +4403,10 @@ async function continueCourseCompletion() {
       onState: snapshot => { if (current()) { courseCompletionState.value = snapshot.state; courseCompletionError.value = snapshot.error; } },
       saveSimulation: async completion => {
         if (run.resumeCompletion && run.integratedSaved) return run.integratedSaved;
+        if (encounterSetupError.value || (vesselEncounterState && !vesselEncounterState.resolved)) throw new Error('Complete the assigned vessel-avoidance exercise before reporting.');
+        const scores = run.simulationRawScores ||= currentSimulationScores();
         const report = run.simulationPerformanceReport ||= performanceManager.isActive ? performanceManager.completeMission() : performanceManager.getPerformanceReport();
-        const scores = run.simulationRawScores ||= { steering: performanceManager.state.steeringScore, course: performanceManager.state.courseScore, docking: performanceManager.state.dockingScore, time: performanceManager.state.timeScore, safety: calculateSafetyCompliance(run) };
-        const saved = await firebaseApi.completeLearningSimulation(origin.activityId, { completion, scores });
+        const saved = await firebaseApi.completeLearningSimulation(origin.activityId, { completion, scores, encounter: vesselEncounterResult(vesselEncounterState) });
         if (!current()) throw new Error('Student session changed.');
         if (!saved.data) throw new Error('The simulation result was not saved. Try again.');
         run.integratedSaved = saved;
@@ -4405,7 +4424,7 @@ async function continueCourseCompletion() {
         return saved;
       },
       findQuiz: async () => {
-        if (run.integratedSaved?.skipped && run.integratedSaved.data?.scoringVersion !== 'simulation-v1') return { quiz: null, saved: null };
+        if (run.integratedSaved?.skipped && !['simulation-v1', 'simulation-v2'].includes(run.integratedSaved.data?.scoringVersion)) return { quiz: null, saved: null };
         return firebaseApi.getLearningMissionQuiz(origin.activityId);
       },
       saveQuiz: (quiz, answers) => firebaseApi.submitLearningMissionQuiz(origin.activityId, { quizId: quiz.id, answers }),
@@ -4419,7 +4438,7 @@ async function continueCourseCompletion() {
           try { saveProgress(progressData.value); } catch { /* remote save remains authoritative */ }
         }
         missionCompleteModal.value = { id: mission.id, title: saved.missionTitle || module.title, score: saved.score, passed: saved.passed,
-          passScore: saved.passScore ?? mission.passScore ?? 70, performanceMetrics: metrics, xpEarned: simulation.xpAwarded, totalXp: simulation.totalXp,
+          passScore: saved.passScore ?? mission.passScore ?? 70, performanceMetrics: metrics, criticalSafetyFailure: saved.criticalSafetyFailure, requiredExerciseFailed: saved.requiredExerciseFailed, xpEarned: simulation.xpAwarded, totalXp: simulation.totalXp,
           elapsedLabel: formatElapsedDuration((run.endedAt || performance.now()) - run.startedAt), stepsLabel: `${run.stepsCompleted}/${run.totalSteps}`,
           quizScore: quizResult ? quizResult['Quiz-score-percentage'] ?? quizResult.score : undefined,
           quizCorrect: quizResult ? quizResult['raw-score'] ?? quizResult.correctAnswers ?? 0 : undefined,
@@ -4440,7 +4459,7 @@ function viewSavedCourseSimulation() {
   const saved = trainingRunMetrics.value?.integratedSaved;
   if (!saved?.data) return;
   missionCompleteModal.value = { id: saved.data.missionId, title: saved.data.missionTitle, score: saved.data.score, passed: saved.data.passed,
-    passScore: saved.data.passScore, performanceMetrics: saved.data.performanceMetrics, isSavedReport: true, fromLesson: true, quizPending: true };
+    passScore: saved.data.passScore, performanceMetrics: saved.data.performanceMetrics, criticalSafetyFailure: saved.data.criticalSafetyFailure, requiredExerciseFailed: saved.data.requiredExerciseFailed, isSavedReport: true, fromLesson: true, quizPending: true };
 }
 function showCourseQuizResult(quiz, saved) {
   const detailed = Array.isArray(saved.answers) && Array.isArray(saved.validation);
@@ -5357,7 +5376,7 @@ const instructorsMap = ref(new Map());
 const instructorRecentActivities = ref([]); // Recent activities for instructor's students only
 
 // Save individual mission score to Firestore
-async function saveMissionScoreToFirestore({ studentId, missionId, missionTitle, score, passed, completedAt }) {
+async function saveMissionScoreToFirestore({ studentId, missionId, missionTitle, score, passed, completedAt, scores, completion, encounter }) {
   const reportingRun = trainingRunMetrics.value;
   try {
     const response = await fetch(`${API_BASE_URL}/mission-scores`, {
@@ -5369,6 +5388,7 @@ async function saveMissionScoreToFirestore({ studentId, missionId, missionTitle,
         missionTitle,
         score,
         passed,
+        scores, completion, encounter,
         completedAt: completedAt || new Date()
       })
     });
@@ -7039,6 +7059,9 @@ function getTacticalChartSnapshot() {
     berth: getActiveHarborDockBerth(),
     spawn: { x: SIMULATION_SPAWN.x, z: SIMULATION_SPAWN.z, label: 'Departure' },
     waypoints: [
+      ...(vesselEncounterState ? [{ x: vesselEncounterState.npc.x, z: vesselEncounterState.npc.z,
+        radius: vesselEncounterState.config.clearance + vesselEncounterState.npc.radius,
+        label: 'Training vessel', color: 0xff6655, active: !vesselEncounterState.resolved, kind: 'vessel' }] : []),
       ...getFishingSpotChartWaypoints(stats.value.boatX, stats.value.boatZ), // Fishing spots now always visible
       ...zones
         .filter((z) => !z.visualOnly)
@@ -7581,11 +7604,83 @@ const activeTrainingElapsedLabel = computed(() => {
   if (!activeTrainingModule.value || isTrainingReviewMode.value) return '';
   const elapsedMs = (trainingRunMetrics.value.endedAt || performance.now()) - trainingRunMetrics.value.startedAt;
   const est = activeTrainingModule.value.duration ?? '';
-  return `Elapsed ${formatElapsedDuration(elapsedMs)}${est ? ` · est. ${est}` : ''} — time affects score`;
+  return `Elapsed ${formatElapsedDuration(elapsedMs)}${est ? ` · est. ${est}` : ''} — completion 40% · accuracy 40% · safety 20%`;
 });
 
 const trainingStepSuccess = ref(false);
 const trainingRunFinished = ref(false);
+const encounterStatus = ref(null);
+const encounterSetupError = ref('');
+let vesselEncounterState = null, encounterVisual = null;
+
+function clearVesselEncounter() {
+  encounterVisual?.dispose(); encounterVisual = null; vesselEncounterState = null;
+  encounterStatus.value = null; encounterSetupError.value = '';
+}
+function setupVesselEncounter() {
+  clearVesselEncounter();
+  const module = activeTrainingModule.value;
+  if (!module || !boatObject || !scene) return;
+  try {
+    const config = normalizeEncounter(module.encounter);
+    if (config.type === 'none') return;
+    const own = { x: boatObject.position.x, z: boatObject.position.z, heading: stats.value.rotationDeg, length: boatObject.userData.loaMeters || 60 };
+    const zone = resolveTrainingZonesAtSpawn().find(zone => !zone.visualOnly && zone.shape !== 'berth' && !/harbor|dock|port/.test(zone.id));
+    const water = createBuoyWaterCheck(islandGroup, getActiveDockColliders(), 40);
+    for (const offset of [0, 20, -20, 40, -40, 70, -70, 100, -100, 180]) {
+      const heading = offset + (zone ? Math.atan2(zone.x - own.x, own.z - zone.z) * 180 / Math.PI : own.heading);
+      const target = { x: own.x + Math.sin(heading * Math.PI / 180) * 2200, z: own.z - Math.cos(heading * Math.PI / 180) * 2200 };
+      const candidate = createVesselEncounter(config, own, target);
+      const samples = config.type === 'anchored' ? [candidate.npc] : Array.from({ length: 17 }, (_, index) => {
+        const t = index / 8;
+        return { x: candidate.npc.x + (candidate.center.x - candidate.npc.x) * t,
+          z: candidate.npc.z + (candidate.center.z - candidate.npc.z) * t };
+      });
+      if (!samples.every(point => water(point.x, point.z))) continue;
+      vesselEncounterState = candidate; break;
+    }
+    if (!vesselEncounterState) throw new Error('No clear-water location was found for the assigned vessel exercise.');
+    encounterVisual = createEncounterVesselVisual(scene, config);
+    encounterVisual.update(vesselEncounterState, own, getWaterSurfaceY);
+    encounterStatus.value = vesselEncounterGuidance(vesselEncounterState);
+  } catch (error) { encounterSetupError.value = error.message; }
+}
+function updateTrainingEncounter(delta) {
+  if (!vesselEncounterState || !boatObject || !simulationRunning.value) return;
+  const state = vesselEncounterState, beforeEvents = state.events.length;
+  const wasCollision = state.collision, previousOwn = { ...state.previousOwn };
+  updateVesselEncounter(state, { x: boatObject.position.x, z: boatObject.position.z,
+    heading: stats.value.rotationDeg, speed: stats.value.speedKnots }, delta);
+  for (const event of state.events.slice(beforeEvents)) {
+    if (!isTrainingReviewMode.value) trainingRunMetrics.value.safety.violations.push({ ...event, timestamp: performance.now() });
+  }
+  if (state.collision && !wasCollision) {
+    boatObject.position.x = previousOwn.x; boatObject.position.z = previousOwn.z;
+    speedVel = 0; stats.value.speedKnots = 0;
+    showCollisionWarning('Vessel collision — stop and keep clear. The safety requirement was not met.');
+  }
+  const dx = boatObject.position.x - state.npc.x, dz = boatObject.position.z - state.npc.z;
+  const distance = Math.hypot(dx, dz), radius = state.ownRadius + state.npc.radius;
+  if (distance < radius) {
+    boatObject.position.x = state.npc.x + (distance ? dx / distance : 1) * (radius + 1);
+    boatObject.position.z = state.npc.z + (distance ? dz / distance : 0) * (radius + 1);
+    speedVel = 0; stats.value.speedKnots = 0;
+    showCollisionWarning('Vessel collision — stop, keep lookout and leave enough clearance.');
+  }
+  encounterVisual?.update(state, boatObject.position, getWaterSurfaceY);
+  const guidance = vesselEncounterGuidance(state);
+  if (JSON.stringify(guidance) !== JSON.stringify(encounterStatus.value)) encounterStatus.value = guidance;
+}
+function currentSimulationScores() {
+  const state = performanceManager.state;
+  state.safetyScore = calculateSafetyCompliance(trainingRunMetrics.value);
+  const inputs = simulationScoringInputs(state, trainingRunMetrics.value, vesselEncounterResult(vesselEncounterState));
+  state.scoringInputs = inputs;
+  return inputs;
+}
+watch([activeTrainingModule, activeScreen], ([module, screen]) => {
+  if (!module || screen !== 'simulation') clearVesselEncounter();
+});
 const missionReadyToReport = ref(false);  // New: true when all tasks done, at port, anchor dropped
 const trainingStepError = ref(false);
 const trainingFeedback = ref('');
@@ -9838,6 +9933,7 @@ function startTrainingModule(moduleId, options = {}) {
     resetTrainingRunState();
     syncTrainingWaypointMarkers();
     captureTrainingStepBaseline();
+    setupVesselEncounter();
     
     // Set initial waypoint in performance system
     if (performanceManager.isActive) {
@@ -10260,6 +10356,11 @@ async function openMissionCompleteModal(module) {
   try {
   const passScore = mission?.passScore ?? MODULE_PASS_SCORES[module.id] ?? 80;
   
+  if (encounterSetupError.value || (vesselEncounterState && !vesselEncounterState.resolved)) {
+    trainingFeedback.value = 'Finish the assigned vessel-avoidance exercise before reporting.';
+    return;
+  }
+  const simulationInputs = currentSimulationScores();
   // Complete performance tracking and get report
   let performanceReport = null;
   if (performanceManager.isActive && !isTrainingReviewMode.value) {
@@ -10293,20 +10394,13 @@ async function openMissionCompleteModal(module) {
     }
   }
 
-  // Calculate mission score using NEW 4-METRIC SYSTEM
-  // Steps (40%) + Waypoints (30%) + Quiz (20%) + Time (10%)
-  const actualTimeMinutes = elapsedMs / 60000; // Convert ms to minutes
-  const targetTimeMinutes = performanceManager.parseExpectedTime(mission?.estimatedDuration ?? module.duration) / 60000;
-  
+  // Calculate the shared practical score; the completed quiz stays separate.
   const scoringResult = calculateMissionScore({
+    simulation: simulationInputs,
     stepsCompleted: trainingRunMetrics.value.stepsCompleted,
     totalSteps: stepCount,
     waypointsReached: waypointsVisited,
-    totalWaypoints: waypointSteps,
-    quizCorrect,
-    quizTotal: quizTotal || 1, // Avoid division by zero
-    actualTimeMinutes,
-    targetTimeMinutes
+    totalWaypoints: waypointSteps
   }, { passScore });
   
   const score = scoringResult.score;
@@ -10318,7 +10412,8 @@ async function openMissionCompleteModal(module) {
     try {
       saved = await saveMissionScoreToFirestore({
         studentId: currentUser.value.id, missionId: mission.id,
-        missionTitle: mission?.title ?? module.title, score, passed, completedAt: new Date()
+        missionTitle: mission?.title ?? module.title, score, passed, completedAt: new Date(),
+        scores: simulationInputs, completion: courseDockingEvidence(), encounter: vesselEncounterResult(vesselEncounterState)
       });
     } catch (error) {
       console.error('Failed to save mission score to Firestore:', error);
@@ -10411,6 +10506,9 @@ async function openMissionCompleteModal(module) {
     score,
     passed,
     elapsedLabel: formatElapsedDuration(elapsedMs),
+    performanceMetrics: scoringResult.performanceMetrics,
+    criticalSafetyFailure: scoringResult.criticalSafetyFailure,
+    requiredExerciseFailed: scoringResult.requiredExerciseFailed,
     maxSpeedLabel: `${trainingRunMetrics.value.maxSpeedKnots.toFixed(1)} kn`,
     stepsLabel: `${trainingRunMetrics.value.stepsCompleted}/${stepCount}`,
     waypointsLabel: waypointSteps
@@ -10452,6 +10550,7 @@ function openSavedMissionReport(module) {
     id: mission.id, title: mission.title || module.title,
     passScore: saved.passScore ?? mission.passScore ?? 80,
     score: saved.score, passed: saved.passed, isSavedReport: true,
+    ...(saved.performanceMetrics ? { performanceMetrics: saved.performanceMetrics, criticalSafetyFailure: saved.criticalSafetyFailure, requiredExerciseFailed: saved.requiredExerciseFailed } : {}),
     ...(submission ? { quizScore: counts.total, quizCorrect: counts.correct, quizTotal: counts.total } : {})
   };
   syncUiCursor();
@@ -10645,6 +10744,7 @@ function openMissionEditor(module) {
       passScore: passScore, // Numeric value
       openDate: localDate(getModuleSchedule(module.id).openDate),
       deadline: localDate(getModuleSchedule(module.id).deadline),
+      encounter: { type: 'none', clearance: 100, warningDistance: 600, ...module.encounter },
       buoyCount: Array.isArray(module.buoys) ? module.buoys.length : 0,
       buoys: (module.buoys || []).map((buoy, index) => ({
         id: buoy.id || `${module.id}-buoy-${index + 1}`,
@@ -10701,6 +10801,7 @@ function openMissionCreator(courseContext = null) {
       xpReward: 100, // Numeric value
       passScore: 70, // Numeric value
       openDate: '', deadline: '',
+      encounter: { type: ({ 'lesson-4': 'crossing-red', 'lesson-5': 'crossing-green', 'lesson-6': 'anchored' })[courseContext?.officialSectionId] || 'none', clearance: 100, warningDistance: 600 },
       buoyCount: 0,
       buoys: [],
       boatType: 'medium',
@@ -10890,6 +10991,7 @@ async function saveMissionEditor() {
       description: data.description?.trim() || '',
       difficulty: data.difficulty || 'Beginner',
       duration: data.duration.trim(),
+      encounter: normalizeEncounter(data.encounter),
       xpReward: Number(data.xpReward), // Store as number
       passScore: Number(data.passScore), // Store as number
       buoyCount: data.buoys.length,
@@ -10936,6 +11038,7 @@ async function saveMissionEditor() {
         pass_score: cleaned.passScore, // Numeric value
         learning_objectives: cleaned.objectives,
         required_boat: cleaned.boatType,
+        encounter: cleaned.encounter,
         steps: cleaned.steps,
         checkpoints: cleaned.buoys.map((buoy) => ({
           id: buoy.id,
@@ -11302,6 +11405,7 @@ async function loadMissionDatesFromFirestore() {
           xpReward: typeof mission.xp_reward === 'number' ? mission.xp_reward : 100,
           passScore: typeof mission.pass_score === 'number' ? mission.pass_score : 70,
           boatType: mission.required_boat || mission.boatType || 'medium',
+          encounter: mission.encounter || null,
           objectives: Array.isArray(mission.learning_objectives)
             ? mission.learning_objectives
             : (mission.objectives || []),
@@ -12343,6 +12447,7 @@ function resetTrainingRunState() {
 }
 
 function exitTraining() {
+  clearVesselEncounter();
   resetCourseCompletion();
   performanceManager.cancelMission();
   clearWaypointMarkers();
@@ -12370,6 +12475,11 @@ function exitTraining() {
 
 function completeTrainingReview(module) {
   const run = trainingRunMetrics.value;
+  if (currentTrainingStep.value === module.steps.length - 1 &&
+      (encounterSetupError.value || (vesselEncounterState && !vesselEncounterState.resolved))) {
+    trainingFeedback.value = 'Complete the vessel-avoidance exercise, then return to port.';
+    return;
+  }
   trainingStepSuccess.value = true;
   showTrainingNotification(
     'Training complete!',
@@ -12458,6 +12568,11 @@ function checkTrainingStep() {
     return;
   }
 
+  if (currentTrainingStep.value === module.steps.length - 1 &&
+      (encounterSetupError.value || (vesselEncounterState && !vesselEncounterState.resolved))) {
+    trainingFeedback.value = 'Complete the vessel-avoidance exercise, then return to port.';
+    return;
+  }
   trainingStepSuccess.value = true;
   trainingStepError.value = false;
   trainingFeedback.value = '✓ Step completed!';
@@ -16113,6 +16228,7 @@ function animate() {
     if (ocean) ocean.update(visualDelta, activeCamera.value === 'helm' ? camera2.position : camera.position);
     // Update simulation
     updateBoatPhysics(visualDelta);
+    updateTrainingEncounter(visualDelta);
     updateBigBoatLightPools(boatObject, getWaterSurfaceY);
     
     // Update performance tracking system
@@ -16639,6 +16755,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   cancelAnimationFrame(animationFrameId);
+  clearVesselEncounter();
   animationFrameId = null;
   disposePostProcessing();
   if (clockIntervalId) window.clearInterval(clockIntervalId);
@@ -16670,6 +16787,10 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.mission-encounter-editor { margin:16px 0; padding:16px; border:1px solid #335a70; border-radius:12px; min-width:0; }
+.mission-encounter-editor legend { color:#7dd3fc; font-weight:700; }
+.mission-encounter-editor p { color:#adc8d9; font-size:.82rem; line-height:1.6; margin:8px 0 14px; }
+.encounter-setup-error { position:absolute; z-index:40; bottom:20px; left:20px; max-width:330px; background:#461f28; color:#ffe0dc; border:1px solid #ff8b79; padding:14px; border-radius:10px; }
 .simulation-container {
   position: relative;
   width: 100%;

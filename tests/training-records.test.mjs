@@ -120,8 +120,8 @@ test('reopening Training Records requests fresh results', () => {
   const hubTab = Vue.ref('overview');
   const start = source.indexOf('function selectHubTab(tab)');
   const end = source.indexOf('function selectInstructorTab(tab)', start);
-  const select = new Function('hubTab', 'fetchStudentTrainingRecords', 'fetchLeaderboardData', 'maybeAutoCollapseSidebar',
-    `${source.slice(start, end)} return selectHubTab;`)(hubTab, () => requests++, () => {}, () => {});
+  const select = new Function('hubTab', 'fetchStudentTrainingRecords', 'fetchLeaderboardData', 'maybeAutoCollapseSidebar', 'loadMissionDatesFromFirestore',
+    `${source.slice(start, end)} return selectHubTab;`)(hubTab, () => requests++, () => {}, () => {}, () => {});
   select('certificates');
   select('overview');
   select('certificates');

@@ -48,13 +48,13 @@ test('mission quiz endpoint rejects requests before actual objective and docking
 });
 test('completion binds the current student and exact mission while preserving simulation and quiz scores separately', async () => {
   const saved = await complete({ studentId: 'sb', score: 100 }).expect(200);
-  expect(saved.body.data).toMatchObject({ studentId: 'sa', missionId: 'navigation', lessonId: moduleId, score: 84, scoringVersion: 'simulation-v1', performanceMetrics: { safetyCompliance: 90 } });
+  expect(saved.body.data).toMatchObject({ studentId: 'sa', missionId: 'navigation', lessonId: moduleId, score: 90, scoringVersion: 'simulation-v2', performanceMetrics: { objectiveCompletion: 100, taskAccuracy: 80, safetyCompliance: 90 } });
   const quiz = await request(f.app).get(`/learning-materials/activities/${activityId}/mission-quiz`).set(headers()).expect(200); expect(quiz.body.quiz.id).toBe('q');
   expect(quiz.body.quiz.questions[0]).not.toHaveProperty('correctAnswer');
   expect(quiz.body.quiz.questions[1].options[0]).not.toHaveProperty('isCorrect');
   const submitted = await request(f.app).post(`/learning-materials/activities/${activityId}/mission-quiz`).set(headers()).send({ quizId: 'q', answers: { one: 'False', two: 'Starboard' }, studentId: 'sb', score: 100 }).expect(200);
   expect(submitted.body.data).toMatchObject({ studentId: 'sa', missionId: 'navigation', score: 50, 'raw-score': 1 }); expect(quizOptions).toEqual({ allowAfterSimulation: true });
-  expect(f.records.mission_score.saved.score).toBe(84);
+  expect(f.records.mission_score.saved.score).toBe(90);
 });
 test('published lessons never expose standalone quiz activities', async () => {
   await f.course.save(owner, syllabusId, moduleId, null, { type: 'quiz', title: 'Legacy quiz', targetId: 'q', published: true }, null);
@@ -65,14 +65,14 @@ test('published lessons never expose standalone quiz activities', async () => {
 test('no assignment and unpublished quizzes skip the quiz without writing a zero score', async () => {
   await complete().expect(200); f.records.quiz.q.published = false;
   let result = await request(f.app).get(`/learning-materials/activities/${activityId}/mission-quiz`).set(headers()).expect(200);
-  expect(result.body.quiz).toBeNull(); expect(f.records.quiz_score).toBeUndefined(); expect(result.body.simulation.score).toBe(84);
+  expect(result.body.quiz).toBeNull(); expect(f.records.quiz_score).toBeUndefined(); expect(result.body.simulation.score).toBe(90);
   delete f.records.quiz.q;
   result = await request(f.app).get(`/learning-materials/activities/${activityId}/mission-quiz`).set(headers()).expect(200); expect(result.body.quiz).toBeNull();
 });
 test('quiz query failure is an error and never discards the persisted simulation', async () => {
   await complete().expect(200); const original = f.db.collection;
   f.db.collection = name => { if (name === 'quiz') throw new Error('Quiz database offline'); return original(name); };
-  await request(f.app).get(`/learning-materials/activities/${activityId}/mission-quiz`).set(headers()).expect(503); expect(f.records.mission_score.saved.score).toBe(84);
+  await request(f.app).get(`/learning-materials/activities/${activityId}/mission-quiz`).set(headers()).expect(503); expect(f.records.mission_score.saved.score).toBe(90);
   f.db.collection = original; await request(f.app).get(`/learning-materials/activities/${activityId}/mission-quiz`).set(headers()).expect(200);
 });
 test('repeated completion and quiz submission preserve the first saved pass/quiz and avoid new rewards', async () => {
@@ -85,4 +85,43 @@ test('foreign classes and instructors cannot complete or submit a student practi
   const path = `/learning-materials/activities/${activityId}`;
   await request(f.app).post(path + '/complete-simulation').set(headers('sb')).send({ scores, completion: completed }).expect(404);
   await request(f.app).post(path + '/complete-simulation').set(headers('a', 'instructor')).send({ scores, completion: completed }).expect(403);
+});
+
+test('assigned vessel exercises require a resolved summary matching the saved mission configuration', async () => {
+  f.records.missions.navigation.encounter = { type: 'crossing-red', clearance: 100, warningDistance: 600 };
+  await complete().expect(409);
+  const result = { type: 'crossing-red', resolved: true, successful: true, collision: false, minimumClearance: 140, accuracy: 100 };
+  for (const patch of [{ resolved: false }, { type: 'anchored' }, { minimumClearance: 50 }, { collision: true }]) {
+    await complete({ encounter: { ...result, ...patch } }).expect(409);
+  }
+  expect(f.records.mission_score).toBeUndefined();
+  const saved = await complete({ scores: { completion: 1, accuracy: 80, safety: 90 }, encounter: result }).expect(200);
+  expect(saved.body.data.performanceMetrics.objectiveCompletion).toBe(100);
+  expect(saved.body.data.encounter).toMatchObject(result);
+  expect(saved.body.data.score).toBe(90);
+});
+
+test('a vessel collision or failed required clearance cannot earn a pass or XP despite high submitted marks', async () => {
+  f.records.missions.navigation.encounter = { type: 'anchored', clearance: 100, warningDistance: 600 };
+  const result = { type: 'anchored', resolved: true, successful: false, collision: true, minimumClearance: 0, accuracy: 0 };
+  let saved = await complete({ scores: { completion: 100, accuracy: 100, safety: 100 }, encounter: result }).expect(200);
+  expect(saved.body.data.passed).toBe(false); expect(saved.body.xpAwarded).toBe(0);
+  expect(saved.body.data.performanceMetrics.safetyCompliance).toBe(0);
+  expect(saved.body.data.criticalSafetyFailure).toBe(true);
+  saved = await complete({ scores: { accuracy: 100, safety: 100 }, encounter: { ...result, collision: false, minimumClearance: 70 } }).expect(200);
+  expect(saved.body.data.passed).toBe(false); expect(saved.body.data.requiredExerciseFailed).toBe(true);
+});
+
+test('missing assessed performance cannot be turned into assumed perfect marks', async () => {
+  await complete({ scores: { accuracy: null, completion: 100, safety: 100 } }).expect(409);
+  expect(f.records.mission_score).toBeUndefined();
+});
+
+test('a clear passing distance does not excuse the wrong required give-way response', async () => {
+  f.records.missions.navigation.encounter = { type: 'crossing-red', clearance: 100, warningDistance: 600 };
+  const encounter = { type: 'crossing-red', resolved: true, successful: true, collision: false, minimumClearance: 180, accuracy: 50 };
+  const saved = await complete({ scores: { accuracy: 100, safety: 100 }, encounter }).expect(200);
+  expect(saved.body.data.requiredExerciseFailed).toBe(true);
+  expect(saved.body.data.passed).toBe(false); expect(saved.body.xpAwarded).toBe(0);
+  expect(saved.body.data.performanceMetrics.objectiveCompletion).toBe(75);
 });

@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc';
 import { createMissionCompletionFlow } from '../src/helpers/missionCompletionFlow.js';
-import { simulationPerformance, validDockingCompletion } from '../shared/simulationPerformance.js';
+import { simulationPerformance, simulationScoringInputs, validDockingCompletion } from '../shared/simulationPerformance.js';
+import { vesselEncounterResult } from '../src/helpers/vesselEncounter.js';
 import { createTrainingRunMetrics, calculateSafetyCompliance } from '../src/helpers/missionScoring.js';
 import { IntegratedPerformanceManager } from '../src/helpers/performanceManager.js';
 
@@ -64,11 +65,13 @@ test('switching student accounts while refreshing mission data cannot launch the
 test('App completes its actual performance tracker before saving, retains raw metrics on retry, and renders separate quiz results', async () => {
   const tracker = new IntegratedPerformanceManager(); tracker.startMission({ id: 'navigation', duration: '10 minutes', steps: [{ id: 'dock' }] });
   Object.assign(tracker.state, { steeringScore: 81.234, courseScore: 87.654, dockingScore: 0 });
+  tracker.state.headingHistory = [{ heading: 0 }, { heading: 1 }];
+  tracker.state.objectivesCompleted = [{ id: 'dock' }];
   const run = createTrainingRunMetrics(); run.totalSteps = 1; run.stepsCompleted = 1;
   const evidence = { objectivesComplete: true, totalSteps: 1, completedSteps: 1, anchored: true, engineStopped: true, inPort: true, speedKnots: 0 };
   const module = { id: 'navigation', title: 'Navigation' }, quiz = { id: 'q', questions: [{ id: 'one', type: 'true-false' }] };
   let saves = 0, lookups = 0, rewards = 0;
-  const context = { performance, console, createMissionCompletionFlow, simulationPerformance, validDockingCompletion, calculateSafetyCompliance,
+  const context = { performance, console, createMissionCompletionFlow, simulationPerformance, simulationScoringInputs, vesselEncounterResult, vesselEncounterState: null, encounterSetupError: ref(''), validDockingCompletion, calculateSafetyCompliance,
     currentUser: ref({ id: 'student', name: 'Student' }), userRole: ref('student'), activeTrainingModule: ref(module), activeMission: ref({ id: 'CUSTOM-navigation' }),
     trainingRunMetrics: ref(run), activeCoursePractical: ref({ studentId: 'student', activityId: 'practical', syllabusId: 'course', lessonId: 'lesson' }),
     isTrainingReviewMode: ref(false), courseCompletionFlow: null, courseCompletionState: ref('IN_PROGRESS'), courseCompletionError: ref(''),
@@ -78,6 +81,7 @@ test('App completes its actual performance tracker before saving, retains raw me
     recordMissionSession: () => {}, processMissionRewards: () => { rewards++; }, saveProgress: () => {}, restoreQuizSubmissions: (local, saved) => [...local, ...saved],
     normalizeQuizData: value => value, postDockingQuizData: ref(null), showPostDockingQuiz: ref(false), postDockingQuizTriggered: ref(false), missionCompleteModal: ref(null),
     formatElapsedDuration: () => '00:10', syncUiCursor: () => {}, isPostDockingQuizSubmitting: ref(false) };
+  appFunction('currentSimulationScores', context);
   const finish = appFunction('continueCourseCompletion', context);
   await finish(); assert.equal(context.courseCompletionState.value, 'SAVE_FAILED'); assert.equal(lookups, 0); assert.equal(rewards, 0);
   await finish(); assert.equal(saves, 2); assert.equal(lookups, 1); assert.equal(rewards, 1); assert.equal(context.showPostDockingQuiz.value, true);

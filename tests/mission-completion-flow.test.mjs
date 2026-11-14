@@ -71,10 +71,10 @@ test('only published instructor-linked quizzes are selected, including existing 
   assert.equal(select({ quizzes: [{ ...q, instructorId: 'other' }] }), null); assert.equal(select({ policy: 'none' }), null);
   assert.equal(select({ quizzes: [{ ...q, moduleId: null }], assignments: [{ quizId: 'q', targetType: 'mission', targetId: 'CUSTOM-mission' }] }).id, 'q');
 });
-test('simulation score uses the existing 35/35/20/10 weights and never includes quiz performance', () => {
-  assert.deepEqual(SIMULATION_WEIGHTS, { steeringWeight: .35, courseWeight: .35, dockingWeight: .2, timeWeight: .1 });
-  const scores = { steering: 90, course: 80, docking: 70, time: 100, safety: 95 };
-  assert.equal(simulationPerformance(scores).score, 84); assert.equal(simulationPerformance({ ...scores, quiz: 0 }).score, simulationPerformance({ ...scores, quiz: 100 }).score);
+test('simulation score uses the shared 40/40/20 practical rubric and never includes quiz performance', () => {
+  assert.deepEqual(SIMULATION_WEIGHTS, { completion: .4, accuracy: .4, safety: .2 });
+  const scores = { completion: 100, accuracy: 80, steering: 90, course: 80, docking: 70, time: 100, safety: 95 };
+  assert.equal(simulationPerformance(scores).score, 91); assert.equal(simulationPerformance({ ...scores, quiz: 0 }).score, simulationPerformance({ ...scores, quiz: 100 }).score);
   assert.throws(() => simulationPerformance({ ...scores, steering: NaN }), /Invalid/);
 });
 

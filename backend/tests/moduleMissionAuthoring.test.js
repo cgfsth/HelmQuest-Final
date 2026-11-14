@@ -70,3 +70,14 @@ test('invalid checkpoint and date settings never create a mission', async () => 
   }
   expect(Object.keys(f.records.missions || {})).toHaveLength(0);
 });
+
+test('module missions preserve vessel exercise settings and reject invalid distance margins', async () => {
+  const encounter = { type: 'crossing-green', clearance: 120, warningDistance: 720 };
+  await request(f.app).post(endpoint()).set(headers()).send(payload({ encounter })).expect(200);
+  expect(f.records.missions['module-mission'].encounter).toEqual(encounter);
+  const before = Object.keys(f.records.missions).length;
+  for (const invalid of [{ type: 'bad' }, { type: 'anchored', clearance: -1 }, { type: 'crossing-red', clearance: 200, warningDistance: 300 }]) {
+    await request(f.app).post(endpoint()).set(headers()).send({ ...payload({ encounter: invalid }), missionId: 'another' }).expect(400);
+  }
+  expect(Object.keys(f.records.missions)).toHaveLength(before);
+});

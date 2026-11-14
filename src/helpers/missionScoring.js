@@ -1,131 +1,21 @@
-// ==================================================
-// SCORING CONFIGURATION CONSTANTS - 4-METRIC SYSTEM
-// ==================================================
-const PASSING_SCORE = 70; // Changed from 80 to 70 as per new requirements
+import { simulationPerformance } from '../../shared/simulationPerformance.js';
 
-// NEW: 4-Metric Weighted Scoring System
-const WEIGHTS = {
-  STEPS_COMPLETED: 0.40,    // 40% - Sequential step completion
-  WAYPOINTS_REACHED: 0.30,  // 30% - Non-sequential waypoint visits
-  QUIZ_SCORE: 0.20,         // 20% - Quiz performance
-  TIME_PERFORMANCE: 0.10    // 10% - Time efficiency
-};
-
-/**
- * Calculate mission performance score - 4-METRIC SYSTEM
- * Components:
- * 1. Steps (40%) - Sequential, requires interaction
- * 2. Waypoints (30%) - Non-sequential, just reaching
- * 3. Quiz (20%) - Quiz performance
- * 4. Time (10%) - Time efficiency
- * 
- * @param {Object} params - Scoring parameters
- * @param {number} params.stepsCompleted - Number of steps completed (sequential)
- * @param {number} params.totalSteps - Total number of steps in mission
- * @param {number} params.waypointsReached - Number of waypoints reached (non-sequential)
- * @param {number} params.totalWaypoints - Total number of waypoints
- * @param {number} params.quizCorrect - Number of correct quiz answers
- * @param {number} params.quizTotal - Total number of quiz questions
- * @param {number} params.actualTimeMinutes - Actual time taken in minutes
- * @param {number} params.targetTimeMinutes - Target time in minutes
- * @param {Object} mission - Mission configuration
- * @returns {Object} Complete performance result with all 4 metrics
- */
+// Compatibility adapter: the shared practical rubric computes every overall
+// score. Quiz marks and elapsed time remain separate diagnostics.
 export function calculateMissionScore(params, mission = {}) {
-  // Validate inputs
-  if (!params || typeof params !== 'object') {
-    throw new Error('Invalid scoring parameters');
-  }
-
-  const nonnegative = (value, fallback = 0) => {
-    const number = Number(value);
-    return Number.isFinite(number) && number >= 0 ? number : fallback;
-  };
-  const totalSteps = nonnegative(params.totalSteps ?? 1);
-  const totalWaypoints = nonnegative(params.totalWaypoints ?? 1);
-  const quizTotal = nonnegative(params.quizTotal ?? 1);
-  const stepsCompleted = Math.min(nonnegative(params.stepsCompleted), totalSteps);
-  const waypointsReached = Math.min(nonnegative(params.waypointsReached), totalWaypoints);
-  const quizCorrect = Math.min(nonnegative(params.quizCorrect), quizTotal);
-  const actualTimeMinutes = nonnegative(params.actualTimeMinutes);
-  const targetTimeMinutes = nonnegative(params.targetTimeMinutes ?? 10, 10) || 10;
-  const passScore = Math.min(100, nonnegative(mission.passScore ?? PASSING_SCORE, PASSING_SCORE));
-  
-  // 1. STEPS SCORE (40%) - Sequential completion
-  const stepsScore = totalSteps > 0 ? (stepsCompleted / totalSteps) * 100 : 0;
-  const stepsContribution = stepsScore * WEIGHTS.STEPS_COMPLETED;
-  
-  // 2. WAYPOINTS SCORE (30%) - Non-sequential reaching
-  // Heading/handling exercises may have no waypoint requirement.
-  const waypointsScore = totalWaypoints > 0 ? (waypointsReached / totalWaypoints) * 100 : 100;
-  const waypointsContribution = waypointsScore * WEIGHTS.WAYPOINTS_REACHED;
-  
-  // 3. QUIZ SCORE (20%)
-  const quizScore = quizTotal > 0 ? (quizCorrect / quizTotal) * 100 : 0;
-  const quizContribution = quizScore * WEIGHTS.QUIZ_SCORE;
-  
-  // 4. TIME SCORE (10%)
-  let timeScore = 100;
-  if (actualTimeMinutes > targetTimeMinutes) {
-    timeScore = (targetTimeMinutes / actualTimeMinutes) * 100;
-  }
-  // Cap at 100%
-  timeScore = Math.min(timeScore, 100);
-  const timeContribution = timeScore * WEIGHTS.TIME_PERFORMANCE;
-  
-  // Calculate final score
-  const finalScore = Math.round(
-    stepsContribution + 
-    waypointsContribution + 
-    quizContribution + 
-    timeContribution
-  );
-  
-  console.log('⭐ [4-METRIC SCORE CALCULATION]', {
-    steps: `${stepsCompleted}/${totalSteps} = ${stepsScore.toFixed(1)}% → ${stepsContribution.toFixed(1)} points`,
-    waypoints: `${waypointsReached}/${totalWaypoints} = ${waypointsScore.toFixed(1)}% → ${waypointsContribution.toFixed(1)} points`,
-    quiz: `${quizCorrect}/${quizTotal} = ${quizScore.toFixed(1)}% → ${quizContribution.toFixed(1)} points`,
-    time: `${actualTimeMinutes.toFixed(1)}/${targetTimeMinutes} min = ${timeScore.toFixed(1)}% → ${timeContribution.toFixed(1)} points`,
-    finalScore: `${finalScore}%`
-  });
-  
-  return {
-    score: finalScore,
-    passed: finalScore >= passScore,
-    passScore,
-    // Individual metrics
-    stepsScore: Math.round(stepsScore),
-    waypointsScore: Math.round(waypointsScore),
-    quizScore: Math.round(quizScore),
-    timeScore: Math.round(timeScore),
-    // Contributions
-    stepsContribution: Math.round(stepsContribution),
-    waypointsContribution: Math.round(waypointsContribution),
-    quizContribution: Math.round(quizContribution),
-    timeContribution: Math.round(timeContribution),
-    // Counts for display
-    stepsCompleted,
-    totalSteps,
-    waypointsReached,
-    totalWaypoints,
-    quizCorrect,
-    quizTotal,
-    actualTimeMinutes: Math.round(actualTimeMinutes * 10) / 10,
-    targetTimeMinutes,
-    // Breakdown for compatibility
-    breakdown: {
-      steps: Math.round(stepsScore),
-      waypoints: Math.round(waypointsScore),
-      quiz: Math.round(quizScore),
-      time: Math.round(timeScore)
-    }
-  };
+  if (!params || typeof params !== 'object') throw new Error('Invalid scoring parameters');
+  const count = value => Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : 0;
+  const totalSteps = count(params.totalSteps), totalWaypoints = count(params.totalWaypoints);
+  const stepsCompleted = Math.min(count(params.stepsCompleted), totalSteps);
+  const waypointsReached = Math.min(count(params.waypointsReached), totalWaypoints);
+  const completion = totalSteps ? stepsCompleted / totalSteps * 100 : null;
+  const result = simulationPerformance(params.simulation || { completion, accuracy: params.accuracy ?? null, safety: params.safety ?? null }, mission.passScore ?? 70);
+  return { ...result, stepsCompleted, totalSteps, waypointsReached, totalWaypoints,
+    stepsScore: completion, waypointsScore: totalWaypoints ? waypointsReached / totalWaypoints * 100 : null };
 }
 
 // =======================================================================
-// DEPRECATED FUNCTIONS - OLD 2-METRIC SYSTEM (Steering + Course)
-// These functions are no longer used in the new 4-metric scoring system
-// Kept for reference only
+// Legacy telemetry diagnostics. Overall practical scores use the shared rubric.
 // =======================================================================
 
 /**
@@ -134,7 +24,7 @@ export function calculateMissionScore(params, mission = {}) {
  * 
  * @param {Object} telemetry - Must contain steering data
  * @returns {number} Score between 0-100
- * @deprecated Use calculateMissionScore with 4-metric system instead
+ * @deprecated Overall scores use the shared simulationPerformance function.
  */
 function calculateSteeringPrecision(telemetry) {
   const { steering = {} } = telemetry;
@@ -367,9 +257,10 @@ function calculateTimeEfficiency(telemetry) {
  * @returns {number} Score between 0-100
  */
 export function calculateSafetyCompliance(telemetry) {
-  // Restore the documented existing collision penalties from
-  // SAFETY_COMPLIANCE_INTEGRATION_COMPLETE.md; no new overall weight is added.
-  const penalties = { BUOY_COLLISION: 10, PORT_COLLISION: 15, SHORE_COLLISION: 15 };
+  // Preserve existing collision penalties and score confirmed vessel-exercise
+  // events. The shared rubric applies the safety criterion's overall weight.
+  const penalties = { BUOY_COLLISION: 10, PORT_COLLISION: 15, SHORE_COLLISION: 15,
+    VESSEL_COLLISION: 100, UNSAFE_CLEARANCE: 20, INCORRECT_ENCOUNTER_RESPONSE: 15 };
   const safety = telemetry.safety || {};
   if (telemetry.procedure?.safetyConcerns > 0) return null;
   // recordCollision writes both arrays. Prefer structured violations so one

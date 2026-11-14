@@ -9,7 +9,7 @@
 
 import * as THREE from 'three';
 import { crossTrackDistance, isFinitePosition } from './navigationMetrics.js';
-import { SIMULATION_WEIGHTS } from '../../shared/simulationPerformance.js';
+import { SIMULATION_WEIGHTS, simulationPerformance, simulationScoringInputs } from '../../shared/simulationPerformance.js';
 
 // ============================================================================
 // CONFIGURATION - Adjustable scoring parameters
@@ -153,6 +153,9 @@ export class PerformanceState {
     this.dockingScore = null;  // Only calculated when docking occurs
     this.timeScore = null;     // Only calculated at mission end
     this.overallScore = null;  // Only calculated at mission end
+    this.safetyScore = 100;
+    this.scoringInputs = null;
+    this.objectivesRequired = 0;
     
     // Navigation tracking
     this.routeDeviations = [];
@@ -293,6 +296,7 @@ export class PerformanceManager {
     }
     
     if (missionData.objectives) {
+      this.state.objectivesRequired = missionData.objectives.length;
       this.expectedObjectiveSequence = missionData.objectives.map(obj => obj.id);
     }
     
@@ -411,34 +415,16 @@ export class PerformanceManager {
   
   // Calculate final time efficiency score
   finalizeTimeScore() {
-    if (this.state.timeScore !== null && this.state.timeScore !== undefined) return;
-    // This will be implemented with mission expected time data
-    // For now, placeholder
-    this.state.timeScore = 85;
+    // Integrated missions record elapsed time through TimeEfficiencyCalculator.
+    // Unmeasured diagnostics stay null and never contribute to the rubric.
+    return this.state.timeScore;
   }
   
   // Calculate final overall performance score
   finalizeOverallScore() {
-    const weights = this.config.overall;
-    
-    let score = 0;
-    score += this.state.steeringScore * weights.steeringWeight;
-    score += this.state.courseScore * weights.courseWeight;
-    
-    if (this.state.dockingScore !== null) {
-      score += this.state.dockingScore * weights.dockingWeight;
-    } else {
-      // Redistribute docking weight if no docking occurred
-      score += this.state.courseScore * weights.dockingWeight;
-    }
-    
-    if (this.state.timeScore !== null) {
-      score += this.state.timeScore * weights.timeWeight;
-    } else {
-      score += 85 * weights.timeWeight; // Default moderate time score
-    }
-    
-    this.state.overallScore = Math.max(0, Math.min(100, score));
+    const inputs = this.state.scoringInputs || simulationScoringInputs(this.state);
+    this.state.simulationAssessment = simulationPerformance(inputs);
+    this.state.overallScore = this.state.simulationAssessment.score;
   }
 }
 
@@ -692,6 +678,9 @@ export class CollisionTracker {
     };
     
     this.state.collisions.push(collision);
+    const safetyPenalty = ({ dock: 15, buoy: 10, shore: 15, vessel: 100 })[type];
+    if (safetyPenalty != null) this.state.safetyScore = Math.max(0, this.state.safetyScore - safetyPenalty);
+    else this.state.safetyScore = null;
     
     // Apply penalty to steering score
     this.state.steeringScore = Math.max(0, this.state.steeringScore - penalty);

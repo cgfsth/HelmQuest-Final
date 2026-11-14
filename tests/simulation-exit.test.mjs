@@ -35,7 +35,7 @@ function simulation({ review = false, quickSail = false } = {}) {
     keyStates: {}, waypointClears: 0,
     engineStarting: { value: true }, engineRunning: { value: true },
     performanceManager: { isActive: true, cancelMission() { this.isActive = false; } },
-    clearWaypointMarkers() { context.waypointClears++; }, dismissTrainingNotification() {},
+    clearWaypointMarkers() { context.waypointClears++; }, clearVesselEncounter() {}, dismissTrainingNotification() {},
     createTrainingRunMetrics() { return { startedAt: null }; },
     cancelExitHold() {}, resetCameraLookOffset() {}, syncUiCursor() {}, syncOrbitControlsEnabled() {},
     snapChaseCamera() {}, updateCompassStripViewportWidth() {},

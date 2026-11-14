@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "verify:settings": "node scripts/verify-student-settings.mjs",
+    "verify:vessels": "node scripts/verify-vessel-encounters.mjs",
     "test:courses": "node --test tests/course-interface.test.mjs tests/mission-completion-flow.test.mjs",
     "verify:syllabus": "node scripts/verify-syllabus-interface.mjs",
     "verify:rendering": "node scripts/verify-rendering-prototype.mjs",

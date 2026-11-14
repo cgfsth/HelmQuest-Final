@@ -4,6 +4,8 @@ import { db } from '../config/firebase-admin.js';
 import { saveMissionResult } from '../services/scorePersistence.js';
 import { canonicalMissionId, readMissionReward } from '../services/missionRewards.js';
 import { loadRankSettings, synchronizeStudentProgression } from '../services/progression.js';
+import { simulationPerformance, validDockingCompletion, completedSimulationScores } from '../../shared/simulationPerformance.js';
+import { normalizeEncounter, validEncounterResult } from '../../shared/vesselEncounter.js';
 
 const router = express.Router();
 
@@ -16,9 +18,23 @@ router.post('/', async (req, res) => {
         error: 'Bad Request', message: 'studentId, missionId, and a valid score are required'
       });
     }
+    let assessment = null, encounter = null;
+    if (req.body.scores) {
+      const mission = await readMissionReward(ref => ref.get(), db, missionId);
+      if (!mission) return res.status(404).json({ message: 'Mission not found.' });
+      if (!validDockingCompletion(req.body.completion)) return res.status(409).json({ message: 'Complete the objectives and dock safely before reporting.' });
+      let config;
+      try { config = normalizeEncounter(mission.data.encounter); } catch (error) { return res.status(400).json({ message: error.message }); }
+      encounter = req.body.encounter || null;
+      if (!validEncounterResult(config, encounter)) return res.status(409).json({ message: 'Finish the assigned vessel exercise first.' });
+      try { assessment = simulationPerformance(completedSimulationScores(req.body.scores, req.body.completion, encounter), Number(mission.data.pass_score ?? mission.data.passScore ?? 70)); }
+      catch (error) { return res.status(400).json({ message: error.message }); }
+      if (!assessment.assessmentComplete) return res.status(409).json({ message: 'Some simulation performance criteria were not recorded.' });
+    }
     const result = await saveMissionResult({
       studentId, missionId, missionTitle: missionTitle || '', score: Number(score),
       passed: passed !== undefined ? passed : (score >= 80),
+      ...(assessment ? { ...assessment, encounter, completion: { ...req.body.completion, verified: true } } : {}),
       completedAt: completedAt || new Date()
     });
     res.status(result.isUpdate || result.skipped ? 200 : 201).json({

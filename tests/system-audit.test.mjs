@@ -93,7 +93,7 @@ test('dropping the anchor outside the required port cannot complete the return-t
 
 test('heading-only missions have finite scores without requiring nonexistent waypoints', () => {
   const result=calculateMissionScore({stepsCompleted:2,totalSteps:2,waypointsReached:0,totalWaypoints:0,
-    quizCorrect:1,quizTotal:1,actualTimeMinutes:4,targetTimeMinutes:5},{passScore:80});
+    accuracy:100,safety:100,quizCorrect:1,quizTotal:1,actualTimeMinutes:4,targetTimeMinutes:5},{passScore:80});
   assert.equal(result.score,100);
   assert.equal(result.passed,true);
 });
@@ -104,7 +104,7 @@ test('score normalization handles zero totals, bad telemetry, string times and o
     {stepsCompleted:99,totalSteps:2,waypointsReached:5,totalWaypoints:1,quizCorrect:9,quizTotal:1,actualTimeMinutes:'12',targetTimeMinutes:'6'},
     {stepsCompleted:NaN,waypointsReached:Infinity,quizTotal:0,actualTimeMinutes:Infinity,targetTimeMinutes:-5}
   ]) {
-    const result=calculateMissionScore(params);
+    const result=calculateMissionScore({...params,accuracy:80,safety:90});
     assert.ok(Number.isFinite(result.score));
     assert.ok(result.score>=0 && result.score<=100);
   }
@@ -193,6 +193,8 @@ function missionReport(save) {
   const module={id:'module',title:'Audit',duration:'5 minutes',completed:false,steps:[{},{}]};
   const data={sessions:[],quizSubmissions:[]},effects={awards:0,saves:0,reports:0};
   const context={activeMission:ref({id:'mission',passScore:70}),getMissionResult:()=>null,isTrainingReviewMode:ref(false),
+    encounterSetupError:ref(''),vesselEncounterState:null,vesselEncounterResult:()=>null,
+    currentSimulationScores:()=>({completion:100,accuracy:50,safety:100}),courseDockingEvidence:()=>({}),
     missionReportSaving:ref(false),activeTrainingModule:ref(module),currentUser:ref({id:'student',name:'Student'}),
     trainingRunMetrics:ref({startedAt:0,endedAt:300000,stepsCompleted:2,visitedWaypoints:new Set(['buoy-1']),maxSpeedKnots:5}),
     performance:{now:()=>300000},performanceManager:{isActive:false,parseExpectedTime:()=>300000},

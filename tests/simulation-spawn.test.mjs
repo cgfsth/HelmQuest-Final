@@ -59,7 +59,7 @@ function makeSimulation(type) {
     tagHelmDeckRailMeshes() {}, tagHelmInteriorMeshes() {},
     setupBoatAnchorRig() { return null; }, applyAnchorPose() {}, resetBoatAnchorRig() {},
     attachHelmCockpitToBoat() {}, addBoatHeadlights() {}, syncOrbitControlsEnabled() {}, syncHelmRailingsVisibility() {},
-    applyEnvironmentPreset() {}, applySimulationWeather() {},
+    applyEnvironmentPreset() {}, applySimulationWeather() {}, setupVesselEncounter() {},
     isMenuBackdropScreen() { return context.activeScreen.value === 'landing'; },
     syncCompassVisualHeading(heading) { context.compassHeading = heading; },
     goToScreen(screen) { context.activeScreen.value = screen; },
