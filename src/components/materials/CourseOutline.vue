@@ -1,6 +1,5 @@
 <template>
   <div class="lc-course">
-    <button v-if="focusedLessonId" type="button" @click="$emit('select-lesson', '')"><ArrowLeft :size="17" /> Back to Course</button>
     <div class="lc-course-heading"><div><span class="lc-label">MARITIME TRAINING COURSE</span><h2>{{ syllabus.title }}</h2><p v-if="official">{{ official.semester }} · School Year {{ official.schoolYear }}</p><p>{{ syllabus.description }}</p><span class="lc-instructor"><Anchor :size="15" /> {{ syllabus.instructorName }}</span></div><span v-if="syllabus.published === false" class="lc-draft">Unpublished course</span></div>
     <div class="lc-course-bar"><span><BookOpen :size="16" /> Course content <b>{{ visibleModules.length }} modules</b></span><button type="button" @click="toggleAll">{{ allCollapsed ? 'Expand all' : 'Collapse all' }}</button></div>
     <section v-if="!focusedLessonId" class="lc-section" aria-labelledby="lc-general-title">
@@ -30,7 +29,7 @@
 </template>
 <script setup>
 import { computed, ref } from 'vue';
-import { Anchor, ArrowDown, ArrowLeft, ArrowUp, BookOpen, ChevronDown, Megaphone, Pencil, Plus, Trash2 } from '@lucide/vue';
+import { Anchor, ArrowDown, ArrowUp, BookOpen, ChevronDown, Megaphone, Pencil, Plus, Trash2 } from '@lucide/vue';
 import CourseActivityRow from './CourseActivityRow.vue';
 import OfficialSyllabusMatrix from './OfficialSyllabusMatrix.vue';
 import { officialSection, PRACTICAL_ALIGNMENT } from '../../../shared/officialSyllabus.js';

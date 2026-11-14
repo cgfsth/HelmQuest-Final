@@ -18,7 +18,7 @@
       <div class="lm-toolbar" :class="{ 'lc-course-toolbar': selected }">
         <div v-if="!selected"><p class="lm-eyebrow">COURSE LIBRARY</p><h2>Your learning materials</h2><p>{{ manager ? 'Organize course documents for your students.' : 'Read the course documents shared by your instructor.' }}</p></div>
         <div class="lm-actions">
-          <button v-if="selected" type="button" @click="back"><ArrowLeft :size="17" /> All syllabi</button>
+          <button v-if="selected" type="button" @click="lessonId ? selectLesson('') : back()"><ArrowLeft :size="17" /> {{ lessonId ? 'Back to Course' : 'All syllabi' }}</button>
           <button v-if="manager && selected" type="button" :aria-pressed="preview" @click="preview = !preview"><Eye :size="17" /> {{ preview ? 'Exit student preview' : 'Preview as student' }}</button>
           <button v-if="manager && !selected" class="lm-primary" type="button" :disabled="loading || busy || !ready" @click="edit('syllabus')"><Plus :size="18" /> Create syllabus</button>
           <button type="button" :disabled="loading || busy" aria-label="Refresh learning materials" @click="refresh"><RefreshCw :size="18" /></button>

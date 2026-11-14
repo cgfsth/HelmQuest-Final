@@ -13543,7 +13543,7 @@ function setBoatHeadlightsVisibility(visible) {
 }
 
 function syncBoatHeadlights() {
-  const automaticState = environmentPreset !== 'day' || boatHeadlights.some(light => light.name === 'BigBoatLights');
+  const automaticState = environmentPreset === 'sunset' || environmentPreset === 'rain';
   setBoatHeadlightsVisibility(headlightsManuallyToggled ? headlightsManualState : automaticState);
 }
 
@@ -13563,7 +13563,7 @@ function toggleBoatHeadlights() {
   }
   
   // Toggle the manual state
-  const automaticState = environmentPreset !== 'day' || boatHeadlights.some(light => light.name === 'BigBoatLights');
+  const automaticState = environmentPreset === 'sunset' || environmentPreset === 'rain';
   const currentState = headlightsManuallyToggled ? headlightsManualState : automaticState;
   headlightsManualState = !currentState;
   headlightsManuallyToggled = true;

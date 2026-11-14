@@ -114,19 +114,62 @@ test('disposing the fixtures releases shared resources once and preserves the bo
   assert.equal(model.parent, boat);
 });
 
-test('actual App lighting flow turns BigBoat lamps on in daylight and respects the L toggle across weather and swaps', () => {
+function appLighting() {
   const source = readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   const context = { THREE, addBigBoatLights, disposeBigBoatLights, boatHeadlights: [],
     environmentPreset: 'day', headlightsManuallyToggled: false, headlightsManualState: true,
+    document: { createElement: () => ({ getContext: () => ({
+      createRadialGradient: () => ({ addColorStop() {} }),
+      createLinearGradient: () => ({ addColorStop() {} }), fillRect() {},
+    }) }) },
     console: { log() {}, warn() {} } };
   vm.createContext(context);
-  for (const name of ['setBoatHeadlightsVisibility', 'syncBoatHeadlights', 'toggleBoatHeadlights', 'addBoatHeadlights']) {
+  for (const name of ['setBoatHeadlightsVisibility', 'syncBoatHeadlights', 'createBoatHeadlightGlow', 'toggleBoatHeadlights', 'addBoatHeadlights']) {
     const start = source.indexOf(`function ${name}(`);
     vm.runInContext(source.slice(start, source.indexOf('\n}', start) + 2), context);
   }
+  return context;
+}
+
+for (const length of [18, 60, 180]) {
+  test(`${length}m boat automatically keeps lights and water beams off in clear and cloudy daylight`, () => {
+    const context = appLighting();
+    const boat = new THREE.Group();
+    boat.userData.loaMeters = length;
+    context.addBoatHeadlights(boat, length);
+    assert.ok(context.boatHeadlights.length > 0);
+    const check = expected => {
+      for (const light of context.boatHeadlights) {
+        const visible = expected && !(light.name === 'BoatHeadlightGlow' && context.environmentPreset === 'day');
+        assert.equal(light.visible, visible, `${context.environmentPreset}: ${light.name || light.type}`);
+      }
+    };
+    check(false);
+    for (const [preset, expected] of [['cloudy', false], ['sunset', true], ['rain', true], ['cloudy', false], ['day', false]]) {
+      context.environmentPreset = preset;
+      context.syncBoatHeadlights();
+      check(expected);
+    }
+    // L must invert the actual automatic state, including cloudy daylight.
+    for (const preset of ['day', 'cloudy']) {
+      context.environmentPreset = preset;
+      context.headlightsManuallyToggled = false;
+      context.syncBoatHeadlights();
+      context.toggleBoatHeadlights();
+      check(true);
+      context.toggleBoatHeadlights();
+      check(false);
+    }
+  });
+}
+
+test('actual App lighting flow respects the L toggle across weather and boat swaps', () => {
+  const context = appLighting();
   const first = realBigBoat().boat;
   context.addBoatHeadlights(first, 180);
   const lamps = first.getObjectByName('BigBoatLights');
+  assert.equal(lamps.visible, false);
+  context.toggleBoatHeadlights();
   assert.equal(lamps.visible, true);
   context.toggleBoatHeadlights();
   assert.equal(lamps.visible, false);
