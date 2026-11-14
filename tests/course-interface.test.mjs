@@ -48,7 +48,8 @@ test('course simulation launches the exact linked existing mission through the e
   assert.equal(launches.length, 1); assert.match(errors[0].message, /unavailable/);
   context.isMissionLocked = () => true; context.getMissionAvailabilityStatus = () => ({ message: 'Not open yet' });
   await start({ target: { id: 'harbor' }, fail: e => errors.push(e) });
-  assert.equal(launches.length, 1); assert.match(errors[1].message, /Not open yet/);
+  assert.equal(launches.length, 2, 'Server-authorized syllabus launches ignore legacy standalone mission locks');
+  assert.equal(errors.length, 1);
 });
 
 test('switching student accounts while refreshing mission data cannot launch the previous activity', async () => {

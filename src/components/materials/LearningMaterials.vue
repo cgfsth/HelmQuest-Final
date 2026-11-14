@@ -10,8 +10,9 @@
       <p><strong>{{ activityDetail.type === 'simulation' ? 'Assigned mission:' : 'Assigned quiz:' }}</strong> {{ linkedTitle(activityDetail) }}</p>
       <p v-if="activityDetail.completionRule === 'pass'">{{ activityDetail.passScore != null ? 'Required score: ' + activityDetail.passScore + '%' : 'Meet the linked activity’s passing requirements.' }}</p>
       <p v-if="error" class="lm-alert lm-error" role="alert">{{ error }}</p>
+      <p v-if="!manager && !preview && activityDetail.type === 'simulation' && !currentSimulationAccess.canStart" class="lm-alert" role="status">{{ currentSimulationAccess.message }}</p>
       <p v-if="preview || manager" class="lc-preview-note">Student preview. Use a student account to start this activity and record progress.</p>
-      <button v-else type="button" class="lm-primary" :disabled="busy" @click="startActivity">{{ busy ? 'Opening…' : activityDetail.type === 'simulation' ? 'Start Simulation' : courseProgress[activityDetail.id]?.status === 'Done' ? 'View Quiz Results' : 'Start Quiz' }}</button>
+      <button v-else type="button" class="lm-primary" :disabled="busy || (activityDetail.type === 'simulation' && !currentSimulationAccess.canStart)" @click="startActivity">{{ busy ? 'Opening…' : activityDetail.type === 'simulation' ? 'Start Simulation' : courseProgress[activityDetail.id]?.status === 'Done' ? 'View Quiz Results' : 'Start Quiz' }}</button>
     </section>
     <template v-else>
       <div class="lm-toolbar" :class="{ 'lc-course-toolbar': selected }">
@@ -42,7 +43,7 @@
         </div>
         <div v-else-if="!selected" class="lm-empty"><BookOpen :size="36" /><h3>{{ search || filter ? 'No matching syllabi' : 'No syllabi yet' }}</h3><p>{{ manager ? 'Create a syllabus and upload its PDF to start your course library.' : 'Your instructor’s uploaded course materials will appear here.' }}</p></div>
         <p v-else-if="preview && selected.published === false" class="lm-empty">This course is unpublished. Students will see it after you publish it.</p>
-        <CourseOutline v-else :mission-authoring="role === 'instructor' && !preview" :mission-quiz-label="missionQuizLabel" :mission-quizzes-loading="missionQuizzesLoading" @create-mission="createModuleMission" @edit-mission="editModuleMission" @edit-mission-quiz="item => emit('edit-mission-quiz', { missionId: item.targetId, title: item.title })" :syllabus="selected" :official="official" :focused-lesson-id="lessonId" :modules="modules" :activities="activities" :progress="preview ? {} : courseProgress" :manager="manager && !preview" :preview="preview" :busy="busy" @select-lesson="selectLesson" @open="openActivity" @edit-section="edit" @remove-section="confirmDelete" @add-activity="addActivity" @edit-activity="item => edit('activity', item)" @remove-activity="item => confirmDelete('activity', item)" @move-activity="moveActivity" @move-module="move" />
+        <CourseOutline v-else :simulation-access="simulationAccess" :mission-authoring="role === 'instructor' && !preview" :mission-quiz-label="missionQuizLabel" :mission-quizzes-loading="missionQuizzesLoading" @create-mission="createModuleMission" @edit-mission="editModuleMission" @edit-mission-quiz="item => emit('edit-mission-quiz', { missionId: item.targetId, title: item.title })" :syllabus="selected" :official="official" :focused-lesson-id="lessonId" :modules="modules" :activities="activities" :progress="preview ? {} : courseProgress" :manager="manager && !preview" :preview="preview" :busy="busy" @select-lesson="selectLesson" @open="openActivity" @edit-section="edit" @remove-section="confirmDelete" @add-activity="addActivity" @edit-activity="item => edit('activity', item)" @remove-activity="item => confirmDelete('activity', item)" @move-activity="moveActivity" @move-module="move" />
       </template>
     </template>
     <Teleport to="body">
@@ -100,12 +101,14 @@ const emit = defineEmits(['create-mission', 'edit-mission', 'edit-mission-quiz',
 const manager = computed(() => ['instructor', 'admin'].includes(props.role));
 const syllabi = ref([]), modules = ref([]), instructors = ref([]), selected = ref(null), document = ref(null);
 const activities = ref([]), courseProgress = ref({}), catalog = ref({ missions: [], quizzes: [] }), preview = ref(false), activityDetail = ref(null);
+const simulationAccess = ref({});
+const currentSimulationAccess = computed(() => simulationAccess.value[activityDetail.value?.moduleId] || { canStart: false, message: 'View the PDF lessons in this module before starting the simulation. Refresh the course to check your reading progress.' });
 const official = ref(null), lessonId = ref(props.initialLessonId || '');
 const loading = ref(false), busy = ref(false), ready = ref(false), error = ref(''), notice = ref(''), cleanupPending = ref(false);
 const search = ref(''), filter = ref(''), editor = ref(null), removal = ref(null), modal = ref(null), modalError = ref('');
 const form = ref({}), file = ref(null), progress = ref(0);
 const visibleSyllabi = computed(() => syllabi.value.filter(item => (!filter.value || item.instructorId === filter.value) && item.title.toLowerCase().includes(search.value.toLowerCase())));
-let controller, mutation, generation = 0, identity = 0, focusReturn, previousOverflow;
+let controller, mutation, viewRecording, generation = 0, identity = 0, focusReturn, previousOverflow;
 const size = value => value ? value < 1048576 ? Math.ceil(value / 1024) + ' KB' : (value / 1048576).toFixed(1) + ' MB' : '';
 async function load(id = null) {
   controller?.abort(); controller = new AbortController();
@@ -121,7 +124,7 @@ async function load(id = null) {
     }
     const result = id ? await api.getLearningCourse(id, { signal }) : await api.listLearningSyllabi({ signal });
     if (ticket !== generation || signal.aborted) return;
-    if (id) { selected.value = result.syllabus; modules.value = result.modules; activities.value = result.activities; courseProgress.value = result.progress; official.value = result.official || null; catalog.value = result.catalog || { missions: [], quizzes: [] }; if (!result.modules.some(m => m.id === lessonId.value)) lessonId.value = ''; emit('navigate-course', { syllabusId: id, lessonId: lessonId.value }); }
+    if (id) { selected.value = result.syllabus; modules.value = result.modules; activities.value = result.activities; courseProgress.value = result.progress; simulationAccess.value = result.simulationAccess || {}; official.value = result.official || null; catalog.value = result.catalog || { missions: [], quizzes: [] }; if (!result.modules.some(m => m.id === lessonId.value)) lessonId.value = ''; emit('navigate-course', { syllabusId: id, lessonId: lessonId.value }); }
     else { selected.value = null; syllabi.value = result.syllabi; }
     cleanupPending.value = !!result.cleanupPending || !!result.syllabus?.cleanupPending;
     ready.value = true;
@@ -142,6 +145,7 @@ function missionContext(moduleId, item = {}) {
     onSaved: async () => { if (ticket === identity && selected.value?.id === syllabusId) { notice.value = 'Mission saved in this module.'; await load(syllabusId); } } };
 }
 function createModuleMission(moduleId) {
+  if (!simulationAccess.value[moduleId]?.canCreate) { error.value = 'Upload a PDF lesson in this module before creating a mission.'; return; }
   const context = missionContext(moduleId);
   if (context) emit('create-mission', context);
 }
@@ -155,16 +159,24 @@ function openActivity(item) {
   if (['simulation', 'quiz'].includes(item.type)) { activityDetail.value = item; return; }
   document.value = { kind: item.legacy ? item.kind : 'activity', id: item.documentId || item.id, title: item.title, objectives: item.objectives || '', presentation: item.type === 'presentation', revision: item.revision, documentVersion: item.documentVersion };
 }
-function closeReader() { document.value = null; refresh(); }
+async function closeReader() {
+  const ticket = identity;
+  document.value = null; loading.value = true;
+  await viewRecording?.catch(() => {});
+  if (ticket === identity) await refresh();
+}
 async function documentViewed() {
   if (props.role !== 'student' || !document.value) return;
   const current = { ...document.value }, ticket = identity;
-  try { await api.recordLearningActivity(current.id, { event: 'viewed', ...(current.kind !== 'activity' ? { kind: current.kind, documentVersion: current.documentVersion } : { revision: current.revision }) }); }
+  const recording = viewRecording = api.recordLearningActivity(current.id, { event: 'viewed', ...(current.kind !== 'activity' ? { kind: current.kind, documentVersion: current.documentVersion } : { revision: current.revision }) });
+  try { await recording; }
   catch (err) { if (ticket === identity) { error.value = err.message; notice.value = 'The document opened, but reading progress was not saved. Open it again to retry.'; } }
+  finally { if (viewRecording === recording) viewRecording = null; }
 }
 const linkedTitle = item => (item.type === 'simulation' ? catalog.value.missions : catalog.value.quizzes).find(target => target.id === item.targetId)?.title || item.targetTitle || item.title;
 async function startActivity() {
   if (busy.value || manager.value || preview.value) return;
+  if (activityDetail.value?.type === 'simulation' && !currentSimulationAccess.value.canStart) { error.value = currentSimulationAccess.value.message; return; }
   const item = activityDetail.value, ticket = identity, operation = mutation = new AbortController();
   busy.value = true; error.value = '';
   try {
@@ -211,6 +223,7 @@ function chooseFile(event) {
 }
 async function save() {
   if (busy.value || !manager.value) return;
+  if (editor.value.kind === 'activity' && form.value.type === 'simulation' && (!editor.value.id || editor.value.targetId !== form.value.targetId) && !simulationAccess.value[form.value.moduleId]?.canCreate) { modalError.value = 'Upload a PDF lesson in this module before linking a simulation.'; return; }
   const needsFile = editor.value.kind === 'syllabus' || (editor.value.kind === 'activity' && ['pdf', 'presentation'].includes(form.value.type));
   if (!editor.value.id && needsFile && !file.value) { modalError.value = 'Choose a learning document.'; return; }
   const current = { ...editor.value }, ticket = identity, operation = mutation = new AbortController();
@@ -267,7 +280,7 @@ async function retryCleanup() {
   finally { if (mutation === operation && ticket === identity) busy.value = false; }
 }
 watch(() => [props.currentUser.id, props.role], () => {
-  identity++; generation++; controller?.abort(); mutation?.abort(); closeModal(true); document.value = null; activityDetail.value = null; selected.value = null; lessonId.value = props.initialLessonId || ''; syllabi.value = []; modules.value = []; activities.value = []; courseProgress.value = {}; preview.value = false; instructors.value = []; ready.value = false; busy.value = false; notice.value = ''; load(props.initialCourseId || null);
+  identity++; generation++; controller?.abort(); mutation?.abort(); closeModal(true); document.value = null; activityDetail.value = null; selected.value = null; lessonId.value = props.initialLessonId || ''; syllabi.value = []; modules.value = []; activities.value = []; courseProgress.value = {}; simulationAccess.value = {}; preview.value = false; instructors.value = []; ready.value = false; busy.value = false; notice.value = ''; load(props.initialCourseId || null);
 }, { immediate: true });
 onBeforeUnmount(() => { identity++; generation++; controller?.abort(); mutation?.abort(); if (previousOverflow !== undefined) window.document.body.style.overflow = previousOverflow; });
 </script>

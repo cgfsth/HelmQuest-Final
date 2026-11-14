@@ -10,6 +10,7 @@ import { issueSession } from '../backend/services/authSession.js';
 import { headlessBrowser } from './lib/headless-browser.mjs';
 
 const directory = resolve('../.tmp/module-mission-authoring'); mkdirSync(directory, { recursive: true });
+const pdfPath = resolve(directory, 'module-lesson.pdf'); writeFileSync(pdfPath, samplePdf());
 const fixture = materialsFixture({ middleware(req, res, next) {
   res.setHeader('Access-Control-Allow-Origin', '*'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
   if (req.method === 'OPTIONS') return res.sendStatus(204); next();
@@ -59,6 +60,13 @@ await vite.listen(); let browser;
 try {
   browser = await headlessBrowser({ directory, port: 9264 }); await browser.viewport(1365); await browser.navigate('http://127.0.0.1:5297/__module-missions');
   await browser.waitFor('document.querySelectorAll(".lc-create-mission").length === 2');
+  assert.equal(await browser.evaluate('[...document.querySelectorAll(".lc-create-mission")].every(button=>button.disabled)'), true);
+  await browser.screenshot('mission-creation-blocked-without-pdf');
+  await browser.clickExpression(`document.querySelector('[aria-labelledby="lc-title-${secondModule}"] .lc-add-activity')`);
+  await browser.waitFor('document.querySelector(".lm-form")');
+  await browser.fill('.lm-form input:not([type])', 'Docking PDF lesson'); await browser.attach(pdfPath);
+  await browser.clickExpression('document.querySelector(".lc-publish input")'); await browser.click('Save document');
+  await browser.waitFor(`!document.querySelector('.lm-modal') && document.querySelector('[aria-labelledby="lc-title-${secondModule}"] .lc-create-mission')?.disabled === false`);
   await browser.clickExpression(`document.querySelector('[aria-labelledby="lc-title-${secondModule}"] .lc-create-mission')`);
   await browser.waitFor('document.querySelector(".mission-editor-card")');
   assert.match(await browser.evaluate('document.querySelector(".mission-editor-context").textContent'), /Docking/);
@@ -71,7 +79,7 @@ try {
   fixture.state.failCommit = false; await browser.clickExpression('document.querySelector(".quiz-save-btn")');
   await browser.waitFor('!document.querySelector(".mission-editor-card") && document.body.textContent.includes("Module 2 Harbor Docking")');
   const missionId = Object.keys(fixture.records.missions)[0];
-  const activityId = Object.keys(fixture.records.learning_activities)[0];
+  const activityId = Object.keys(fixture.records.learning_activities).find(id => fixture.records.learning_activities[id].type === 'simulation');
   assert.equal(fixture.records.learning_activities[activityId].moduleId, secondModule);
   assert.equal(await browser.evaluate(`document.querySelector('[aria-labelledby="lc-title-${firstModule}"]').textContent.includes('Module 2 Harbor Docking')`), false);
   await browser.click('Edit mission'); await browser.waitFor('document.querySelector(".mission-editor-card")');
@@ -84,11 +92,29 @@ try {
   await browser.evaluate('window.fixture.login("student")');
   await browser.waitFor('document.querySelectorAll(".lc-create-mission").length === 0 && document.body.textContent.includes("Revised Docking Mission")');
   assert.equal(await browser.evaluate('document.querySelectorAll(".lc-mission-tools").length'), 0);
+  const simulationButton = `[...document.querySelectorAll('.lc-activity-open')].find(button=>button.textContent.includes('Revised Docking Mission'))`;
+  assert.equal(await browser.evaluate(`(${simulationButton}).disabled`), true);
+  await browser.screenshot('simulation-blocked-before-pdf-view');
+  const readingId = Object.keys(fixture.records.learning_activities).find(id => fixture.records.learning_activities[id].type === 'pdf');
+  const readingPath = fixture.records.learning_activities[readingId].storagePath, savedFile = fixture.files.get(readingPath);
+  fixture.files.delete(readingPath);
+  await browser.clickExpression(`[...document.querySelectorAll('.lc-activity-open')].find(button=>button.textContent.includes('Docking PDF lesson'))`);
+  await browser.waitFor('document.querySelector(".lm-reader .lm-error")');
+  await browser.click('Back to Module'); await browser.waitFor('!document.querySelector(".lm-reader") && !document.querySelector(".lm-empty[role=status]")');
+  assert.equal(await browser.evaluate(`(${simulationButton}).disabled`), true);
+  assert.equal(Object.values(fixture.records.learning_activity_progress || {}).some(item => item.activityId === readingId && item.viewedAt), false);
+  fixture.files.set(readingPath, savedFile);
+  await browser.clickExpression(`[...document.querySelectorAll('.lc-activity-open')].find(button=>button.textContent.includes('Docking PDF lesson'))`);
+  await browser.waitFor('document.querySelector(".lm-pdf-page canvas")?.width > 0');
+  await browser.waitFor('document.querySelector(".lm-pdf-text")?.textContent.length > 0 && !document.querySelector(\'[data-pdf-page="1"] .lm-pdf-placeholder\')');
+  await browser.click('Back to Module');
+  await browser.waitFor(`!document.querySelector('.lm-reader') && (${simulationButton}) && !(${simulationButton}).disabled`);
+  await browser.screenshot('simulation-unlocked-after-pdf-view');
   await browser.clickExpression(`[...document.querySelectorAll('.lc-activity-open')].find(button=>button.textContent.includes('Revised Docking Mission'))`);
   await browser.click('Start Simulation');
   await browser.waitFor('window.fixture.launches.length === 1');
   assert.deepEqual(await browser.evaluate('window.fixture.launches[0]'), { missionId, moduleId: secondModule, syllabusId });
   assert.deepEqual(browser.errors, []);
-  console.log('PASS: per-module Create mission, actual buoy editor, failed-save retry, automatic module assignment, edit without duplicates, module quiz control, student launch, and desktop/mobile layouts.');
+  console.log('PASS: PDF upload required for authoring, failed PDF open keeps simulation locked, successful rendering unlocks it, per-module creation/editing/retry/quiz controls, correct student launch and mobile layouts.');
   console.log('Screenshots: ' + directory);
 } finally { browser?.close(); apiServer.closeAllConnections(); await new Promise(resolve => apiServer.close(resolve)); await vite.close(); }

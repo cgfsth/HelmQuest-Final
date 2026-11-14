@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { materialsFixture, samplePdf } from './helpers/materialsFixture.js';
 import { issueSession } from '../services/authSession.js';
 import { createPresentationPreview } from '../services/presentationPreview.js';
+import { viewModulePdf } from './helpers/coursePdf.js';
 
 const owner = { id: 'a', role: 'instructor' }, student = { id: 'sa', role: 'student', instructorid: 'a' };
 const headers = (id = 'a', role = 'instructor') => ({ Authorization: `Bearer ${issueSession(id, role)}` });
@@ -22,12 +23,12 @@ beforeEach(async () => {
     f.records.quiz_score.saved = data; return { data, scoreId: 'saved' };
   } });
   ({ id: syllabusId } = await f.service.save(owner, 'syllabi', null, { title: 'Maritime Navigation' }, file()));
-  ({ id: moduleId } = await f.service.save(owner, 'syllabus_modules', null, { title: 'Safe Navigation', moduleNumber: 1 }, null, syllabusId));
+  ({ id: moduleId } = await f.service.save(owner, 'syllabus_modules', null, { title: 'Safe Navigation', moduleNumber: 1 }, file(), syllabusId));
   f.records.missions = { mission: { title: 'Harbor Navigation', instructorId: 'a' }, foreign: { title: 'Other class', instructorId: 'b' } };
   f.records.quiz = { quiz: { title: 'Navigation Quiz', moduleId: 'mission', questions: [{ type: 'true-false', correctAnswer: 'True' }, { type: 'multiple-choice', options: [{ text: 'Starboard', isCorrect: true }, { text: 'Port', isCorrect: false }] }] }, foreign: { title: 'Foreign quiz', instructorId: 'b' } };
 });
 
-test('existing syllabi and fileless modules become a course with protected activity metadata', async () => {
+test('existing syllabi and module PDFs become a course with protected activity metadata', async () => {
   await add({}, file(), null);
   await add({ type: 'simulation', title: 'Practice', targetId: 'mission' }, null);
   const response = await request(f.app).get(`/learning-materials/syllabi/${syllabusId}/course`).set(headers('sa', 'student')).expect(200);
@@ -83,6 +84,7 @@ test('private uploaded PDF is readable and marks only the authenticated studentâ
 
 test('opening simulations never completes them; saved results and CUSTOM aliases determine completion', async () => {
   const { id } = await add({ type: 'simulation', targetId: 'mission', completionRule: 'pass', passScore: 80 }, null);
+  await viewModulePdf(f, student, moduleId);
   await request(f.app).post(`/learning-materials/activities/${id}/launch`).set(headers('sa', 'student')).expect(200);
   expect((await f.course.course(student, syllabusId)).progress[id].status).toBe('In Progress');
   await request(f.app).post(`/learning-materials/activities/${id}/progress`).set(headers('sa', 'student')).send({ event: 'viewed', revision: 1 }).expect(200);

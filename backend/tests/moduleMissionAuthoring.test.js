@@ -2,6 +2,7 @@ import { beforeEach, expect, test } from '@jest/globals';
 import request from 'supertest';
 import { materialsFixture, samplePdf } from './helpers/materialsFixture.js';
 import { issueSession } from '../services/authSession.js';
+import { viewModulePdf } from './helpers/coursePdf.js';
 
 const owner = { id: 'a', role: 'instructor' }, student = { id: 'sa', role: 'student', instructorid: 'a' };
 const file = { originalname: 'syllabus.pdf', mimetype: 'application/pdf', buffer: samplePdf() };
@@ -14,7 +15,7 @@ let f, syllabusId, moduleId, otherModule;
 beforeEach(async () => {
   f = materialsFixture();
   ({ id: syllabusId } = await f.service.save(owner, 'syllabi', null, { title: 'Navigation' }, file));
-  ({ id: moduleId } = await f.service.save(owner, 'syllabus_modules', null, { title: 'Harbor', moduleNumber: 1 }, null, syllabusId));
+  ({ id: moduleId } = await f.service.save(owner, 'syllabus_modules', null, { title: 'Harbor', moduleNumber: 1 }, file, syllabusId));
   ({ id: otherModule } = await f.service.save(owner, 'syllabus_modules', null, { title: 'Offshore', moduleNumber: 2 }, null, syllabusId));
 });
 const endpoint = () => `/learning-materials/syllabi/${syllabusId}/modules/${moduleId}/missions`;
@@ -27,6 +28,7 @@ test('module creation atomically creates the owned mission and a published pract
   expect(course.activities).toHaveLength(1);
   expect(course.activities[0]).toMatchObject({ id: result.body.activityId, moduleId, type: 'simulation', targetId: 'module-mission', published: true });
   expect(course.activities.filter(a => a.moduleId === otherModule)).toHaveLength(0);
+  await viewModulePdf(f, student, moduleId);
   expect((await f.course.launch(student, result.body.activityId)).target.id).toBe('module-mission');
 });
 

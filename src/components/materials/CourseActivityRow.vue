@@ -19,7 +19,7 @@
 <script setup>
 import { computed } from 'vue';
 import { ArrowDown, ArrowUp, Check, ChevronDown, Circle, FileText, Pencil, Presentation, Ship, ClipboardList, Trash2 } from '@lucide/vue';
-const props = defineProps({ activity: { type: Object, required: true }, progress: Object, missionAuthoring: Boolean, missionQuizLabel: { type: Function, default: () => 'Create / edit quiz' }, missionQuizzesLoading: Boolean, manager: Boolean, preview: Boolean, busy: Boolean, first: Boolean, last: Boolean });
+const props = defineProps({ activity: { type: Object, required: true }, progress: Object, simulationAccess: Object, missionAuthoring: Boolean, missionQuizLabel: { type: Function, default: () => 'Create / edit quiz' }, missionQuizzesLoading: Boolean, manager: Boolean, preview: Boolean, busy: Boolean, first: Boolean, last: Boolean });
 defineEmits(['edit-mission', 'edit-mission-quiz', 'open', 'edit', 'move', 'remove']);
 const icons = { pdf: FileText, presentation: Presentation, simulation: Ship, quiz: ClipboardList };
 const state = computed(() => props.progress || { status: 'To do', requirements: [
@@ -28,6 +28,7 @@ const state = computed(() => props.progress || { status: 'To do', requirements: 
 ] });
 const unavailable = computed(() => {
   if (props.manager || props.preview) return '';
+  if (props.activity.type === 'simulation' && !props.simulationAccess?.canStart) return props.simulationAccess?.message || 'View the PDF lessons in this module before starting the simulation.';
   if (props.activity.availableFrom && Date.parse(props.activity.availableFrom) > Date.now()) return 'Not open yet';
   return props.activity.availableUntil && Date.parse(props.activity.availableUntil) < Date.now() ? 'Activity closed' : '';
 });

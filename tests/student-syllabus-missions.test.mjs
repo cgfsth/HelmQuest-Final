@@ -14,12 +14,13 @@ const materials = readFileSync(new URL('../src/components/materials/LearningMate
 const render = new Function('Vue', compile(parse(outline).descriptor.template.content, { mode: 'function', prefixIdentifiers: true }).code)(Vue);
 const modules = [{ id: 'first', title: 'Navigation', moduleNumber: 1 }, { id: 'second', title: 'Docking', moduleNumber: 2 }];
 
-async function course(manager) {
+async function course(manager, hasPdf = true) {
   return renderToString(Vue.createSSRApp({ render,
     components: { Anchor, ArrowDown, ArrowLeft, ArrowUp, BookOpen, ChevronDown, Megaphone, Pencil, Plus, Trash2,
       CourseActivityRow: { render: () => null }, OfficialSyllabusMatrix: { render: () => null } },
     setup: () => ({ syllabus: { title: 'Maritime Training' }, visibleModules: modules, displayedModules: modules,
       official: null, focusedLessonId: '', manager, missionAuthoring: manager, missionQuizzesLoading: false, missionQuizLabel: () => 'Create Quiz',
+      simulationAccess: Object.fromEntries(modules.map(module => [module.id, { canCreate: hasPdf, canStart: hasPdf }])),
       busy: false, collapsed: {}, allCollapsed: false, rows: () => [], officialSection: () => null, PRACTICAL_ALIGNMENT: {}, toggle() {}, toggleAll() {} })
   }));
 }
@@ -30,6 +31,12 @@ test('each instructor module has Create mission; students get course content wit
   const navStart = app.indexOf('<nav class="hub-sidebar-nav" aria-label="Instructor sections"');
   assert.doesNotMatch(app.slice(navStart, app.indexOf('</nav>', navStart)), /selectInstructorTab\('missions'\)/);
   assert.doesNotMatch(app, /instructorTab === 'missions'|template #missions/);
+});
+
+test('the module explains that a PDF is required and disables Create mission until it is uploaded', async () => {
+  const blocked = await course(true, false);
+  assert.match(blocked, /Upload a PDF lesson in this module to enable mission creation/);
+  assert.equal((blocked.match(/class="lm-primary lc-create-mission" disabled/g) || []).length, 2);
 });
 
 function extract(source, name) {
@@ -101,4 +108,27 @@ test('editing a linked mission retains the activity schedule in the mission edit
   await context.openCourseMissionEditor({ missionId: 'existing', availableFrom: '2026-12-01T08:00:00Z', availableUntil: '2026-12-10T08:00:00Z' });
   assert.match(context.missionEditorModal.value.data.openDate, /^2026-12-01T/);
   assert.match(context.missionEditorModal.value.data.deadline, /^2026-12-10T/);
+});
+
+test('client-side authoring and launch handlers cannot bypass missing PDF prerequisites', async () => {
+  const emitted = [], apiCalls = [];
+  const authoring = { simulationAccess: Vue.ref({}), error: Vue.ref(''), emit: (...args) => emitted.push(args), missionContext: () => ({}) };
+  vm.createContext(authoring); vm.runInContext(extract(materials, 'createModuleMission'), authoring);
+  authoring.createModuleMission('first');
+  assert.equal(emitted.length, 0); assert.match(authoring.error.value, /Upload a PDF/);
+  const student = { busy: Vue.ref(false), manager: Vue.ref(false), preview: Vue.ref(false), activityDetail: Vue.ref({ type: 'simulation' }),
+    currentSimulationAccess: Vue.ref({ canStart: false, message: 'View the module PDF first.' }), error: Vue.ref(''), api: { launchLearningActivity: () => apiCalls.push(true) } };
+  vm.createContext(student); vm.runInContext(extract(materials, 'startActivity'), student);
+  await student.startActivity();
+  assert.equal(apiCalls.length, 0); assert.equal(student.error.value, 'View the module PDF first.');
+});
+
+test('returning from the PDF reader waits for the saved view before refreshing simulation access', async () => {
+  let release;
+  const refreshes = [], context = { identity: 1, document: Vue.ref({ id: 'pdf' }), loading: Vue.ref(false),
+    viewRecording: new Promise(resolve => { release = resolve; }), refresh: async () => refreshes.push(true) };
+  vm.createContext(context); vm.runInContext(extract(materials, 'closeReader'), context);
+  const pending = context.closeReader();
+  assert.equal(refreshes.length, 0); assert.equal(context.loading.value, true);
+  release(); await pending; assert.equal(refreshes.length, 1);
 });

@@ -3,6 +3,7 @@ import request from 'supertest';
 import { materialsFixture, samplePdf } from './helpers/materialsFixture.js';
 import { issueSession } from '../services/authSession.js';
 import { OFFICIAL_SYLLABUS, OFFICIAL_SYLLABUS_KEY } from '../../shared/officialSyllabus.js';
+import { attachModulePdf, viewModulePdf } from './helpers/coursePdf.js';
 const owner = { id: 'a', role: 'instructor' }, student = { id: 'sa', role: 'student', instructorid: 'a' };
 const headers = (id = 'sa', role = 'student') => ({ Authorization: `Bearer ${issueSession(id, role)}` });
 const upload = { originalname: 'syllabus.pdf', mimetype: 'application/pdf', buffer: samplePdf() };
@@ -20,6 +21,8 @@ beforeEach(async () => {
   });
   ({ id: syllabusId } = await f.service.save(owner, 'syllabi', null, { title: OFFICIAL_SYLLABUS.title, officialSyllabusKey: OFFICIAL_SYLLABUS_KEY }, upload));
   moduleId = `${syllabusId}--lesson-3`;
+  await attachModulePdf(f, owner, moduleId);
+  await viewModulePdf(f, student, moduleId);
   f.records.missions = { navigation: { title: 'Route practice', instructorId: 'a', pass_score: 70 } };
   f.records.quiz = { q: { title: 'Navigation quiz', moduleId: 'navigation', instructorId: 'a', published: true, questions: [{ id: 'one', type: 'true-false', correctAnswer: 'True' }, { id: 'two', type: 'multiple-choice', options: [{ text: 'Starboard', isCorrect: true }, { text: 'Port', isCorrect: false }] }] } };
   ({ id: activityId } = await f.course.save(owner, syllabusId, moduleId, null, { title: 'Practical navigation', type: 'simulation', targetId: 'navigation', published: true }, null));
