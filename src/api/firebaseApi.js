@@ -43,6 +43,12 @@ export async function loginDemo(email, password) {
   return loginWithSession('/auth/demo-login', email, password);
 }
 
+export function changePassword(currentPassword, newPassword, options = {}) {
+  return apiFetch('/auth/change-password', {
+    method: 'POST', body: JSON.stringify({ currentPassword, newPassword }), timeoutMs: 20000, ...options,
+  });
+}
+
 // The existing local admin dashboard acquires a server-verified session only
 // when opening protected materials. Credentials remain in the login component.
 export async function ensureLearningMaterialsSession(email, password, options = {}) {

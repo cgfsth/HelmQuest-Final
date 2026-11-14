@@ -361,7 +361,7 @@
         <div class="menu-settings-content">
           <label class="setting-row">
             <span>Sound Volume</span>
-            <input type="range" v-model="soundVolume" min="0" max="1" step="0.1" />
+            <input type="range" v-model.number="soundVolume" min="0" max="1" step="0.1" />
           </label>
           <label class="setting-row">
             <span>Start Camera</span>
@@ -1497,16 +1497,20 @@
             </div>
           </div>
 
-          <div class="hub-sidebar-profile">
-            <div class="hub-sidebar-avatar">{{ (demoStudent.name || 'S').charAt(0).toUpperCase() }}</div>
+          <button type="button" class="hub-sidebar-profile hub-sidebar-profile--settings"
+            :class="{ 'hub-sidebar-profile--active': hubTab === 'settings' }"
+            :aria-current="hubTab === 'settings' ? 'page' : undefined"
+            aria-label="Open account settings" @click="selectHubTab('settings'); closeStudentMenu()">
+            <span class="hub-sidebar-avatar">{{ (demoStudent.name || 'S').charAt(0).toUpperCase() }}</span>
             <strong class="hub-sidebar-name">{{ demoStudent.name }}</strong>
             <span class="hub-sidebar-student-id">{{ studentProfileExtras.studentId }}</span>
             <span class="hub-sidebar-rank">{{ demoStudent.rank }}</span>
-            <div class="hub-sidebar-xp-bar" role="progressbar" :aria-valuenow="demoStudent.xpProgress" aria-valuemin="0" aria-valuemax="100">
-              <div class="hub-sidebar-xp-fill" :style="{ width: demoStudent.xpProgress + '%' }"></div>
-            </div>
+            <span class="hub-sidebar-xp-bar" role="progressbar" aria-label="Progress to next rank" :aria-valuenow="demoStudent.xpProgress" aria-valuemin="0" aria-valuemax="100">
+              <span class="hub-sidebar-xp-fill" :style="{ width: demoStudent.xpProgress + '%' }"></span>
+            </span>
             <span class="hub-sidebar-xp-text">{{ demoStudent.xp }} XP</span>
-          </div>
+            <span class="hub-sidebar-settings-hint"><Settings :size="13" aria-hidden="true" /> Settings</span>
+          </button>
 
           <nav class="hub-sidebar-nav" aria-label="Training sections">
             <button
@@ -1561,6 +1565,7 @@
               <template v-else-if="hubTab === 'certificates'">Training Records</template>
               <template v-else-if="hubTab === 'leaderboards'">Leaderboards</template>
               <template v-else-if="hubTab === 'materials'">Syllabus &amp; Lessons</template>
+              <template v-else-if="hubTab === 'settings'">Settings</template>
               <template v-else>Navigation Training</template>
             </h1>
             <p v-if="hubTab === 'overview'" class="missions-hub-welcome">
@@ -1579,6 +1584,7 @@
                 See how you rank against other students
               </template>
               <template v-else-if="hubTab === 'materials'">Read your instructor’s syllabus and lessons, then complete your practical missions.</template>
+              <template v-else-if="hubTab === 'settings'">Manage your account security and personalize your simulation experience.</template>
             </p>
           </div>
           <button v-if="tutorialEligible" type="button" class="student-tour-trigger" title="Simulation guided tour"
@@ -1588,6 +1594,8 @@
         </header>
 
         <LearningMaterials v-if="hubTab === 'materials' && !isStudentPending" :key="currentUser.id" :current-user="currentUser" role="student" :prepare-access="prepareLearningMaterialsAccess" :initial-course-id="courseNavigation.studentId === currentUser.id ? courseNavigation.syllabusId : ''" :initial-lesson-id="courseNavigation.studentId === currentUser.id ? courseNavigation.lessonId : ''" @navigate-course="rememberCourse" @launch-simulation="launchCourseSimulation" />
+
+        <StudentSettings v-if="hubTab === 'settings'" :key="currentUser.id" :current-user="currentUser" :student-id="studentProfileExtras.studentId" :rank="demoStudent.rank" v-model:preferences="studentPreferences" :storage-notice="preferencesStorageNotice" @reset-preferences="resetStudentPreferences" />
 
         <section v-show="hubTab === 'overview'" class="motivation-panel" id="hub-badges" aria-label="Your progress and rewards">
           <!-- Student Profile Card - Horizontal Layout -->
@@ -2311,7 +2319,7 @@
 
             <div class="control-group audio-controls">
               <label>Sinking Theme Volume</label>
-              <input type="range" min="0" max="1" step="0.05" v-model="soundVolume" @input="updateVolume" />
+              <input type="range" min="0" max="1" step="0.05" v-model.number="soundVolume" @input="updateVolume" />
             </div>
 
             <div class="sound-track-info">
@@ -3398,8 +3406,10 @@
 
 <script setup>
 import { ref, computed, defineAsyncComponent, onMounted, onUnmounted, watch, nextTick, provide } from 'vue';
-import { BookOpen, LibraryBig } from '@lucide/vue';
+import { BookOpen, LibraryBig, Settings } from '@lucide/vue';
 const LearningMaterials = defineAsyncComponent(() => import('./components/materials/LearningMaterials.vue'));
+const StudentSettings = defineAsyncComponent(() => import('./components/StudentSettings.vue'));
+import { useSimulationPreferences } from './composables/useSimulationPreferences.js';
 import { deriveProgression, studentTotalXp } from '../shared/progression.js';
 import { createMissionCompletionFlow } from './helpers/missionCompletionFlow.js';
 import { validDockingCompletion } from '../shared/simulationPerformance.js';
@@ -4094,6 +4104,11 @@ const waterQuality = ref('medium');
 const shadowQuality = ref('low');
 const uiScale = ref('1.0');
 const showFPS = ref(false);
+const preferencesStorageNotice = ref('');
+const { preferences: studentPreferences, resetPreferences: resetStudentPreferences } = useSimulationPreferences({
+  currentUser, isAuthenticated, userRole, storageNotice: preferencesStorageNotice,
+  controls: { soundVolume, menuStartCamera, graphicsQuality, waterQuality, shadowQuality, uiScale, showFPS },
+});
 const activeScreen = ref('landing');
 const achievementPopup = ref('');
 const trainingNotification = ref(null);
@@ -7618,6 +7633,8 @@ function updateVolume() {
     audioPlayer.value.volume = soundVolume.value;
   }
 }
+
+watch(soundVolume, updateVolume);
 
 // Toggle background music
 function toggleMusic() {
@@ -16031,14 +16048,25 @@ function disposePostProcessing() {
   postProcessing = null;
 }
 
+let fpsSampleStartedAt = 0, fpsSampleFrames = 0;
 function renderFrame(activeCam) {
   if (!renderer || !scene || !activeCam) return;
   if (typeof postProcessing?.render === 'function') {
     postProcessing.setCamera(activeCam);
     postProcessing.render();
-    return;
+  } else {
+    renderer.render(scene, activeCam);
   }
-  renderer.render(scene, activeCam);
+  if (showFPS.value && activeScreen.value === 'simulation') {
+    const now = performance.now();
+    if (!fpsSampleStartedAt) fpsSampleStartedAt = now;
+    fpsSampleFrames++;
+    if (now - fpsSampleStartedAt >= 500) {
+      const counter = document.getElementById('fps-counter');
+      if (counter) counter.textContent = `${Math.round(fpsSampleFrames * 1000 / (now - fpsSampleStartedAt))} FPS`;
+      fpsSampleStartedAt = now; fpsSampleFrames = 0;
+    }
+  }
 }
 
 // --- Animation Loop ---
@@ -16517,12 +16545,15 @@ watch(uiScale, (newScale) => {
   document.documentElement.style.fontSize = `${parseFloat(newScale) * 16}px`;
 });
 
-watch(showFPS, (newShow) => {
+watch([showFPS, activeScreen], ([enabled, screen]) => {
+  const newShow = enabled && screen === 'simulation';
+  fpsSampleStartedAt = 0; fpsSampleFrames = 0;
   const fpsElement = document.getElementById('fps-counter');
   if (newShow && !fpsElement) {
     const fpsDiv = document.createElement('div');
     fpsDiv.id = 'fps-counter';
-    fpsDiv.style.cssText = 'position:fixed;top:10px;left:228px;background:transparent;color:#fff;padding:8px 12px;border-radius:4px;font-family:monospace;z-index:10000;text-shadow:1px 1px 2px rgba(0,0,0,0.8);';
+    fpsDiv.textContent = 'Measuring FPS…';
+    fpsDiv.style.cssText = 'position:fixed;bottom:12px;left:12px;pointer-events:none;background:#071827cc;color:#fff;padding:6px 10px;border-radius:6px;font-family:monospace;z-index:10000;';
     document.body.appendChild(fpsDiv);
   } else if (!newShow && fpsElement) {
     fpsElement.remove();
@@ -18344,6 +18375,21 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   border-radius: 14px;
 }
 
+.hub-sidebar-profile--settings {
+  width:100%;
+  box-sizing:border-box;
+  font:inherit;
+  color:inherit;
+  cursor:pointer;
+  transition:border-color .18s ease, background .18s ease;
+}
+.hub-sidebar-profile--settings:hover,.hub-sidebar-profile--active {
+  border-color:#38bdf8;
+  background:linear-gradient(180deg,rgba(56,189,248,.2),rgba(14,116,144,.12));
+}
+.hub-sidebar-profile--settings:focus-visible { outline:2px solid #67e8f9; outline-offset:4px; }
+.hub-sidebar-settings-hint { display:flex; align-items:center; gap:5px; color:#7dd3fc; font-size:.7rem; margin-top:5px; }
+
 .hub-sidebar-avatar {
   width: 54px;
   height: 54px;
@@ -18381,6 +18427,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 .hub-sidebar-xp-fill {
+  display: block;
   height: 100%;
   border-radius: 4px;
   background: linear-gradient(90deg, #0ea5e9, #38bdf8);

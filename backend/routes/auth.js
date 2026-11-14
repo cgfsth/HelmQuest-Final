@@ -18,8 +18,10 @@ import bcrypt from 'bcrypt';
 import { db } from '../config/firebase-admin.js';
 import { issueSession } from '../services/authSession.js';
 import { DEMO_USERS } from '../../shared/demoAccounts.js';
+import { createAccountRouter } from './accountRouter.js';
 
 const router = express.Router();
+router.use(createAccountRouter({ db }));
 
 router.post('/demo-login', (req, res) => {
   const user = DEMO_USERS[String(req.body.email || '').trim().toLowerCase()];
