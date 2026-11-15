@@ -106,12 +106,57 @@ test('leaving while the real vessel model loads releases the late asset without 
   assert.equal(scene.children.length, 0); assert.equal(disposals, 1); assert.equal(loaded.parent, null);
 });
 
-test('after completion, live distance updates cannot alter the recorded encounter result', () => {
-  const { state, own } = sail('crossing-green', true);
-  const saved = vesselEncounterResult(state);
-  own.x += 2000; updateVesselEncounter(state, own, .1);
-  assert.ok(state.clearance > 1000);
-  assert.deepEqual(vesselEncounterResult(state), saved);
+test('crossing traffic keeps its course and speed after success or collision without changing assessment results', () => {
+  for (const [type, avoid] of [['crossing-green', true], ['crossing-red', true], ['crossing-red', false]]) {
+    const { state, own } = sail(type, avoid);
+    assert.equal(state.resolved, true);
+    const saved = vesselEncounterResult(state), previous = { ...state.npc };
+    own.speed = 0;
+    for (let frame = 0; frame < 100; frame++) updateVesselEncounter(state, own, .1);
+    const heading = previous.heading * Math.PI / 180, travel = previous.speed * .514444 * 10;
+    assert.ok(travel > 0);
+    assert.ok(Math.abs(state.npc.x - previous.x - Math.sin(heading) * travel) < 1e-6);
+    assert.ok(Math.abs(state.npc.z - previous.z + Math.cos(heading) * travel) < 1e-6);
+    assert.equal(state.npc.speed, previous.speed);
+    assert.equal(state.npc.heading, previous.heading);
+    own.x += 2000; updateVesselEncounter(state, own, .1);
+    assert.ok(state.clearance > 1000);
+    assert.deepEqual(vesselEncounterResult(state), saved);
+  }
+});
+
+test('anchored vessels remain stationary after the exercise finishes', () => {
+  const { state, own } = sail('anchored', true), previous = { ...state.npc };
+  for (let frame = 0; frame < 100; frame++) updateVesselEncounter(state, own, .1);
+  assert.deepEqual(state.npc, previous);
+});
+
+test('navigation halos are sector-controlled, visible at distance, and release their shared texture', () => {
+  const own = { x: 0, z: -1000, heading: 0, speed: 8 };
+  const state = createVesselEncounter({ type: 'crossing-red' }, own);
+  state.npc = { ...state.npc, x: 0, z: 0, heading: 0 };
+  const scene = new THREE.Scene(), visual = createEncounterVesselVisual(scene, state.config, { loadModel: false });
+  for (const [observer, visible] of [
+    [{ x: -600, z: -600 }, ['red', 'masthead']],
+    [{ x: 600, z: -600 }, ['green', 'masthead']],
+    [{ x: 0, z: -1000 }, ['red', 'green', 'masthead']],
+    [{ x: 0, z: 1000 }, ['white']],
+  ]) {
+    visual.update(state, observer);
+    for (const [name, lamp] of Object.entries(visual.lamps)) {
+      assert.equal(lamp.visible, visible.includes(name), name);
+      const glow = lamp.getObjectByName('NavigationGlow');
+      assert.equal(glow.material.sizeAttenuation, false);
+      assert.equal(glow.material.depthTest, true);
+      assert.equal(glow.material.toneMapped, false);
+    }
+  }
+  state.npc.anchored = true; visual.update(state, own);
+  assert.deepEqual(Object.entries(visual.lamps).filter(([, lamp]) => lamp.visible).map(([name]) => name), ['masthead']);
+  let disposed = 0;
+  visual.lamps.red.getObjectByName('NavigationGlow').material.map.addEventListener('dispose', () => disposed++);
+  visual.dispose(); visual.dispose();
+  assert.equal(disposed, 1); assert.equal(scene.children.length, 0);
 });
 test('one rubric is used for all modules, preserves zero values, and excludes quizzes and time from the overall score', () => {
   const scores = { completion: 100, accuracy: 80, safety: 90, docking: 0 };

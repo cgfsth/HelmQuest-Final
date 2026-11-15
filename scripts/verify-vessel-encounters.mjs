@@ -4,6 +4,7 @@ import { createServer } from 'vite';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
+import { PNG } from 'pngjs';
 import { headlessBrowser } from './lib/headless-browser.mjs';
 const directory = resolve('../.tmp/vessel-encounters'); mkdirSync(directory, { recursive: true });
 const source = readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
@@ -39,8 +40,13 @@ const stats=ref({rotationDeg:0,speedKnots:8}),trainingRunMetrics=ref(createTrain
 const encounterStatus=ref(null),encounterSetupError=ref('');let vesselEncounterState=null,encounterVisual=null,speedVel=4;
 const showCollisionWarning=message=>{document.querySelector('#message').textContent=message;};
 ${['clearVesselEncounter','setupVesselEncounter','updateTrainingEncounter','currentSimulationScores'].map(extract).join('\n')}
-const frame=()=>{if(encounterVisual){const npc=vesselEncounterState.npc;const dx=boatObject.position.x-npc.x,dz=boatObject.position.z-npc.z,d=Math.hypot(dx,dz)||1;camera.position.set(npc.x+dx/d*160,55,npc.z+dz/d*160);camera.lookAt(npc.x,5,npc.z);}renderer.render(scene,camera);};
+let viewDistance=160;
+const frame=()=>{if(encounterVisual){const npc=vesselEncounterState.npc;const dx=boatObject.position.x-npc.x,dz=boatObject.position.z-npc.z,d=Math.hypot(dx,dz)||1;camera.position.set(npc.x+dx/d*viewDistance,viewDistance===160?55:25,npc.z+dz/d*viewDistance);camera.lookAt(npc.x,5,npc.z);}renderer.render(scene,camera);};
 window.fixture={
+ view(distance){viewDistance=distance;frame();},
+ lightSample(name,lit){const lamp=encounterVisual.lamps[name],visible=lamp.visible;lamp.visible=lit;frame();const p=lamp.getWorldPosition(new THREE.Vector3()).project(camera);const image=renderer.domElement.toDataURL();lamp.visible=visible;frame();return{image,x:Math.round((p.x+1)*innerWidth/2),y:Math.round((1-p.y)*innerHeight/2)};},
+ get position(){return {...vesselEncounterState.npc};},
+ coast(count){for(let i=0;i<count;i++)updateTrainingEncounter(.1);frame();return vesselEncounterResult(vesselEncounterState);},
  start(type){clearVesselEncounter();boatObject.position.set(0,0,0);stats.value.rotationDeg=0;stats.value.speedKnots=8;document.querySelector('#message').textContent='';trainingRunMetrics.value=createTrainingRunMetrics();trainingRunMetrics.value.totalSteps=2;activeTrainingModule.value={id:'fixture',encounter:normalizeEncounter({type})};performanceManager.startMission({id:'fixture',steps:[{id:'one'},{id:'two'}]});this.frames=0;this.turn=null;setupVesselEncounter();if(encounterSetupError.value)throw new Error(encounterSetupError.value);frame();},
  advance(count,avoid=true){for(let i=0;i<count && !vesselEncounterState.resolved;i++){if(avoid && vesselEncounterState.approached && vesselEncounterState.config.type!=='crossing-green' && this.turn==null)this.turn=this.frames;if(this.turn!=null)stats.value.rotationDeg=this.frames-this.turn<900?45:0;const h=stats.value.rotationDeg*Math.PI/180;boatObject.position.x+=Math.sin(h)*stats.value.speedKnots*.514444*.1;boatObject.position.z-=Math.cos(h)*stats.value.speedKnots*.514444*.1;boatObject.rotation.y=Math.PI/2-h;updateTrainingEncounter(.1);this.frames++;}frame();return vesselEncounterResult(vesselEncounterState);},
  get result(){return vesselEncounterResult(vesselEncounterState);},
@@ -65,30 +71,56 @@ try {
     await browser.evaluate(`window.fixture.start(${JSON.stringify(type)})`);
     await browser.waitFor('window.fixture.modelReady', 90000);
     await browser.waitFor('document.querySelector(".encounter-panel summary")');
+    assert.equal(await browser.evaluate('document.querySelector(".encounter-panel details").open'),false);
+    assert.equal(await browser.evaluate('document.querySelector(".encounter-panel").getBoundingClientRect().height < 140'),true);
+    // Check both red and green on approach before the green vessel alters course.
+    await browser.evaluate('window.fixture.view(600)');
+    if (type !== 'anchored') {
+      const lamp = type.split('-')[1];
+      const on = await browser.evaluate('window.fixture.lightSample(' + JSON.stringify(lamp) + ',true)');
+      const off = await browser.evaluate('window.fixture.lightSample(' + JSON.stringify(lamp) + ',false)');
+      const decode = sample => PNG.sync.read(Buffer.from(sample.image.split(',')[1], 'base64'));
+      const lit = decode(on), dark = decode(off);
+      let changed = 0;
+      for (let y = Math.max(0,on.y-15); y <= Math.min(lit.height-1,on.y+15); y++) {
+        for (let x = Math.max(0,on.x-15); x <= Math.min(lit.width-1,on.x+15); x++) {
+          const i = (y*lit.width+x)*4, channel = lamp === 'red' ? 0 : 1;
+          if (lit.data[i+channel] - dark.data[i+channel] > 25) changed++;
+        }
+      }
+      assert.ok(changed >= 12, lamp + ' lamp must visibly light at least 12 pixels at 600 m; got ' + changed);
+    }
+    await browser.screenshot(type + '-lights-600m');
+    await browser.evaluate('window.fixture.view(160)');
     const waiting = await browser.evaluate('window.fixture.advance(1500)'); assert.equal(waiting.resolved, false);
     await browser.screenshot(type + '-approach');
     const completed = await browser.evaluate('window.fixture.advance(15000)'); assert.equal(completed.successful,true,JSON.stringify(completed));
     const saved = await browser.evaluate('window.fixture.finish()'); assert.equal(saved.assessment.score,saved.overall); assert.equal(saved.assessment.passed,true);
+    const before = await browser.evaluate('window.fixture.position');
+    assert.deepEqual(await browser.evaluate('window.fixture.coast(100)'),completed);
+    const after = await browser.evaluate('window.fixture.position');
+    assert.equal(Math.hypot(after.x-before.x,after.z-before.z)>0,type!=='anchored');
   }
   await browser.evaluate('window.fixture.start("crossing-red");window.fixture.advance(15000,false)');
   const failed = await browser.evaluate('window.fixture.finish()');
   assert.equal(failed.assessment.passed,false); assert.equal(failed.assessment.performanceMetrics.safetyCompliance,0);
   assert.equal(failed.events.filter(event=>event.type==='VESSEL_COLLISION').length,1);
   await browser.screenshot('collision-feedback');
-  for (const [width,height] of [[844,390],[375,812]]) {
+  for (const [width,height] of [[1362,686],[844,390],[375,812]]) {
     await browser.viewport(width,height); assert.equal(await browser.evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
     assert.equal(await browser.evaluate('(()=>{const r=document.querySelector(".encounter-panel").getBoundingClientRect();return r.x>=0 && r.right<=innerWidth && r.bottom<=innerHeight})()'),true);
     await browser.screenshot('guidance-' + width);
-    if (width === 844) {
+    {
       await browser.waitFor('!document.querySelector(".encounter-panel details").open');
       await browser.clickExpression('document.querySelector(".encounter-panel summary")');
       assert.equal(await browser.evaluate('document.querySelector(".encounter-panel details").open'),true);
-      await browser.screenshot('guidance-844-expanded');
+      assert.equal(await browser.evaluate('(()=>{const r=document.querySelector(".encounter-panel").getBoundingClientRect();return r.x>=0 && r.right<=innerWidth && r.y>=0 && r.bottom<=innerHeight && r.height<innerHeight*.6})()'),true);
+      await browser.screenshot('guidance-' + width + '-expanded');
       await browser.clickExpression('document.querySelector(".encounter-panel summary")');
     }
   }
   assert.deepEqual((await browser.evaluate('window.fixture.health')).shaderErrors,[]); assert.deepEqual(browser.errors,[]);
   await browser.evaluate('window.fixture.dispose()');
-  console.log('PASS: real NPC WebGL, App lifecycle/physics integration, safe passing, NPC give-way, collision feedback, centralized tracker score parity, and 375/844/1365 guidance layouts.');
+  console.log('PASS: real NPC WebGL, red/green lights visible at 600 m, continued traffic after assessment, safe passing, collision feedback, score parity, and compact/expanded 375/844/1362 guidance layouts.');
   console.log('Screenshots: ' + directory);
 } finally { browser?.close(); await vite.close(); }

@@ -55,14 +55,24 @@ function event(state, type) {
   if (!state.events.some(value => value.type === type)) state.events.push({ type, elapsed: state.elapsed });
 }
 
+function advanceVessel(state, dt) {
+  const { npc } = state, direction = forward(npc.heading);
+  state.previousNpc = { ...npc };
+  if (npc.anchored) return;
+  npc.x += direction.x * knots(npc.speed) * dt;
+  npc.z += direction.z * knots(npc.speed) * dt;
+}
+
 export function updateVesselEncounter(state, own, delta) {
   if (!state || !(delta > 0) || ![own.x, own.z, own.heading, own.speed].every(Number.isFinite)) return state;
+  const dt = Math.min(delta, .1), { config, npc } = state;
   if (state.resolved) {
+    // Finishing the assessment must not freeze live crossing traffic.
+    advanceVessel(state, dt);
     state.previousOwn = { ...own };
     state.clearance = Math.max(0, length(subtract(state.npc, own)) - state.ownRadius - state.npc.radius);
     return state;
   }
-  const dt = Math.min(delta, .1), { config, npc } = state;
   state.elapsed += dt;
   state.ownTravel += length(subtract(own, state.previousOwn));
   const ownVelocity = forward(own.heading);
@@ -91,8 +101,7 @@ export function updateVesselEncounter(state, own, delta) {
     const direction = forward(npc.heading);
     npcVelocity = { x: direction.x * knots(npc.speed), z: direction.z * knots(npc.speed) };
   }
-  state.previousNpc = { ...npc };
-  npc.x += npcVelocity.x * dt; npc.z += npcVelocity.z * dt;
+  advanceVessel(state, dt);
   const currentRelative = subtract(npc, own);
   const previousRelative = subtract(state.previousNpc, state.previousOwn);
   const swept = sweptDistance(previousRelative, currentRelative);
