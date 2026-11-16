@@ -3426,6 +3426,7 @@ import { useSimulationPreferences } from './composables/useSimulationPreferences
 import { deriveProgression, studentTotalXp } from '../shared/progression.js';
 import { createMissionCompletionFlow } from './helpers/missionCompletionFlow.js';
 import { validDockingCompletion, simulationScoringInputs, simulationPerformance } from '../shared/simulationPerformance.js';
+import { isBoatAtPort } from './helpers/portDocking.js';
 import { normalizeEncounter } from '../shared/vesselEncounter.js';
 import { createVesselEncounter, updateVesselEncounter, vesselEncounterResult, vesselEncounterGuidance } from './helpers/vesselEncounter.js';
 import { createEncounterVesselVisual } from './helpers/encounterVesselVisual.js';
@@ -6732,13 +6733,12 @@ const currentWaypointHint = computed(() => {
 // Check if boat is in port/harbor zone
 const isBoatInPortZone = computed(() => {
   // Read the reactive position even while the boat model is still loading.
-  const { boatX, boatZ } = stats.value;
+  const { boatX, boatZ, rotationDeg } = stats.value;
   if (!activeTrainingModule.value || !boatObject) return false;
-  const zones = resolveTrainingZonesAtSpawn();
-  return zones.some(z => (z.zoneType === 'dock' || z.id === 'harbor' ||
-    z.label?.toLowerCase().includes('port') || 
-    z.label?.toLowerCase().includes('harbor') ||
-    z.label?.toLowerCase().includes('return')) && isBoatInZone(boatX, boatZ, z));
+  return isBoatAtPort({ x: boatX, z: boatZ, headingDeg: rotationDeg,
+    length: boatObject.userData?.loaMeters, beam: boatObject.userData?.beamMeters }, {
+    zones: resolveTrainingZonesAtSpawn(), dockColliders: getActiveDockColliders()
+  });
 });
 
 // Computed to check if quiz button should show (for debugging)

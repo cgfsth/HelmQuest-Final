@@ -9,6 +9,7 @@ import { simulationPerformance, simulationScoringInputs, validDockingCompletion 
 import { vesselEncounterResult } from '../src/helpers/vesselEncounter.js';
 import { createTrainingRunMetrics, calculateSafetyCompliance } from '../src/helpers/missionScoring.js';
 import { IntegratedPerformanceManager } from '../src/helpers/performanceManager.js';
+import { isBoatAtPort } from '../src/helpers/portDocking.js';
 
 const app = readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const ref = value => ({ value });
@@ -129,7 +130,7 @@ test('port detection follows the boat after model loading and recognizes dock ty
   const context = { computed: Vue.computed, activeTrainingModule: Vue.ref({ id: 'mission' }), boatObject: null,
     stats: Vue.ref({ boatX: 100, boatZ: 100 }),
     resolveTrainingZonesAtSpawn: () => [{ zoneType: 'dock', x: 20, z: 30, radius: 10 }],
-    isBoatInZone: (x, z, zone) => Math.hypot(x - zone.x, z - zone.z) <= zone.radius };
+    isBoatAtPort, getActiveDockColliders: () => [] };
   vm.createContext(context);
   const start = app.indexOf('const isBoatInPortZone = computed(');
   vm.runInContext(`${app.slice(start, app.indexOf('\n});', start) + 4)}\nglobalThis.inPort = isBoatInPortZone;`, context);
