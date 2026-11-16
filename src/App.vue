@@ -2668,30 +2668,23 @@
       <p class="helm-bridge-hint">C — camera · R — rain · WASD — helm · mouse — look</p>
     </div>
 
-    <div v-if="courseReadyToTakeQuiz" class="report-mission-overlay">
-      <div class="report-mission-card">
-        <h2>Vessel Docked</h2>
-        <p>You can take the quiz now. Unfinished buoy tasks will remain incomplete in your simulation score.</p>
-        <button type="button" class="report-mission-btn-large" @click="continueCourseCompletion">📝 Take Quiz</button>
-      </div>
-    </div>
     <div v-if="activeCoursePractical && !missionCompleteModal && !showPostDockingQuiz && ['SAVING_SIMULATION', 'MISSION_COMPLETED', 'QUIZ_CHECKING', 'QUIZ_LOOKUP_FAILED', 'SAVE_FAILED'].includes(courseCompletionState)" class="report-mission-overlay">
       <div class="report-mission-card"><h2>{{ courseCompletionError ? 'Completion needs attention' : courseCompletionState === 'SAVING_SIMULATION' ? 'Saving simulation results…' : 'Checking your assigned quiz…' }}</h2><p role="status">{{ courseCompletionError || 'Your simulation performance is saved before the optional quiz begins.' }}</p><button v-if="courseCompletionError" type="button" class="report-mission-btn-large" @click="continueCourseCompletion">Retry this stage</button><button v-if="courseCompletionError && trainingRunMetrics.integratedSaved" type="button" class="report-mission-btn-large" @click="viewSavedCourseSimulation">View saved simulation result</button></div>
     </div>
     <!-- Legacy reporting remains available to existing practice/review flows. -->
     <transition name="fade">
-      <div v-if="!activeCoursePractical && anchor.deployed && activeTrainingModule && !isTrainingReviewMode && !missionReadyToReport && !activeMissionQuizSubmission && !showPostDockingQuiz && !engineRunning" class="report-mission-overlay">
+      <div v-if="!activeCoursePractical && anchor.deployed && isBoatInPortZone && activeTrainingModule && !isTrainingReviewMode && !missionReadyToReport && !activeMissionQuizSubmission && !showPostDockingQuiz && !engineRunning" class="report-mission-overlay">
         <div class="report-mission-card" style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(37, 99, 235, 0.15)); border-color: rgba(59, 130, 246, 0.6);">
           <div class="report-icon">📝</div>
           <h2 style="color: #3b82f6;">Mission Complete!</h2>
-          <p style="color: #bfdbfe;">{{ missionQuizLoading ? 'Checking your saved quiz result…' : missionQuizLoadError || 'Time to test your knowledge.' }}</p>
+          <p style="color: #bfdbfe;">{{ missionQuizLoadError || 'Checking your assigned quiz…' }}</p>
           <button
             class="report-mission-btn-large"
             style="background: linear-gradient(135deg, #3b82f6, #2563eb);"
-            @click="handleTakeQuizClick"
-            :disabled="missionQuizLoading"
+            @click="checkForPostDockingQuiz"
+            :disabled="missionQuizLoading || postDockingQuizChecking"
           >
-            {{ missionQuizLoading ? 'Checking…' : missionQuizLoadError ? 'Retry Quiz Check' : '📝 Take Quiz' }}
+            {{ missionQuizLoadError ? 'Retry Quiz Check' : 'Checking…' }}
           </button>
         </div>
       </div>
@@ -4398,7 +4391,7 @@ function courseDockingEvidence() {
     totalSteps: run?.totalSteps || module?.steps?.length || 0, anchored: anchor.value.deployed,
     engineStopped: !engineRunning.value && !engineStarting.value, inPort: isBoatInPortZone.value, speedKnots: stats.value.speedKnots };
 }
-const courseReadyToTakeQuiz = computed(() => !!activeCoursePractical.value && !!activeTrainingModule.value
+const courseReadyToComplete = computed(() => !!activeCoursePractical.value && !!activeTrainingModule.value
   && activeScreen.value === 'simulation' && !isTrainingReviewMode.value
   && !missionCompleteModal.value && !showPostDockingQuiz.value
   && courseCompletionState.value === 'IN_PROGRESS' && validDockingCompletion(courseDockingEvidence()));
@@ -6738,33 +6731,14 @@ const currentWaypointHint = computed(() => {
 
 // Check if boat is in port/harbor zone
 const isBoatInPortZone = computed(() => {
-  if (!activeTrainingModule.value || !boatObject) {
-    console.log('[Quiz Button Debug] No active module or boat object');
-    return false;
-  }
-  
-  // Find the port/harbor waypoint (usually the last one or labeled as 'harbor'/'port')
+  // Read the reactive position even while the boat model is still loading.
+  const { boatX, boatZ } = stats.value;
+  if (!activeTrainingModule.value || !boatObject) return false;
   const zones = resolveTrainingZonesAtSpawn();
-  console.log('[Quiz Button Debug] All zones:', zones.map(z => ({ id: z.id, label: z.label })));
-  
-  const portZone = zones.find(z => 
-    z.id === 'harbor' || 
+  return zones.some(z => (z.zoneType === 'dock' || z.id === 'harbor' ||
     z.label?.toLowerCase().includes('port') || 
     z.label?.toLowerCase().includes('harbor') ||
-    z.label?.toLowerCase().includes('return')
-  );
-  
-  console.log('[Quiz Button Debug] Port zone found:', portZone);
-  
-  if (!portZone) {
-    console.log('[Quiz Button Debug] No port zone found in zones');
-    return false;
-  }
-  
-  // Check if boat is inside the port zone
-  const inZone = isBoatInZone(stats.value.boatX, stats.value.boatZ, portZone);
-  console.log('[Quiz Button Debug] Boat position:', { x: stats.value.boatX, z: stats.value.boatZ }, 'In zone:', inZone);
-  return inZone;
+    z.label?.toLowerCase().includes('return')) && isBoatInZone(boatX, boatZ, z));
 });
 
 // Computed to check if quiz button should show (for debugging)
@@ -8935,6 +8909,7 @@ const postDockingQuizData = ref(null);
 const postDockingQuizTriggered = ref(false);
 
 const isPostDockingQuizSubmitting = ref(false);
+const postDockingQuizChecking = ref(false);
 const missionQuizLoading = ref(false);
 const missionQuizLoadError = ref('');
 let missionQuizRequest = 0;
@@ -9413,9 +9388,9 @@ async function handleTakeQuizClick() {
       return;
     }
     
-    // No quiz found
-    console.warn('[TAKE QUIZ] No quiz found for moduleId:', moduleId);
-    alert('No quiz available for this mission. Please contact your instructor.');
+    postDockingQuizTriggered.value = true;
+    missionReadyToReport.value = true;
+    reportMissionCompletion();
     
   } catch (error) {
     console.error('[TAKE QUIZ] Error:', error);
@@ -9436,64 +9411,45 @@ function skipQuizAndReport() {
  * Queries quiz collection by moduleId to see if a quiz is assigned to current mission
  */
 async function checkForPostDockingQuiz() {
-  if (isTrainingReviewMode.value) return;
-  const verified = await restoreMissionQuizCompletion();
-  if (activeMissionQuizSubmission.value) {
-    postDockingQuizTriggered.value = true;
-    missionReadyToReport.value = true;
-    return;
-  }
-  if (!verified) return;
-  console.log('[QUIZ CHECK] === FUNCTION CALLED ===');
-  console.log('[QUIZ CHECK] activeTrainingModule:', activeTrainingModule.value);
-  
-  const moduleId = activeTrainingModule.value?.id;
-  console.log('[QUIZ CHECK] Module ID:', moduleId);
-  
-  if (!moduleId) {
-    console.warn('[QUIZ CHECK] No module ID found, exiting');
-    postDockingQuizTriggered.value = true;
-    missionReadyToReport.value = true;
-    return;
-  }
-  
+  if (isTrainingReviewMode.value || postDockingQuizChecking.value) return;
+  const module = activeTrainingModule.value, run = trainingRunMetrics.value;
+  const studentId = currentUser.value?.id;
+  const current = () => activeTrainingModule.value === module && trainingRunMetrics.value === run
+    && currentUser.value?.id === studentId && activeScreen.value === 'simulation'
+    && !activeCoursePractical.value && !isTrainingReviewMode.value
+    && anchor.value.deployed && !engineRunning.value && !engineStarting.value && isBoatInPortZone.value;
+  if (!module || !current()) return;
+  postDockingQuizChecking.value = true;
+  missionQuizLoadError.value = '';
   try {
-    console.log('[QUIZ CHECK] Loading quiz from Firestore via REST API...');
-    
-    // Use the same direct query approach as handleTakeQuizClick
-    const quiz = await getQuizForModuleFromFirestore(moduleId);
-    
-    console.log('[QUIZ CHECK] Quiz result:', quiz);
-    
-    if (quiz && quiz.questions && quiz.questions.length > 0) {
-      // Valid quiz found - SET DATA FIRST, THEN SHOW MODAL
-      console.log('[QUIZ CHECK] ✓✓✓ VALID QUIZ FOUND ✓✓✓');
-      console.log('[QUIZ CHECK] Setting postDockingQuizData first...');
-      postDockingQuizData.value = quiz;
-      
-      // Wait a tick to ensure reactive data is updated
-      await nextTick();
-      
-      console.log('[QUIZ CHECK] Now setting showPostDockingQuiz to true...');
-      showPostDockingQuiz.value = true;
-      console.log('[QUIZ CHECK] Modal should be visible now!');
-      console.log('[QUIZ CHECK] postDockingQuizData:', postDockingQuizData.value);
-      console.log('[QUIZ CHECK] showPostDockingQuiz:', showPostDockingQuiz.value);
-      postDockingQuizTriggered.value = true;
-    } else {
-      // No quiz or quiz has no questions
-      console.log('[QUIZ CHECK] No valid quiz found for moduleId - enabling report mission');
+    const verified = await restoreMissionQuizCompletion();
+    if (!verified || !current()) return;
+    if (activeMissionQuizSubmission.value) {
       postDockingQuizTriggered.value = true;
       missionReadyToReport.value = true;
+      reportMissionCompletion();
+      return;
+    }
+    // Verify absence remotely; a network failure must never skip an assigned quiz.
+    const quiz = await getQuizForModuleFromFirestore(module.id, { requireDatabase: true });
+    if (!current()) return;
+    if (quiz?.questions?.length) {
+      postDockingQuizData.value = quiz;
+      await nextTick();
+      if (!current()) return;
+      showPostDockingQuiz.value = true;
+      postDockingQuizTriggered.value = true;
+    } else {
+      postDockingQuizTriggered.value = true;
+      missionReadyToReport.value = true;
+      reportMissionCompletion();
     }
   } catch (error) {
-    console.error('[QUIZ CHECK] ❌ ERROR:', error);
-    console.error('[QUIZ CHECK] Error stack:', error.stack);
-    postDockingQuizTriggered.value = true;
-    missionReadyToReport.value = true;
+    if (current()) missionQuizLoadError.value = 'Could not check your assigned quiz. Please retry.';
+    console.error('Post-docking quiz lookup failed:', error);
+  } finally {
+    postDockingQuizChecking.value = false;
   }
-  
-  console.log('[QUIZ CHECK] === FUNCTION COMPLETE ===');
 }
 
 /**
@@ -13046,8 +13002,11 @@ function startQuickSail() {
 function syncUiCursor(screen = activeScreen.value) {
   // Consider any modal/overlay that should make the cursor visible
   const overlayOpen = (
-    courseReadyToTakeQuiz.value ||
+    courseReadyToComplete.value ||
     courseCompletionPaused.value ||
+    postDockingQuizChecking.value ||
+    !!missionQuizLoadError.value ||
+    missionReadyToReport.value ||
     showPostDockingQuiz.value ||
     missionCompleteModal.value ||
     instructorReviewModal.value ||
@@ -16328,8 +16287,7 @@ function animate() {
           trackDockingAttempt(trainingRunMetrics.value, isInBerth, distanceFromCenter);
           checkTrainingStep();
           
-          // Take Quiz button will appear automatically (no need to check database here)
-          console.log('[ANCHOR] Take Quiz button should be visible');
+          // The docking watcher saves the attempt, then opens its quiz or results.
         }
       } else if (anchorMilestone === 'stowed') {
         anchor.value.deployed = false;
@@ -16465,6 +16423,16 @@ function resetCourseCompletion() {
   courseCompletionState.value = 'NOT_STARTED'; courseCompletionError.value = ''; activeCoursePractical.value = null;
 }
 watch([() => currentUser.value?.id, userRole], () => { resetCourseCompletion(); if (missionCompleteModal.value?.fromLesson) missionCompleteModal.value = null; });
+watch(courseReadyToComplete, ready => {
+  if (ready) continueCourseCompletion();
+});
+const legacyReadyToComplete = computed(() => !activeCoursePractical.value && !!activeTrainingModule.value
+  && activeScreen.value === 'simulation' && !isTrainingReviewMode.value
+  && !missionCompleteModal.value && !showPostDockingQuiz.value && !postDockingQuizTriggered.value
+  && validDockingCompletion(courseDockingEvidence()));
+watch(legacyReadyToComplete, ready => {
+  if (ready) checkForPostDockingQuiz();
+});
 watch([() => trainingRunMetrics.value.resumeCompletion, activeScreen], ([resumeCompletion]) => {
   if (resumeCompletion && activeCoursePractical.value && activeScreen.value === 'simulation') continueCourseCompletion();
 });
@@ -16568,7 +16536,8 @@ watch(missionCompleteModal, () => {
   syncUiCursor();
 });
 
-watch([courseReadyToTakeQuiz, courseCompletionPaused, showPostDockingQuiz], () => {
+watch([courseReadyToComplete, courseCompletionPaused, showPostDockingQuiz,
+  postDockingQuizChecking, missionQuizLoadError, missionReadyToReport], () => {
   syncUiCursor();
 });
 

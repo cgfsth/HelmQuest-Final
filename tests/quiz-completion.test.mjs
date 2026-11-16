@@ -20,10 +20,11 @@ function actualFunction(name) {
 }
 const overlay = source.slice(source.indexOf('<!-- Legacy reporting remains available'), source.indexOf('<!-- Sinking Crash Alarm Overlay'));
 const render = new Function('Vue', compile(`<div>${overlay}</div>`, { mode: 'function', prefixIdentifiers: true }).code)(Vue);
-function page(api = {}) {
+function page(api = {}, lookup = async () => quiz) {
   const alerts = [], notifications = [], reports = [];
   const deps = {
     activeCoursePractical: Vue.ref(null), courseCompletionFlow: null,
+    activeScreen: Vue.ref('simulation'), engineStarting: Vue.ref(false), isBoatInPortZone: Vue.ref(true),
     ref: Vue.ref, computed: Vue.computed, watch: Vue.watch, nextTick: Vue.nextTick,
     findCompletedQuizSubmission, quizScoreCounts, restoreQuizSubmissions,
     currentUser: Vue.ref({ id: 'student' }), activeTrainingModule: Vue.ref({ id: 'module' }),
@@ -33,7 +34,7 @@ function page(api = {}) {
     missionCompleteModal: Vue.ref(null), engineRunning: Vue.ref(false),
     postDockingQuizData: Vue.ref(quiz), showPostDockingQuiz: Vue.ref(false),
     firebaseApi: { getQuizScores: async () => ({ scores: [] }), ...api },
-    getQuizForModuleFromFirestore: async () => quiz, saveProgress() {},
+    getQuizForModuleFromFirestore: lookup, saveProgress() {},
     alert: message => alerts.push(message), showTrainingNotification: (...args) => notifications.push(args),
     console: { warn() {}, error() {}, log() {} },
     openSavedMissionReport: module => reports.push({ module, saved: true }),
@@ -44,7 +45,7 @@ function page(api = {}) {
   const scope = Vue.effectScope();
   const bindings = scope.run(() => new Function(...Object.keys(deps), `${state}
     ${['handlePostDockingQuizClose', 'handleTakeQuizClick', 'checkForPostDockingQuiz', 'handlePostDockingQuizSubmit', 'reportMissionCompletion'].map(actualFunction).join('\n')}
-    return { activeMissionQuizSubmission, missionQuizLoading, missionQuizLoadError,
+    return { activeMissionQuizSubmission, missionQuizLoading, missionQuizLoadError, postDockingQuizChecking,
       isPostDockingQuizSubmitting, restoreMissionQuizCompletion, handleTakeQuizClick,
       checkForPostDockingQuiz, handlePostDockingQuizSubmit, reportMissionCompletion };`)(...Object.values(deps)));
   return { ...deps, ...bindings, alerts, notifications, reports, scope,
@@ -79,6 +80,67 @@ test('first attempt opens the quiz after checking persisted results', async () =
     await view.handleTakeQuizClick();
     assert.equal(view.showPostDockingQuiz.value, true);
     assert.equal(view.missionReadyToReport.value, false);
+  } finally { view.scope.stop(); }
+});
+
+test('standalone docking opens its quiz automatically and coalesces duplicate checks', async () => {
+  let release, lookups = 0;
+  const view = page({}, () => { lookups++; return new Promise(resolve => { release = resolve; }); });
+  try {
+    const start = source.indexOf('const legacyReadyToComplete = computed(');
+    const end = source.indexOf('\nwatch([() => trainingRunMetrics.value.resumeCompletion', start);
+    view.scope.run(() => new Function(...Object.keys(view), 'validDockingCompletion', 'courseDockingEvidence',
+      source.slice(start, end))(...Object.values(view), evidence => evidence.anchored,
+        () => ({ anchored: view.anchor.value.deployed })));
+    view.anchor.value.deployed = false;
+    await Vue.nextTick();
+    view.anchor.value.deployed = true;
+    await Vue.nextTick(); await Vue.nextTick();
+    assert.equal(lookups, 1);
+    await view.checkForPostDockingQuiz();
+    assert.equal(lookups, 1);
+    release(quiz);
+    await Vue.nextTick(); await Vue.nextTick();
+    assert.equal(view.showPostDockingQuiz.value, true);
+    assert.equal(view.reports.length, 0);
+  } finally { view.scope.stop(); }
+});
+
+test('standalone docking without an assigned quiz opens simulation results directly', async () => {
+  const view = page({}, async () => null);
+  try {
+    await view.checkForPostDockingQuiz();
+    assert.equal(view.showPostDockingQuiz.value, false);
+    assert.deepEqual(view.reports, [{ module: view.activeTrainingModule.value, saved: false }]);
+    assert.equal(view.alerts.length, 0);
+  } finally { view.scope.stop(); }
+});
+
+test('failed assigned-quiz lookup stays retryable and never reports a quiz-free result', async () => {
+  let offline = true;
+  const view = page({}, async () => { if (offline) throw new Error('Offline'); return quiz; });
+  try {
+    await view.checkForPostDockingQuiz();
+    assert.equal(view.reports.length, 0);
+    assert.equal(view.postDockingQuizTriggered.value, false);
+    assert.match(view.missionQuizLoadError.value, /retry/i);
+    offline = false;
+    await view.checkForPostDockingQuiz();
+    assert.equal(view.showPostDockingQuiz.value, true);
+  } finally { view.scope.stop(); }
+});
+
+test('leaving port during lookup prevents a late quiz from opening', async () => {
+  let release;
+  const view = page({}, () => new Promise(resolve => { release = resolve; }));
+  try {
+    const pending = view.checkForPostDockingQuiz();
+    await Vue.nextTick(); await Vue.nextTick();
+    view.isBoatInPortZone.value = false;
+    release(quiz);
+    await pending;
+    assert.equal(view.showPostDockingQuiz.value, false);
+    assert.equal(view.reports.length, 0);
   } finally { view.scope.stop(); }
 });
 

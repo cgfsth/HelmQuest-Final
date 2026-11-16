@@ -4,8 +4,6 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc';
 import * as Vue from 'vue';
-import { compile } from '@vue/compiler-dom';
-import { renderToString } from '@vue/server-renderer';
 import { createMissionCompletionFlow } from '../src/helpers/missionCompletionFlow.js';
 import { simulationPerformance, simulationScoringInputs, validDockingCompletion } from '../shared/simulationPerformance.js';
 import { vesselEncounterResult } from '../src/helpers/vesselEncounter.js';
@@ -65,38 +63,82 @@ test('switching student accounts while refreshing mission data cannot launch the
   context.currentUser.value = { id: 'b' }; release(); await pending; assert.equal(launched, false);
 });
 
-test('the docked course renders Take Quiz with zero, partial or full buoy progress and hides it during other stages', async () => {
-  const context = { computed: Vue.computed, validDockingCompletion,
-    activeCoursePractical: Vue.ref({ studentId: 'student' }), activeTrainingModule: Vue.ref({ id: 'navigation' }),
-    activeScreen: Vue.ref('simulation'), isTrainingReviewMode: Vue.ref(false), missionCompleteModal: Vue.ref(null),
-    showPostDockingQuiz: Vue.ref(false), courseCompletionState: Vue.ref('IN_PROGRESS'), trainingRunFinished: Vue.ref(false),
-    trainingRunMetrics: Vue.ref({ totalSteps: 3, stepsCompleted: 0 }), anchor: Vue.ref({ deployed: true }),
-    engineRunning: Vue.ref(false), engineStarting: Vue.ref(false), isBoatInPortZone: Vue.ref(true), stats: Vue.ref({ speedKnots: 0 }) };
-  appFunction('courseDockingEvidence', context);
-  const start = app.indexOf('const courseReadyToTakeQuiz = computed(');
-  vm.runInContext(`${app.slice(start, app.indexOf('\nasync function continueCourseCompletion', start))}\nglobalThis.ready = courseReadyToTakeQuiz;`, context);
-  const overlayStart = app.indexOf('<div v-if="courseReadyToTakeQuiz"');
-  const overlay = app.slice(overlayStart, app.indexOf('\n    <div v-if="activeCoursePractical', overlayStart));
-  const render = new Function('Vue', compile(overlay, { mode: 'function', prefixIdentifiers: true }).code)(Vue);
-  const html = () => renderToString(Vue.createSSRApp({ render, setup: () => ({ courseReadyToTakeQuiz: context.ready, continueCourseCompletion() {} }) }));
-  for (const steps of [0, 1, 3]) {
-    context.trainingRunMetrics.value.stepsCompleted = steps;
-    context.trainingRunFinished.value = steps === 3;
-    assert.match(await html(), /Take Quiz/);
+test('docking automatically opens the assigned quiz or simulation results with zero, partial or full buoy progress', async () => {
+  for (const assignedQuiz of [null, { id: 'quiz', questions: [{ id: 'one' }] }]) {
+    for (const steps of [0, 1, 3]) {
+      const context = { computed: Vue.computed, validDockingCompletion,
+        activeCoursePractical: Vue.ref({ studentId: 'student' }), activeTrainingModule: Vue.ref({ id: 'navigation' }),
+        activeScreen: Vue.ref('simulation'), isTrainingReviewMode: Vue.ref(false), missionCompleteModal: Vue.ref(null),
+        showPostDockingQuiz: Vue.ref(false), courseCompletionState: Vue.ref('IN_PROGRESS'), trainingRunFinished: Vue.ref(false),
+        trainingRunMetrics: Vue.ref({ totalSteps: 3, stepsCompleted: steps }), anchor: Vue.ref({ deployed: false }),
+        engineRunning: Vue.ref(false), engineStarting: Vue.ref(false), isBoatInPortZone: Vue.ref(true), stats: Vue.ref({ speedKnots: 0 }) };
+      appFunction('courseDockingEvidence', context);
+      const events = [];
+      const flow = createMissionCompletionFlow({
+        saveSimulation: async evidence => { events.push('save'); assert.equal(evidence.completedSteps, steps); return { data: { score: 40 } }; },
+        findQuiz: async () => { events.push('lookup'); return { quiz: assignedQuiz, saved: null }; },
+        saveQuiz: async () => ({ data: { score: 100 } }),
+        onState: ({ state }) => { context.courseCompletionState.value = state; },
+        onQuiz: () => { events.push('quiz'); context.showPostDockingQuiz.value = true; },
+        onResults: result => { events.push('results'); context.missionCompleteModal.value = result; }
+      });
+      context.watch = Vue.watch;
+      let pending;
+      context.continueCourseCompletion = () => { pending = flow.finish(context.courseDockingEvidence()); };
+      const start = app.indexOf('const courseReadyToComplete = computed(');
+      vm.runInContext(`${app.slice(start, app.indexOf('\nasync function continueCourseCompletion', start))}\nglobalThis.ready = courseReadyToComplete;`, context);
+      const watcherStart = app.indexOf('watch(courseReadyToComplete,');
+      const scope = Vue.effectScope();
+      scope.run(() => vm.runInContext(app.slice(watcherStart, app.indexOf('\n});', watcherStart) + 4), context));
+      try {
+        for (const [name, value] of [['engineRunning', true], ['engineStarting', true], ['isBoatInPortZone', false],
+          ['isTrainingReviewMode', true], ['showPostDockingQuiz', true], ['missionCompleteModal', {}],
+          ['activeScreen', 'dashboard'], ['courseCompletionState', 'SAVING_SIMULATION'], ['courseCompletionState', 'RESULTS']]) {
+          const previous = context[name].value;
+          context[name].value = value;
+          context.anchor.value.deployed = true;
+          await Vue.nextTick();
+          assert.equal(context.ready.value, false, name);
+          assert.deepEqual(events, [], name);
+          context.anchor.value.deployed = false;
+          context[name].value = previous;
+          await Vue.nextTick();
+        }
+        context.anchor.value.deployed = true;
+        context.stats.value.speedKnots = 3;
+        await Vue.nextTick();
+        assert.equal(context.ready.value, false);
+        assert.deepEqual(events, []);
+        context.stats.value.speedKnots = 0;
+        await Vue.nextTick(); await pending; await Vue.nextTick();
+        assert.deepEqual(events, ['save', 'lookup', assignedQuiz ? 'quiz' : 'results']);
+        assert.equal(context.showPostDockingQuiz.value, !!assignedQuiz);
+        assert.equal(!!context.missionCompleteModal.value, !assignedQuiz);
+        if (!assignedQuiz) assert.equal(context.missionCompleteModal.value.quizResult, null);
+        // Repeated position updates cannot save or open a second time.
+        context.stats.value = { speedKnots: 0 };
+        await Vue.nextTick();
+        assert.equal(events.length, 3);
+      } finally { scope.stop(); }
+    }
   }
-  for (const [name, value] of [['engineRunning', true], ['engineStarting', true], ['isBoatInPortZone', false],
-    ['isTrainingReviewMode', true], ['showPostDockingQuiz', true], ['missionCompleteModal', {}],
-    ['activeScreen', 'dashboard'], ['courseCompletionState', 'SAVING_SIMULATION'], ['courseCompletionState', 'RESULTS']]) {
-    const previous = context[name].value;
-    context[name].value = value;
-    assert.doesNotMatch(await html(), /Take Quiz/, name);
-    context[name].value = previous;
-  }
-  context.anchor.value.deployed = false;
-  assert.doesNotMatch(await html(), /Take Quiz/);
-  context.anchor.value.deployed = true;
-  context.stats.value.speedKnots = 3;
-  assert.doesNotMatch(await html(), /Take Quiz/);
+  assert.doesNotMatch(app, /v-if="courseReadyToComplete"/);
+});
+
+test('port detection follows the boat after model loading and recognizes dock types without English labels', () => {
+  const context = { computed: Vue.computed, activeTrainingModule: Vue.ref({ id: 'mission' }), boatObject: null,
+    stats: Vue.ref({ boatX: 100, boatZ: 100 }),
+    resolveTrainingZonesAtSpawn: () => [{ zoneType: 'dock', x: 20, z: 30, radius: 10 }],
+    isBoatInZone: (x, z, zone) => Math.hypot(x - zone.x, z - zone.z) <= zone.radius };
+  vm.createContext(context);
+  const start = app.indexOf('const isBoatInPortZone = computed(');
+  vm.runInContext(`${app.slice(start, app.indexOf('\n});', start) + 4)}\nglobalThis.inPort = isBoatInPortZone;`, context);
+  assert.equal(context.inPort.value, false);
+  context.boatObject = {};
+  context.stats.value = { boatX: 20, boatZ: 30 };
+  assert.equal(context.inPort.value, true);
+  context.stats.value = { boatX: 100, boatZ: 100 };
+  assert.equal(context.inPort.value, false);
 });
 
 test('App saves partial buoy progress, retains raw metrics on retry, and renders separate quiz results', async () => {
