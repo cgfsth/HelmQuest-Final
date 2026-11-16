@@ -20,9 +20,22 @@ test('official sections retain exact prescribed order, weeks, CLOs and grading i
   assert.match(OFFICIAL_SYLLABUS.sections[2].outcomes[0], /terrestrial coordinate system/);
   for (const section of [OFFICIAL_SYLLABUS.general, ...OFFICIAL_SYLLABUS.sections]) for (const key of ['content', 'outcomes', 'teachingActivities', 'assessmentTasks', 'submissionModes', 'resources']) assert.ok(section[key].length, `${section.id} ${key}`);
 });
-test('incomplete objectives, approaching the dock, moving boats and engines left on never save or open quizzes', async () => {
-  for (const patch of [{ objectivesComplete: false }, { completedSteps: 2 }, { inPort: false }, { anchored: false }, { engineStopped: false }, { speedKnots: 4 }]) {
+test('unsafe docking and invalid step counts never save or open quizzes', async () => {
+  for (const patch of [{ completedSteps: -1 }, { completedSteps: 4 }, { completedSteps: 1.5 }, { totalSteps: 0 }, { inPort: false }, { anchored: false }, { engineStopped: false }, { speedKnots: 4 }]) {
     const f = setup(); await f.flow.finish({ ...evidence, ...patch }); assert.equal(f.flow.snapshot().state, 'DOCKING_VALIDATION'); assert.deepEqual(f.events, []);
+  }
+});
+
+test('docking with zero or partial buoy progress saves the actual counts and opens the assigned quiz', async () => {
+  for (const completedSteps of [0, 1, 2]) {
+    const completion = { ...evidence, objectivesComplete: false, completedSteps };
+    let savedEvidence;
+    const f = setup({ saveSimulation: async value => { savedEvidence = value; return { data: { score: 40 } }; },
+      findQuiz: async () => ({ quiz: { id: 'quiz' }, saved: null }) });
+    await f.flow.finish(completion);
+    assert.deepEqual(savedEvidence, completion);
+    assert.equal(f.flow.snapshot().state, 'QUIZ_IN_PROGRESS');
+    assert.equal(f.quizzes.length, 1);
   }
 });
 test('no assigned quiz saves simulation first and transitions directly to results without a zero quiz score', async () => {

@@ -2668,6 +2668,13 @@
       <p class="helm-bridge-hint">C — camera · R — rain · WASD — helm · mouse — look</p>
     </div>
 
+    <div v-if="courseReadyToTakeQuiz" class="report-mission-overlay">
+      <div class="report-mission-card">
+        <h2>Vessel Docked</h2>
+        <p>You can take the quiz now. Unfinished buoy tasks will remain incomplete in your simulation score.</p>
+        <button type="button" class="report-mission-btn-large" @click="continueCourseCompletion">📝 Take Quiz</button>
+      </div>
+    </div>
     <div v-if="activeCoursePractical && !missionCompleteModal && !showPostDockingQuiz && ['SAVING_SIMULATION', 'MISSION_COMPLETED', 'QUIZ_CHECKING', 'QUIZ_LOOKUP_FAILED', 'SAVE_FAILED'].includes(courseCompletionState)" class="report-mission-overlay">
       <div class="report-mission-card"><h2>{{ courseCompletionError ? 'Completion needs attention' : courseCompletionState === 'SAVING_SIMULATION' ? 'Saving simulation results…' : 'Checking your assigned quiz…' }}</h2><p role="status">{{ courseCompletionError || 'Your simulation performance is saved before the optional quiz begins.' }}</p><button v-if="courseCompletionError" type="button" class="report-mission-btn-large" @click="continueCourseCompletion">Retry this stage</button><button v-if="courseCompletionError && trainingRunMetrics.integratedSaved" type="button" class="report-mission-btn-large" @click="viewSavedCourseSimulation">View saved simulation result</button></div>
     </div>
@@ -4391,6 +4398,10 @@ function courseDockingEvidence() {
     totalSteps: run?.totalSteps || module?.steps?.length || 0, anchored: anchor.value.deployed,
     engineStopped: !engineRunning.value && !engineStarting.value, inPort: isBoatInPortZone.value, speedKnots: stats.value.speedKnots };
 }
+const courseReadyToTakeQuiz = computed(() => !!activeCoursePractical.value && !!activeTrainingModule.value
+  && activeScreen.value === 'simulation' && !isTrainingReviewMode.value
+  && !missionCompleteModal.value && !showPostDockingQuiz.value
+  && courseCompletionState.value === 'IN_PROGRESS' && validDockingCompletion(courseDockingEvidence()));
 async function continueCourseCompletion() {
   const origin = activeCoursePractical.value, module = activeTrainingModule.value, run = trainingRunMetrics.value;
   if (!origin || !module || origin.studentId !== currentUser.value?.id || (isTrainingReviewMode.value && !run.resumeCompletion)) return;
@@ -13035,6 +13046,9 @@ function startQuickSail() {
 function syncUiCursor(screen = activeScreen.value) {
   // Consider any modal/overlay that should make the cursor visible
   const overlayOpen = (
+    courseReadyToTakeQuiz.value ||
+    courseCompletionPaused.value ||
+    showPostDockingQuiz.value ||
     missionCompleteModal.value ||
     instructorReviewModal.value ||
     certificateModal.value ||
@@ -16451,10 +16465,8 @@ function resetCourseCompletion() {
   courseCompletionState.value = 'NOT_STARTED'; courseCompletionError.value = ''; activeCoursePractical.value = null;
 }
 watch([() => currentUser.value?.id, userRole], () => { resetCourseCompletion(); if (missionCompleteModal.value?.fromLesson) missionCompleteModal.value = null; });
-watch([trainingRunFinished, () => anchor.value.deployed, engineRunning, activeScreen,
-  () => trainingRunMetrics.value.resumeCompletion,
-  () => trainingRunFinished.value && anchor.value.deployed && Math.abs(stats.value.speedKnots) <= 2], () => {
-  if (activeCoursePractical.value && activeScreen.value === 'simulation') continueCourseCompletion();
+watch([() => trainingRunMetrics.value.resumeCompletion, activeScreen], ([resumeCompletion]) => {
+  if (resumeCompletion && activeCoursePractical.value && activeScreen.value === 'simulation') continueCourseCompletion();
 });
 watch([showPostDockingQuiz, courseCompletionState, simulationRunning], ([visible]) => {
   if (activeScreen.value === 'simulation' && (visible || courseCompletionPaused.value)) {
@@ -16553,6 +16565,10 @@ watch(activeScreen, (screen, previousScreen) => {
 }, { immediate: true });
 
 watch(missionCompleteModal, () => {
+  syncUiCursor();
+});
+
+watch([courseReadyToTakeQuiz, courseCompletionPaused, showPostDockingQuiz], () => {
   syncUiCursor();
 });
 

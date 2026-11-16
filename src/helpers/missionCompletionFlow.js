@@ -7,7 +7,7 @@ export function createMissionCompletionFlow({ saveSimulation, findQuiz, saveQuiz
   const results = () => { set('RESULTS'); if (!disposed) onResults({ simulation, quiz, quizResult }); };
   async function finish(evidence) {
     if (disposed || pending || state === 'RESULTS' || state === 'QUIZ_IN_PROGRESS') return pending;
-    if (!validDockingCompletion(evidence)) { set('DOCKING_VALIDATION', 'Complete the objectives and validated docking requirements first.'); return; }
+    if (!validDockingCompletion(evidence)) { set('DOCKING_VALIDATION', 'Dock in the assigned port, stop the engine and deploy the anchor first.'); return; }
     pending = (async () => {
       try {
         if (!simulation) { set('SAVING_SIMULATION'); const saved = await saveSimulation(evidence); if (disposed) return; simulation = saved; set('MISSION_COMPLETED'); }

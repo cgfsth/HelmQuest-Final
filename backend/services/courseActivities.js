@@ -388,7 +388,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
   async function completeSimulation(user, id, body) {
     const item = await practical(user, id);
     await requireViewedModulePdfs(user, item);
-    if (!validDockingCompletion(body.completion)) fail(409, 'Complete all mission objectives, dock in the assigned port, stop the engine and deploy the anchor first.');
+    if (!validDockingCompletion(body.completion)) fail(409, 'Dock in the assigned port, stop the engine and deploy the anchor first.');
     let performance;
     let encounter;
     try {

@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc';
+import * as Vue from 'vue';
+import { compile } from '@vue/compiler-dom';
+import { renderToString } from '@vue/server-renderer';
 import { createMissionCompletionFlow } from '../src/helpers/missionCompletionFlow.js';
 import { simulationPerformance, simulationScoringInputs, validDockingCompletion } from '../shared/simulationPerformance.js';
 import { vesselEncounterResult } from '../src/helpers/vesselEncounter.js';
@@ -62,13 +65,47 @@ test('switching student accounts while refreshing mission data cannot launch the
   context.currentUser.value = { id: 'b' }; release(); await pending; assert.equal(launched, false);
 });
 
-test('App completes its actual performance tracker before saving, retains raw metrics on retry, and renders separate quiz results', async () => {
+test('the docked course renders Take Quiz with zero, partial or full buoy progress and hides it during other stages', async () => {
+  const context = { computed: Vue.computed, validDockingCompletion,
+    activeCoursePractical: Vue.ref({ studentId: 'student' }), activeTrainingModule: Vue.ref({ id: 'navigation' }),
+    activeScreen: Vue.ref('simulation'), isTrainingReviewMode: Vue.ref(false), missionCompleteModal: Vue.ref(null),
+    showPostDockingQuiz: Vue.ref(false), courseCompletionState: Vue.ref('IN_PROGRESS'), trainingRunFinished: Vue.ref(false),
+    trainingRunMetrics: Vue.ref({ totalSteps: 3, stepsCompleted: 0 }), anchor: Vue.ref({ deployed: true }),
+    engineRunning: Vue.ref(false), engineStarting: Vue.ref(false), isBoatInPortZone: Vue.ref(true), stats: Vue.ref({ speedKnots: 0 }) };
+  appFunction('courseDockingEvidence', context);
+  const start = app.indexOf('const courseReadyToTakeQuiz = computed(');
+  vm.runInContext(`${app.slice(start, app.indexOf('\nasync function continueCourseCompletion', start))}\nglobalThis.ready = courseReadyToTakeQuiz;`, context);
+  const overlayStart = app.indexOf('<div v-if="courseReadyToTakeQuiz"');
+  const overlay = app.slice(overlayStart, app.indexOf('\n    <div v-if="activeCoursePractical', overlayStart));
+  const render = new Function('Vue', compile(overlay, { mode: 'function', prefixIdentifiers: true }).code)(Vue);
+  const html = () => renderToString(Vue.createSSRApp({ render, setup: () => ({ courseReadyToTakeQuiz: context.ready, continueCourseCompletion() {} }) }));
+  for (const steps of [0, 1, 3]) {
+    context.trainingRunMetrics.value.stepsCompleted = steps;
+    context.trainingRunFinished.value = steps === 3;
+    assert.match(await html(), /Take Quiz/);
+  }
+  for (const [name, value] of [['engineRunning', true], ['engineStarting', true], ['isBoatInPortZone', false],
+    ['isTrainingReviewMode', true], ['showPostDockingQuiz', true], ['missionCompleteModal', {}],
+    ['activeScreen', 'dashboard'], ['courseCompletionState', 'SAVING_SIMULATION'], ['courseCompletionState', 'RESULTS']]) {
+    const previous = context[name].value;
+    context[name].value = value;
+    assert.doesNotMatch(await html(), /Take Quiz/, name);
+    context[name].value = previous;
+  }
+  context.anchor.value.deployed = false;
+  assert.doesNotMatch(await html(), /Take Quiz/);
+  context.anchor.value.deployed = true;
+  context.stats.value.speedKnots = 3;
+  assert.doesNotMatch(await html(), /Take Quiz/);
+});
+
+test('App saves partial buoy progress, retains raw metrics on retry, and renders separate quiz results', async () => {
   const tracker = new IntegratedPerformanceManager(); tracker.startMission({ id: 'navigation', duration: '10 minutes', steps: [{ id: 'dock' }] });
   Object.assign(tracker.state, { steeringScore: 81.234, courseScore: 87.654, dockingScore: 0 });
   tracker.state.headingHistory = [{ heading: 0 }, { heading: 1 }];
   tracker.state.objectivesCompleted = [{ id: 'dock' }];
-  const run = createTrainingRunMetrics(); run.totalSteps = 1; run.stepsCompleted = 1;
-  const evidence = { objectivesComplete: true, totalSteps: 1, completedSteps: 1, anchored: true, engineStopped: true, inPort: true, speedKnots: 0 };
+  const run = createTrainingRunMetrics(); run.totalSteps = 3; run.stepsCompleted = 1;
+  const evidence = { objectivesComplete: false, totalSteps: 3, completedSteps: 1, anchored: true, engineStopped: true, inPort: true, speedKnots: 0 };
   const module = { id: 'navigation', title: 'Navigation' }, quiz = { id: 'q', questions: [{ id: 'one', type: 'true-false' }] };
   let saves = 0, lookups = 0, rewards = 0;
   const context = { performance, console, createMissionCompletionFlow, simulationPerformance, simulationScoringInputs, vesselEncounterResult, vesselEncounterState: null, encounterSetupError: ref(''), validDockingCompletion, calculateSafetyCompliance,
@@ -76,7 +113,7 @@ test('App completes its actual performance tracker before saving, retains raw me
     trainingRunMetrics: ref(run), activeCoursePractical: ref({ studentId: 'student', activityId: 'practical', syllabusId: 'course', lessonId: 'lesson' }),
     isTrainingReviewMode: ref(false), courseCompletionFlow: null, courseCompletionState: ref('IN_PROGRESS'), courseCompletionError: ref(''),
     courseDockingEvidence: () => evidence, performanceManager: tracker, progressData: ref({ quizSubmissions: [] }),
-    firebaseApi: { completeLearningSimulation: async (id, body) => { saves++; assert.equal(id, 'practical'); assert.equal(tracker.isActive, false); assert.equal(body.scores.steering, 81.234); assert.equal(body.scores.docking, 0); if (saves === 1) throw new Error('Offline'); return { data: { ...simulationPerformance(body.scores), studentId: 'student' }, totalXp: 0, xpAwarded: 0 }; },
+    firebaseApi: { completeLearningSimulation: async (id, body) => { saves++; assert.equal(id, 'practical'); assert.equal(tracker.isActive, false); assert.deepEqual(body.completion, evidence); assert.ok(Math.abs(body.scores.completion - 100 / 3) < 1e-10); assert.equal(body.scores.steering, 81.234); assert.equal(body.scores.docking, 0); if (saves === 1) throw new Error('Offline'); return { data: { ...simulationPerformance(body.scores), studentId: 'student' }, totalXp: 0, xpAwarded: 0 }; },
       getLearningMissionQuiz: async () => { lookups++; return { quiz }; }, submitLearningMissionQuiz: async () => ({ data: { quizId: 'q', studentId: 'student', score: 50, 'raw-score': 1, totalQuestions: 2, passed: false } }) },
     recordMissionSession: () => {}, processMissionRewards: () => { rewards++; }, saveProgress: () => {}, restoreQuizSubmissions: (local, saved) => [...local, ...saved],
     normalizeQuizData: value => value, postDockingQuizData: ref(null), showPostDockingQuiz: ref(false), postDockingQuizTriggered: ref(false), missionCompleteModal: ref(null),

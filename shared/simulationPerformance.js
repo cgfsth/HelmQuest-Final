@@ -50,8 +50,9 @@ export function simulationPerformance(scores, passScore = 70) {
       steeringPrecision: steering, courseAccuracy: course, dockingAccuracy: docking, timeEfficiency: time } };
 }
 export function validDockingCompletion(evidence) {
-  return !!evidence && evidence.objectivesComplete === true && Number.isInteger(evidence.totalSteps) && evidence.totalSteps > 0
-    && Number.isInteger(evidence.completedSteps) && evidence.completedSteps >= evidence.totalSteps
+  // Docking ends the attempt; unfinished objectives still reduce its score.
+  return !!evidence && Number.isInteger(evidence.totalSteps) && evidence.totalSteps > 0
+    && Number.isInteger(evidence.completedSteps) && evidence.completedSteps >= 0 && evidence.completedSteps <= evidence.totalSteps
     && evidence.anchored === true && evidence.engineStopped === true && evidence.inPort === true
     && Number.isFinite(evidence.speedKnots) && Math.abs(evidence.speedKnots) <= 2;
 }

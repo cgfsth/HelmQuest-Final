@@ -41,10 +41,23 @@ test('instructors can edit their notes but cannot overwrite official titles, ord
   expect(f.records.syllabus_modules[moduleId].description).toBe('Instructor note');
   await expect(f.service.reorder(owner, syllabusId, { ids: [], revision: f.records.syllabi[syllabusId].revision })).rejects.toMatchObject({ status: 400 });
 });
-test('mission quiz endpoint rejects requests before actual objective and docking completion', async () => {
+test('mission quiz endpoint requires saved docking and rejects unsafe docking or invalid step counts', async () => {
   await request(f.app).get(`/learning-materials/activities/${activityId}/mission-quiz`).set(headers()).expect(409);
-  for (const patch of [{ objectivesComplete: false }, { completedSteps: 1 }, { inPort: false }, { anchored: false }, { engineStopped: false }, { speedKnots: 3 }]) await complete({ completion: { ...completed, ...patch } }).expect(409);
+  for (const patch of [{ completedSteps: -1 }, { completedSteps: 4 }, { completedSteps: 1.5 }, { totalSteps: 0 }, { inPort: false }, { anchored: false }, { engineStopped: false }, { speedKnots: 3 }]) await complete({ completion: { ...completed, ...patch } }).expect(409);
   expect(f.records.mission_score).toBeUndefined();
+});
+
+test.each([0, 1, 2])('docking after %i of 3 objectives unlocks the quiz and keeps the actual completion score', async completedSteps => {
+  const completion = { ...completed, objectivesComplete: false, completedSteps };
+  const saved = await complete({ completion }).expect(200);
+  expect(saved.body.data.completion).toMatchObject({ ...completion, verified: true });
+  expect(saved.body.data.performanceMetrics.objectiveCompletion).toBeCloseTo(completedSteps / 3 * 100);
+  expect(saved.body.data.score).toBe(Math.round(completedSteps / 3 * 40 + 80 * .4 + 90 * .2));
+  const quiz = await request(f.app).get(`/learning-materials/activities/${activityId}/mission-quiz`).set(headers()).expect(200);
+  expect(quiz.body.quiz.id).toBe('q');
+  await request(f.app).post(`/learning-materials/activities/${activityId}/mission-quiz`).set(headers())
+    .send({ quizId: 'q', answers: { one: 'True', two: 'Starboard' } }).expect(200);
+  expect(f.records.mission_score.saved.performanceMetrics.objectiveCompletion).toBeCloseTo(completedSteps / 3 * 100);
 });
 test('completion binds the current student and exact mission while preserving simulation and quiz scores separately', async () => {
   const saved = await complete({ studentId: 'sb', score: 100 }).expect(200);

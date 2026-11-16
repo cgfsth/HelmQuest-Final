@@ -22,7 +22,7 @@ router.post('/', async (req, res) => {
     if (req.body.scores) {
       const mission = await readMissionReward(ref => ref.get(), db, missionId);
       if (!mission) return res.status(404).json({ message: 'Mission not found.' });
-      if (!validDockingCompletion(req.body.completion)) return res.status(409).json({ message: 'Complete the objectives and dock safely before reporting.' });
+      if (!validDockingCompletion(req.body.completion)) return res.status(409).json({ message: 'Dock in the assigned port, stop the engine and deploy the anchor before reporting.' });
       let config;
       try { config = normalizeEncounter(mission.data.encounter); } catch (error) { return res.status(400).json({ message: error.message }); }
       encounter = req.body.encounter || null;
