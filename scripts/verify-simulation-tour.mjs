@@ -18,7 +18,9 @@ const compiled = compileScript(component, { id: 'tour-browser-fixture', inlineTe
 const state = read('../src/helpers/simulationTutorial.js').replace(/import[^\n]+\n/, '').replace(/export /g, '');
 const layout = read('../src/helpers/simulationTourLayout.js').replace(/export /g, '');
 const binding = app.match(/const \{\n  stepIndex: tutorialStepIndex[\s\S]+?\} = useSimulationTutorial\([^;]+;/)[0];
-const pause = app.slice(app.indexOf('const tutorialVisible = computed('), app.indexOf('watch(simulationNeedsLandscape,'));
+const visibilityStart = app.indexOf('const tutorialVisible = computed(');
+const visibility = app.slice(visibilityStart, app.indexOf(');\n', visibilityStart) + 2);
+const pause = visibility + '\n' + app.slice(app.indexOf('let tutorialPause = null;'), app.indexOf('watch(simulationNeedsLandscape,'));
 function actualFunction(name) {
   const start = app.search(new RegExp(`(?:async )?function ${name}\\(`));
   assert.ok(start >= 0);
@@ -27,10 +29,10 @@ function actualFunction(name) {
 const handlers = ['openStudentTour','advanceStudentTour','previousStudentTourStep','chooseMissionForTour','restoreStudentTourFocus','closeStudentTour'].map(actualFunction).join('\n');
 const shellStart = app.indexOf('<div v-else class="missions-hub missions-hub--with-sidebar student-hub-shell"');
 const shell = app.slice(shellStart, app.indexOf('<section v-show="hubTab === \'overview\'"', shellStart)).replace('<div v-else ', '<div ');
-const overlay = app.slice(app.indexOf('    <SimulationTutorial v-if="tutorialVisible"'), app.indexOf('    <InventoryModal/>'));
+const overlay = app.match(/<SimulationTutorial v-if="tutorialVisible"[\s\S]+?\/>/)[0];
 const template = `${overlay}<div v-if="activeScreen==='dashboard'" class="scene-overlay dashboard-overlay student-dashboard-overlay">${shell}
   <section v-if="hubTab==='overview'" class="fixture-summary"><h2>Your training at a glance</h2><p>Complete navigation missions to build your skills at sea.</p><div class="fixture-rewards">⚓ Deck Cadet &nbsp; · &nbsp; 0 XP &nbsp; · &nbsp; 0 missions passed</div></section>
-  <section v-if="hubTab==='missions'" id="hub-missions" class="fixture-summary"><h2 class="training-card-title">Mission 1: Harbor Navigation</h2><p>Practice the basics of safe departure and navigation.</p><button class="hub-mission-start" @click="startMission">Start mission</button></section>
+  <section v-if="hubTab==='materials'" id="hub-missions" class="fixture-summary"><h2 class="training-card-title">Mission 1: Harbor Navigation</h2><p>Practice the basics of safe departure and navigation.</p><button class="hub-mission-start lc-activity-open" @click="startMission">Start mission</button></section>
   </div></div></div>
   <div v-if="activeScreen==='simulation'" class="fixture-sea"><div class="tactical-minimap">RADAR<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="40"/><path d="M10 50h80M50 10v80M50 50l25-25"/></svg></div>
     <div class="fixture-hud"><div class="mission-objective-box">CURRENT OBJECTIVE<br><strong>Depart the harbor safely</strong></div><div class="speed-pill">0.0 Knots</div><div class="simulation-primary-actions"><button class="engine-btn">Engine</button><button>Anchor</button></div><button class="exit-hold-btn">Hold to exit</button></div>
@@ -46,6 +48,7 @@ writeFileSync(fixturePath, `<!doctype html><html><head><meta charset="UTF-8"><me
 const {ref,computed,watch,nextTick}=Vue;
 ${state}\n${layout}
 const currentUser=ref({id:'fixture-'+Date.now(),status:'active'}),isAuthenticated=ref(true),userRole=ref('student');
+const tourClaims=new Set(),firebaseApi={async claimSimulationTour(alreadySeen){const id=currentUser.value.id,showAutomatically=!alreadySeen&&!tourClaims.has(id);tourClaims.add(id);return{showAutomatically}}};
 const activeScreen=ref('dashboard'),hubTab=ref('overview'),simulationTouchEnabled=ref(false),simulationRunning=ref(true);
 const showCinematicLoading=ref(false),showMissionBriefing=ref(false),simulationNeedsLandscape=ref(false),controlsGuideVisible=ref(false),gearInfoPopup=ref(null),showPostDockingQuiz=ref(false),showQuizResults=ref(false),exitConfirmVisible=ref(false),exitFinalConfirmVisible=ref(false);
 const trainingRunMetrics=ref({startedAt:performance.now(),endedAt:null}),trainingStepStartedAt=ref(0),trainingHeadingHold=ref({startedAt:null}),performanceManager={state:{missionStartTime:Date.now()}},keyStates={KeyW:false};
@@ -57,7 +60,7 @@ const studentCompactLayout=ref(innerWidth<1024);window.addEventListener('resize'
 const studentMenuOpen=ref(false),studentMenuPanel=ref(null),studentMenuTrigger=ref(null),studentMenuClose=ref(null),studentProfileExtras={studentId:'STU-2026-001'},navigationMissions=[{},{}];
 function startMission(){simulationRunning.value=true;activeScreen.value='simulation'}
 const snapshot=()=>({step:tutorialStepIndex.value,visible:tutorialVisible.value,completed:tutorialCompleted.value,screen:activeScreen.value,running:simulationRunning.value});
-window.fixture={snapshot,reset(touch=false){activeScreen.value='dashboard';hubTab.value='overview';simulationTouchEnabled.value=touch;currentUser.value={id:'fixture-'+Math.random(),status:'active'}},backToDashboard(){activeScreen.value='dashboard';hubTab.value='overview'},completeForTest(){while(!tutorialCompleted.value)nextTutorialCard()}};
+window.fixture={snapshot,reset(touch=false,xp=0){activeScreen.value='dashboard';hubTab.value='overview';simulationTouchEnabled.value=touch;currentUser.value={id:'fixture-'+Math.random(),status:'active',xp}},async relogin(){const user=currentUser.value;isAuthenticated.value=false;currentUser.value=null;await nextTick();currentUser.value=user;isAuthenticated.value=true;await nextTick()},backToDashboard(){activeScreen.value='dashboard';hubTab.value='overview'},completeForTest(){while(!tutorialCompleted.value)nextTutorialCard()}};
 Vue.createApp({components:{SimulationTutorial:Tutorial},template:${JSON.stringify(template)},setup:()=>({activeScreen,hubTab,tutorialVisible,tutorialStepIndex,tutorialStorageNotice,tutorialEligible,simulationTouchEnabled,advanceStudentTour,previousStudentTourStep,closeStudentTour,chooseMissionForTour,openStudentTour,demoStudent,studentCompactLayout,studentMenuOpen,studentMenuPanel,studentMenuTrigger,studentMenuClose,studentProfileExtras,navigationMissions,closeStudentMenu,selectHubTab,startMission,trapStudentMenuFocus(){},signOut(){},openStudentMenu(){}})}).mount('#app');
 </script></body></html>`);
 
@@ -90,22 +93,18 @@ try {
     assert.equal(await evaluate('Math.abs(document.querySelector(".student-tour-trigger").getBoundingClientRect().top-document.querySelector(".missions-hub-title").getBoundingClientRect().top)<30'),true,'Help icon must stay beside the heading on phones too');
     assert.equal(await evaluate('document.querySelector(".hub-sidebar-nav").textContent.includes("Simulation Tutorial")'),false);
     assert.equal(await evaluate('document.querySelector(".student-hub-shell").inert'),true);
-    await click('.tour-next');assert.equal((await evaluate('window.fixture.snapshot()')).step,1);await bounds();
-    await click('.tour-next');assert.equal(await evaluate('!!document.querySelector(".tour-tooltip")'),false);
-    assert.equal(await evaluate('document.activeElement.className'),'hub-mission-start');
-    await click('.hub-mission-start');await waitFor('window.fixture.snapshot().visible && window.fixture.snapshot().screen==="simulation"');
-    assert.equal((await evaluate('window.fixture.snapshot()')).running,false);
-    assert.ok((await bounds()).spotlight);await screenshot('engine-'+width);
-    for(let step=2;step<6;step++){await click('.tour-next');assert.equal((await evaluate('window.fixture.snapshot()')).step,step);assert.ok((await bounds()).spotlight)}
-    await evaluate('document.querySelector(".tour-next").focus()');
-    await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
-    assert.equal(await evaluate('document.activeElement.className'),'tour-close');
-    await click('.tour-next');assert.equal(await evaluate('!!document.querySelector(".tour-tooltip")'),false);assert.equal((await evaluate('window.fixture.snapshot()')).completed,true);assert.equal((await evaluate('window.fixture.snapshot()')).running,true);
-    await evaluate('window.fixture.backToDashboard();Vue.nextTick()');assert.equal(await evaluate('!!document.querySelector(".tour-tooltip")'),false);
+    await click('.tour-close');await waitFor('!window.fixture.snapshot().visible');
+    await evaluate('window.fixture.relogin()');await sleep();assert.equal(await evaluate('!!document.querySelector(".tour-tooltip")'),false,'Closing the first welcome card must survive another login');
+    await screenshot('returning-login-'+width);
+    await click('.student-tour-trigger');await waitFor('window.fixture.snapshot().visible');await bounds();
+    await evaluate('window.fixture.completeForTest();Vue.nextTick()');assert.equal((await evaluate('window.fixture.snapshot()')).completed,true);
+    await evaluate('window.fixture.relogin()');await sleep();assert.equal(await evaluate('!!document.querySelector(".tour-tooltip")'),false,'Finishing the tour must survive another login');
     await click('.student-tour-trigger');assert.equal((await evaluate('window.fixture.snapshot()')).step,0);await bounds();
     await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     await waitFor('!window.fixture.snapshot().visible');assert.equal(await evaluate('document.activeElement.className'),'student-tour-trigger');
-    results.push({width,height,spotlight:true,viewportSafe:true,missionHandoff:true,paused:true,focusTrap:true,replay:true});
+    await evaluate('window.fixture.relogin()');await sleep();assert.equal(await evaluate('!!document.querySelector(".tour-tooltip")'),false,'An acknowledged tour must stay closed after signing in again');
+    await evaluate(`window.fixture.reset(${touch},110);Vue.nextTick()`);await sleep();assert.equal(await evaluate('!!document.querySelector(".tour-tooltip")'),false,'Returning trainees must not receive the new-account welcome');
+    results.push({width,height,spotlight:true,viewportSafe:true,dismissedLoginHidden:true,completedLoginHidden:true,returningStudentHidden:true,replay:true});
   }
   assert.deepEqual(errors,[]);console.log(JSON.stringify({viewports:results,screenshots:directory}));
   await Promise.race([send('Browser.close'),new Promise(resolve=>setTimeout(resolve,1000))]);

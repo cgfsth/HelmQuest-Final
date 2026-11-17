@@ -1,0 +1,7 @@
+The welcome tour is offered automatically once per admitted student account. Closing it, finishing it, signing in again or using another browser does not offer it again. The question-mark button can still replay the guide without resetting its automatic-display acknowledgement.
+
+The authenticated `POST /auth/simulation-tour` endpoint atomically records `simulationTourSeenAt` on the signed-in active student's existing document. Concurrent logins can receive at most one automatic offer. Pending, disabled, instructor, admin and shared demo accounts cannot claim it. Existing students with training XP/session/completion counters are marked seen without receiving a new-account welcome.
+
+Browser storage preserves guide position and an independent `seen` flag. Existing completed or partially read guides migrate to seen; an acknowledgement is also saved immediately on the first offer and on close. The account acknowledgement survives missing/cleared browser storage. If the account lookup fails, automatic display stays closed and the help button remains usable. Late replies cannot reopen a closed guide or change another signed-in account.
+
+Deploy both frontend and backend for the account-level behaviour. Verification: `node --test tests/simulation-tutorial.test.mjs tests/login-submit.test.mjs`, backend `npm test -- --runInBand tests/simulationTour.test.js tests/accountSettings.test.js`, and `node scripts/verify-simulation-tour.mjs` for actual close/relogin/replay interactions at desktop and phone sizes.

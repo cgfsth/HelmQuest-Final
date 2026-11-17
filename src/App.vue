@@ -3663,7 +3663,8 @@ const {
   stepIndex: tutorialStepIndex, completed: tutorialCompleted, storageNotice: tutorialStorageNotice,
   eligible: tutorialEligible, visible: tutorialOpen, next: nextTutorialCard, back: previousTutorialCard,
   show: showTutorial, dismiss: dismissTutorial, waitForSimulation: waitForTutorialSimulation, resumeInSimulation: resumeTutorialInSimulation,
-} = useSimulationTutorial({ currentUser, isAuthenticated, userRole });
+} = useSimulationTutorial({ currentUser, isAuthenticated, userRole,
+  claimFirstVisit: alreadySeen => firebaseApi.claimSimulationTour(alreadySeen) });
 const adminLoginMode = ref(false); // Track if user is trying to login as admin
 const instructorLoginMode = ref(false); // Track if user is trying to login as instructor
 

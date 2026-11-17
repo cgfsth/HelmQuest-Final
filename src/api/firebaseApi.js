@@ -49,6 +49,10 @@ export function changePassword(currentPassword, newPassword, options = {}) {
   });
 }
 
+export function claimSimulationTour(alreadySeen = false, options = {}) {
+  return apiFetch('/auth/simulation-tour', { method: 'POST', body: JSON.stringify({ alreadySeen }), ...options });
+}
+
 // The existing local admin dashboard acquires a server-verified session only
 // when opening protected materials. Credentials remain in the login component.
 export async function ensureLearningMaterialsSession(email, password, options = {}) {

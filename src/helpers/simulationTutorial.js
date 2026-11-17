@@ -55,7 +55,7 @@ export const SIMULATION_TUTORIAL_STEPS = [
       'Stop the engine and use the anchor when the current mission step asks you to.',
       'After validated completion and docking, an assigned quiz opens automatically. If there is no quiz, your simulation results appear directly. Use Back to Lesson to return.',
     ],
-    tip: 'Complete the required simulation steps before taking the quiz. Your instructor sets the mission requirements.',
+    tip: 'Unfinished steps reduce your simulation score. They do not block the assigned quiz after you anchor safely at port.',
   },
   {
     title: 'You are ready to take the helm', label: 'Help & next steps', target: '.exit-hold-btn',
@@ -77,19 +77,22 @@ const storageKey = studentId => `helmquest-simulation-tutorial:v1:${encodeURICom
 function readProgress(storage, studentId) {
   const saved = JSON.parse(storage?.getItem(storageKey(studentId)) || 'null');
   if (!saved || !Number.isInteger(saved.stepIndex) || saved.stepIndex < 0 || saved.stepIndex > LAST_STEP) {
-    return { stepIndex: 0, completed: false };
+    return { stepIndex: 0, completed: false, seen: false };
   }
-  return { stepIndex: saved.stepIndex, completed: saved.completed === true && saved.stepIndex === LAST_STEP };
+  const completed = saved.completed === true && saved.stepIndex === LAST_STEP;
+  return { stepIndex: saved.stepIndex, completed, seen: saved.seen === true || completed || saved.stepIndex > 0 };
 }
 
 // Completion belongs to the signed-in, approved account, never to a shared browser flag.
-export function useSimulationTutorial({ currentUser, isAuthenticated, userRole, storage }) {
+export function useSimulationTutorial({ currentUser, isAuthenticated, userRole, storage, claimFirstVisit }) {
   const stepIndex = ref(0);
   const completed = ref(false);
   const visible = ref(false);
   const waitingForSimulation = ref(false);
   const storageNotice = ref('');
+  const seen = ref(false);
   const visitProgress = new Map();
+  let request = 0, interaction = 0;
   const studentId = computed(() => isAuthenticated.value && userRole.value === 'student'
     && currentUser.value?.status === 'active' ? currentUser.value.id || null : null);
 
@@ -101,28 +104,48 @@ export function useSimulationTutorial({ currentUser, isAuthenticated, userRole, 
   }
 
   watch(studentId, id => {
+    const generation = ++request, startedInteraction = interaction;
     stepIndex.value = 0;
     completed.value = false;
     visible.value = false;
     waitingForSimulation.value = false;
+    seen.value = false;
     storageNotice.value = '';
     if (!id) return;
     try {
       const saved = visitProgress.get(id) || readProgress(getStorage(), id);
       stepIndex.value = saved.stepIndex;
       completed.value = saved.completed;
-      visible.value = !saved.completed;
+      seen.value = saved.seen;
     } catch {
       const saved = visitProgress.get(id);
-      if (saved) { stepIndex.value = saved.stepIndex; completed.value = saved.completed; }
-      visible.value = !completed.value;
+      if (saved) { stepIndex.value = saved.stepIndex; completed.value = saved.completed; seen.value = saved.seen; }
       storageUnavailable();
     }
+    const hasTraining = ['xp', 'total_xp', 'completed', 'missionsCompleted', 'totalsessions', 'totalSessions']
+      .some(field => Number(currentUser.value?.[field]) > 0);
+    const alreadySeen = seen.value || hasTraining || !!currentUser.value?.simulationTourSeenAt;
+    if (!claimFirstVisit) {
+      seen.value = true;
+      visible.value = !alreadySeen;
+      saveProgress();
+      return;
+    }
+    // The account claim is atomic, so only one login/browser can auto-open it.
+    Promise.resolve().then(() => {
+      if (generation !== request) return null;
+      return claimFirstVisit(alreadySeen);
+    }).then(result => {
+      if (generation !== request || !result || typeof result.showAutomatically !== 'boolean') return;
+      seen.value = true;
+      saveProgress();
+      if (interaction === startedInteraction && !alreadySeen && result.showAutomatically) visible.value = true;
+    }).catch(() => { /* Keep automatic onboarding closed until its account state is known. Help remains available. */ });
   }, { immediate: true, flush: 'sync' });
 
   function saveProgress() {
     if (!studentId.value) return;
-    const saved = { stepIndex: stepIndex.value, completed: completed.value };
+    const saved = { stepIndex: stepIndex.value, completed: completed.value, seen: seen.value };
     visitProgress.set(studentId.value, saved);
     try {
       const target = getStorage();
@@ -147,6 +170,8 @@ export function useSimulationTutorial({ currentUser, isAuthenticated, userRole, 
   }
   function restart() {
     if (!studentId.value) return;
+    interaction++;
+    seen.value = true;
     stepIndex.value = 0;
     completed.value = false;
     visible.value = true;
@@ -156,12 +181,17 @@ export function useSimulationTutorial({ currentUser, isAuthenticated, userRole, 
 
   function show() {
     if (!studentId.value) return;
+    interaction++;
+    seen.value = true;
     if (completed.value) restart();
-    else visible.value = true;
+    else { visible.value = true; saveProgress(); }
   }
   function dismiss() {
+    interaction++;
+    seen.value = true;
     visible.value = false;
     waitingForSimulation.value = false;
+    saveProgress();
   }
   function waitForSimulation() {
     if (!studentId.value || completed.value) return;

@@ -11,11 +11,11 @@ function memoryStorage() {
   const records = new Map();
   return { getItem: key => records.get(key) ?? null, setItem: (key, value) => records.set(key, value), records };
 }
-function student(storage = memoryStorage(), status = 'active') {
-  const currentUser = Vue.ref({ id: 'student-a', status });
+function student(storage = memoryStorage(), status = 'active', options = {}) {
+  const currentUser = Vue.ref({ id: 'student-a', status, ...options.profile });
   const isAuthenticated = Vue.ref(true), userRole = Vue.ref('student');
   const scope = Vue.effectScope();
-  const guide = scope.run(() => useSimulationTutorial({ currentUser, isAuthenticated, userRole, storage }));
+  const guide = scope.run(() => useSimulationTutorial({ currentUser, isAuthenticated, userRole, storage, claimFirstVisit: options.claimFirstVisit }));
   return { ...guide, currentUser, isAuthenticated, userRole, storage, stop: () => scope.stop() };
 }
 
@@ -43,7 +43,7 @@ test('only an authenticated approved student receives onboarding, including a pe
   } finally { guide.stop(); }
 });
 
-test('cards resume after reload and complete only after the student finishes the final card', () => {
+test('progress is preserved but an already-offered tour does not auto-open after reload', () => {
   const storage = memoryStorage(), guide = student(storage);
   try {
     assert.equal(guide.completed.value, false);
@@ -54,6 +54,7 @@ test('cards resume after reload and complete only after the student finishes the
     const reloaded = student(storage);
     try {
       assert.equal(reloaded.stepIndex.value, 1);
+      assert.equal(reloaded.visible.value, false);
       while (reloaded.stepIndex.value < SIMULATION_TUTORIAL_STEPS.length - 1) reloaded.next();
       assert.equal(reloaded.completed.value, false);
       reloaded.next();
@@ -69,6 +70,66 @@ test('cards resume after reload and complete only after the student finishes the
       } finally { returning.stop(); }
     } finally { reloaded.stop(); }
   } finally { guide.stop(); }
+});
+
+test('closing the welcome card persists acknowledgement across reload, logout and manual replay', () => {
+  const storage = memoryStorage(), guide = student(storage);
+  try {
+    assert.equal(guide.visible.value, true);
+    guide.dismiss();
+    guide.isAuthenticated.value = false; guide.isAuthenticated.value = true;
+    assert.equal(guide.visible.value, false);
+    const returning = student(storage);
+    try {
+      assert.equal(returning.visible.value, false);
+      returning.show(); assert.equal(returning.visible.value, true);
+      returning.dismiss();
+      const again = student(storage);
+      try { assert.equal(again.visible.value, false); } finally { again.stop(); }
+    } finally { returning.stop(); }
+  } finally { guide.stop(); }
+});
+
+const settle = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); await Vue.nextTick(); };
+
+test('account persistence suppresses automatic replay in a fresh browser even without local storage', async () => {
+  let seen = false;
+  const claimFirstVisit = async alreadySeen => { const showAutomatically = !seen && !alreadySeen; seen = true; return { showAutomatically }; };
+  const guide = student(memoryStorage(), 'active', { claimFirstVisit });
+  try {
+    assert.equal(guide.visible.value, false, 'wait for the account claim before showing anything');
+    await settle(); assert.equal(guide.visible.value, true); guide.dismiss();
+    const otherBrowser = student(memoryStorage(), 'active', { claimFirstVisit });
+    try { await settle(); assert.equal(otherBrowser.visible.value, false); otherBrowser.show(); assert.equal(otherBrowser.visible.value, true); }
+    finally { otherBrowser.stop(); }
+  } finally { guide.stop(); }
+});
+
+test('returning students with training history do not receive a new welcome tour', () => {
+  const guide = student(memoryStorage(), 'active', { profile: { xp: 110 } });
+  try { assert.equal(guide.visible.value, false); guide.show(); assert.equal(guide.visible.value, true); }
+  finally { guide.stop(); }
+});
+
+test('a late first-visit claim cannot reopen a dismissed tour or affect another student', async () => {
+  let release;
+  const guide = student(memoryStorage(), 'active', { claimFirstVisit: () => new Promise(resolve => { release = resolve; }) });
+  try {
+    await settle(); guide.show(); guide.dismiss(); release({ showAutomatically: true }); await settle();
+    assert.equal(guide.visible.value, false);
+    guide.isAuthenticated.value = false; guide.isAuthenticated.value = true; await settle();
+    const old = release;
+    guide.currentUser.value = { id: 'student-b', status: 'active' }; await settle();
+    release({ showAutomatically: false }); old({ showAutomatically: true }); await settle();
+    assert.equal(guide.visible.value, false);
+    assert.equal(guide.currentUser.value.id, 'student-b');
+  } finally { guide.stop(); }
+});
+
+test('a failed account lookup keeps automatic onboarding closed while help remains usable', async () => {
+  const guide = student(memoryStorage(), 'active', { claimFirstVisit: async () => { throw new Error('Offline'); } });
+  try { await settle(); assert.equal(guide.visible.value, false); guide.show(); assert.equal(guide.visible.value, true); }
+  finally { guide.stop(); }
 });
 
 test('closing, reopening and choosing a mission preserve progress without launching or completing a mission', () => {

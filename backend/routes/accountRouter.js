@@ -7,6 +7,34 @@ export function createAccountRouter({ db, now = Date.now }) {
   const router = express.Router();
   const attempts = new Map();
   const windowMs = 15 * 60 * 1000;
+  router.post('/simulation-tour', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    const session = verifySession(req.headers.authorization?.replace(/^Bearer\s+/i, ''));
+    if (!session) return res.status(401).json({ message: 'Please sign in again.' });
+    if (session.role !== 'student' || Object.values(DEMO_USERS).some(user => user.id === session.id)) {
+      return res.status(403).json({ message: 'The welcome tour is for admitted student accounts.' });
+    }
+    if (req.body?.alreadySeen !== undefined && typeof req.body.alreadySeen !== 'boolean') {
+      return res.status(400).json({ message: 'Invalid tour state.' });
+    }
+    try {
+      const ref = db.collection('students').doc(session.id);
+      const showAutomatically = await db.runTransaction(async transaction => {
+        const snapshot = await transaction.get(ref);
+        if (!snapshot.exists || snapshot.data().status !== 'active') return null;
+        const profile = snapshot.data();
+        if (profile.simulationTourSeenAt) return false;
+        const hasTraining = ['xp', 'total_xp', 'completed', 'missionsCompleted', 'totalsessions', 'totalSessions']
+          .some(field => Number(profile[field]) > 0);
+        transaction.update(ref, { simulationTourSeenAt: new Date(now()) });
+        return req.body?.alreadySeen !== true && !hasTraining;
+      });
+      if (showAutomatically === null) return res.status(403).json({ message: 'Your instructor must admit your account first.' });
+      res.json({ showAutomatically });
+    } catch {
+      res.status(503).json({ message: 'Unable to check your welcome tour.' });
+    }
+  });
   router.post('/change-password', async (req, res) => {
     res.set('Cache-Control', 'no-store');
     const session = verifySession(req.headers.authorization?.replace(/^Bearer\s+/i, ''));
