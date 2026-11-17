@@ -34,6 +34,7 @@ const activeCoursePractical=ref(null),activeTrainingModule=ref(null),activeMissi
 const trainingRunMetrics=ref({}),trainingRunFinished=ref(false),isTrainingReviewMode=ref(false);
 const stats=ref({boatX:17168.5,boatZ:-4425.56,rotationDeg:355,speedKnots:0}),anchor=ref({deployed:false});
 const engineRunning=ref(false),engineStarting=ref(false),missionCompleteModal=ref(null),showPostDockingQuiz=ref(false);
+const showCinematicLoading=ref(false);
 const courseCompletionState=ref('IN_PROGRESS'),courseCompletionError=ref(''),postDockingQuizData=ref(null),postDockingQuizTriggered=ref(false),isPostDockingQuizSubmitting=ref(false);
 const progressData=ref({quizSubmissions:[]}),demoStudent=ref({xp:0}),encounterSetupError=ref('');
 const vesselEncounterState=null,performanceManager=new IntegratedPerformanceManager();

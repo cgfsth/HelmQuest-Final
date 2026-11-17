@@ -108,6 +108,8 @@ function addMissionWorld(context, type) {
     trainingRunMetrics: { value: {} }, trainingStepSuccess: { value: false },
     trainingRunFinished: { value: false }, trainingStepError: { value: false },
     trainingFeedback: { value: '' }, trainingWaypoints: { value: [] }, waypointMarkerGroup: null,
+    cancelAnchorTransition() {}, postDockingQuizTriggered: { value: false }, missionReadyToReport: { value: false },
+    showPostDockingQuiz: { value: false }, postDockingQuizData: { value: null }, missionCompleteModal: { value: null }, missionQuizLoadError: { value: '' },
     waypointOrigins: [], dockLoads: 0,
     performance: { now() { return 0; } }, setTimeout() {},
     wind: { value: {} },
@@ -162,6 +164,29 @@ test('reentering the same terrain reuses the harbor and concurrent requests load
   context.islandGroup = new THREE.Group();
   await context.rebuildHarborDocks();
   assert.equal(context.dockLoads, 2, 'a changed world must rebuild its harbor');
+});
+
+test('a new mission clears old docking/quiz state and stays loading until its vessel is initialized', async () => {
+  const context = makeSimulation('medium');
+  const { module, mission } = addMissionWorld(context, 'medium');
+  context.anchor.value.deployed = true;
+  context.postDockingQuizTriggered.value = true;
+  context.missionReadyToReport.value = true;
+  context.showPostDockingQuiz.value = true;
+  context.missionCompleteModal.value = { score: 80 };
+  let release;
+  context.archipelagoLoadPromise = new Promise(resolve => { release = resolve; });
+  context.startTrainingModule(module.id, { mission });
+  assert.equal(context.showCinematicLoading.value, true);
+  assert.equal(context.postDockingQuizTriggered.value, false);
+  assert.equal(context.missionReadyToReport.value, false);
+  assert.equal(context.showPostDockingQuiz.value, false);
+  assert.equal(context.missionCompleteModal.value, null);
+  release();
+  for (let i = 0; i < 20 && !context.showEngineStatus.value; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(context.showEngineStatus.value, true);
+  assert.equal(context.showCinematicLoading.value, false);
+  assert.equal(context.anchor.value.deployed, false);
 });
 
 for (const type of ['small', 'medium', 'large']) {

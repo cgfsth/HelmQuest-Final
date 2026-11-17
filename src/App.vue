@@ -2521,7 +2521,7 @@
             <svg class="hud-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path fill="currentColor" d="M12 2c1.5 2.2 4.5 3.4 4.5 7.1c0 3.2-2.5 5.8-4.5 7.9-2-2.1-4.5-4.7-4.5-7.9C7.5 5.4 10.5 4.2 12 2zm0 6.2a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4z"/>
             </svg>
-            <span class="simulation-action-label">Anchor</span>
+            <span class="simulation-action-label">{{ anchor.deploying ? 'Anchoring…' : anchor.retracting ? 'Raising…' : anchor.deployed ? 'Anchored' : 'Anchor' }}</span>
           </button>
           <button
             type="button"
@@ -4394,6 +4394,7 @@ function courseDockingEvidence() {
 }
 const courseReadyToComplete = computed(() => !!activeCoursePractical.value && !!activeTrainingModule.value
   && activeScreen.value === 'simulation' && !isTrainingReviewMode.value
+  && !showCinematicLoading.value
   && !missionCompleteModal.value && !showPostDockingQuiz.value
   && courseCompletionState.value === 'IN_PROGRESS' && validDockingCompletion(courseDockingEvidence()));
 async function continueCourseCompletion() {
@@ -6428,6 +6429,7 @@ const _landingFocus = new THREE.Vector3();
 const _landingLookAt = new THREE.Vector3();
 let boatObject = null; // Main physics container
 let boatAnchorRig = null;
+let anchorTransitionTimerId = null;
 let anchorMesh = null; // Fallback when GLB has no anchor rig
 let waypointMarkerGroup = null;
 let animationFrameId = null;
@@ -8957,8 +8959,8 @@ watch([() => activeTrainingModule.value?.id, () => currentUser.value?.id, isTrai
 
 // Raising the anchor resets report readiness; docking again reuses the same quiz.
 watch([activeMissionQuizSubmission, () => anchor.value.deployed, isTrainingReviewMode,
-  () => activeTrainingModule.value?.id], ([submission, deployed]) => {
-  if (activeTrainingModule.value && deployed && (submission || isTrainingReviewMode.value)) {
+  () => activeTrainingModule.value?.id, showCinematicLoading], ([submission, deployed]) => {
+  if (activeTrainingModule.value && deployed && !showCinematicLoading.value && (submission || isTrainingReviewMode.value)) {
     postDockingQuizTriggered.value = true;
     missionReadyToReport.value = true;
   }
@@ -9791,6 +9793,14 @@ function startTrainingModule(moduleId, options = {}) {
   if (!module) return;
   if (!canViewMission(module, { ...currentUser.value, role: userRole.value })) return;
 
+  cancelAnchorTransition();
+  postDockingQuizTriggered.value = false;
+  missionReadyToReport.value = false;
+  showPostDockingQuiz.value = false;
+  postDockingQuizData.value = null;
+  missionCompleteModal.value = null;
+  missionQuizLoadError.value = '';
+
   ensureMissionBuoySteps(module);
   randomizeBuoyTasks(module);
 
@@ -9887,7 +9897,6 @@ function startTrainingModule(moduleId, options = {}) {
   const startingRun = trainingRunMetrics.value;
   const enterTrainingSimulation = async () => {
     if (activeTrainingModule.value !== module || trainingRunMetrics.value !== startingRun) return;
-    showCinematicLoading.value = false;
     goToScreen('simulation');
     if (activeMission.value?.boatType) {
       applyBoatTypePhysics(activeMission.value.boatType);
@@ -9917,6 +9926,7 @@ function startTrainingModule(moduleId, options = {}) {
     
     // Apply mission weather with the same sea state as Set Sail.
     applyLevelWeather(module);
+    showCinematicLoading.value = false;
     
     // Show engine status indicator at mission start
     showEngineStatus.value = true
@@ -14151,6 +14161,53 @@ function createAnchorMesh() {
   return anchorGroup;
 }
 
+function cancelAnchorTransition() {
+  if (anchorTransitionTimerId !== null) window.clearTimeout(anchorTransitionTimerId);
+  anchorTransitionTimerId = null;
+}
+
+function finishAnchorTransition(state) {
+  const deployed = state === 'deployed';
+  if (deployed ? !anchor.value.deploying : !anchor.value.retracting) return;
+  cancelAnchorTransition();
+  if (boatAnchorRig) {
+    boatAnchorRig.progress = deployed ? 1 : 0;
+    boatAnchorRig.state = state;
+    applyAnchorPose(boatAnchorRig, boatAnchorRig.progress);
+  }
+  anchor.value.deployed = deployed;
+  anchor.value.deploying = false;
+  anchor.value.retracting = false;
+  anchor.value.chainLength = deployed ? anchor.value.maxChainLength : 0;
+  if (deployed && boatObject) anchor.value.position.copy(boatObject.position);
+  if (!deployed) {
+    postDockingQuizTriggered.value = false;
+    missionReadyToReport.value = false;
+    showPostDockingQuiz.value = false;
+    lastQuizCheckTime = 0;
+  }
+  if (activeTrainingModule.value) {
+    if (deployed) {
+      const berth = getActiveHarborDockBerth();
+      const distance = berth && boatObject ? Math.hypot(boatObject.position.x - berth.x, boatObject.position.z - berth.z) : 50;
+      trackDockingAttempt(trainingRunMetrics.value, isBoatInPortZone.value, distance);
+    }
+    checkTrainingStep();
+  }
+}
+
+function scheduleAnchorTransition(state) {
+  cancelAnchorTransition();
+  const boat = boatObject, rig = boatAnchorRig, run = trainingRunMetrics.value;
+  // Logical anchoring must complete even when WebGL renders very few frames.
+  anchorTransitionTimerId = window.setTimeout(() => {
+    anchorTransitionTimerId = null;
+    if (activeScreen.value === 'simulation' && boatObject === boat && boatAnchorRig === rig && trainingRunMetrics.value === run) {
+      finishAnchorTransition(state);
+    }
+  }, (rig?.duration ?? 0) * 1000);
+}
+
 function toggleAnchor() {
   if (anchor.value.deploying || anchor.value.retracting) return;
 
@@ -14161,10 +14218,10 @@ function toggleAnchor() {
     anchor.value.chainLength = 0;
     if (boatAnchorRig) {
       beginAnchorRetract(boatAnchorRig);
-    } else if (anchorMesh) {
-      anchorMesh.visible = false;
-      anchor.value.deployed = false;
-      anchor.value.retracting = false;
+      scheduleAnchorTransition('stowed');
+    } else {
+      if (anchorMesh) anchorMesh.visible = false;
+      finishAnchorTransition('stowed');
     }
   } else if (boatObject) {
     anchor.value.position.copy(boatObject.position);
@@ -14175,10 +14232,8 @@ function toggleAnchor() {
 
     if (boatAnchorRig) {
       beginAnchorDeploy(boatAnchorRig);
+      scheduleAnchorTransition('deployed');
     } else {
-      anchor.value.deployed = true;
-      anchor.value.deploying = false;
-      anchor.value.chainLength = anchor.value.maxChainLength;
       if (!anchorMesh) {
         anchorMesh = createAnchorMesh();
         scene.add(anchorMesh);
@@ -14186,6 +14241,7 @@ function toggleAnchor() {
       anchorMesh.position.copy(anchor.value.position);
       anchorMesh.position.y = baselineWaterlineY - 2;
       anchorMesh.visible = true;
+      finishAnchorTransition('deployed');
     }
   }
 
@@ -16271,36 +16327,7 @@ function animate() {
 
     if (boatAnchorRig) {
       const anchorMilestone = updateBoatAnchorRig(boatAnchorRig, simulationRunning.value ? visualDelta : 0);
-      if (anchorMilestone === 'deployed') {
-        anchor.value.deployed = true;
-        anchor.value.deploying = false;
-        anchor.value.chainLength = anchor.value.maxChainLength;
-        if (boatObject) anchor.value.position.copy(boatObject.position);
-        
-        console.log('[ANCHOR] === ANCHOR DEPLOYED ===');
-        
-        // Track docking attempt if in training
-        if (activeTrainingModule.value) {
-          const berth = getActiveHarborDockBerth();
-          const isInBerth = berth !== null;
-          const distanceFromCenter = berth ? berth.distance : 50;
-          trackDockingAttempt(trainingRunMetrics.value, isInBerth, distanceFromCenter);
-          checkTrainingStep();
-          
-          // The docking watcher saves the attempt, then opens its quiz or results.
-        }
-      } else if (anchorMilestone === 'stowed') {
-        anchor.value.deployed = false;
-        anchor.value.retracting = false;
-        anchor.value.chainLength = 0;
-        if (activeTrainingModule.value) checkTrainingStep();
-        
-        // Reset states when anchor is raised
-        postDockingQuizTriggered.value = false;
-        missionReadyToReport.value = false;
-        showPostDockingQuiz.value = false;
-        lastQuizCheckTime = 0;
-      }
+      if (anchorMilestone) finishAnchorTransition(anchorMilestone);
     }
 
     if (activeTrainingModule.value && activeScreen.value === 'simulation') {
@@ -16428,6 +16455,7 @@ watch(courseReadyToComplete, ready => {
 });
 const legacyReadyToComplete = computed(() => !activeCoursePractical.value && !!activeTrainingModule.value
   && activeScreen.value === 'simulation' && !isTrainingReviewMode.value
+  && !showCinematicLoading.value
   && !missionCompleteModal.value && !showPostDockingQuiz.value && !postDockingQuizTriggered.value
   && validDockingCompletion(courseDockingEvidence()));
 watch(legacyReadyToComplete, ready => {
@@ -16739,6 +16767,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  cancelAnchorTransition();
   cancelAnimationFrame(animationFrameId);
   clearVesselEncounter();
   animationFrameId = null;

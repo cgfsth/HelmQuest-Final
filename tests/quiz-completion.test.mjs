@@ -25,6 +25,7 @@ function page(api = {}, lookup = async () => quiz) {
   const deps = {
     activeCoursePractical: Vue.ref(null), courseCompletionFlow: null,
     activeScreen: Vue.ref('simulation'), engineStarting: Vue.ref(false), isBoatInPortZone: Vue.ref(true),
+    showCinematicLoading: Vue.ref(false),
     ref: Vue.ref, computed: Vue.computed, watch: Vue.watch, nextTick: Vue.nextTick,
     findCompletedQuizSubmission, quizScoreCounts, restoreQuizSubmissions,
     currentUser: Vue.ref({ id: 'student' }), activeTrainingModule: Vue.ref({ id: 'module' }),

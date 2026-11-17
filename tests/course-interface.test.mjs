@@ -69,7 +69,7 @@ test('docking automatically opens the assigned quiz or simulation results with z
     for (const steps of [0, 1, 3]) {
       const context = { computed: Vue.computed, validDockingCompletion,
         activeCoursePractical: Vue.ref({ studentId: 'student' }), activeTrainingModule: Vue.ref({ id: 'navigation' }),
-        activeScreen: Vue.ref('simulation'), isTrainingReviewMode: Vue.ref(false), missionCompleteModal: Vue.ref(null),
+        activeScreen: Vue.ref('simulation'), showCinematicLoading: Vue.ref(false), isTrainingReviewMode: Vue.ref(false), missionCompleteModal: Vue.ref(null),
         showPostDockingQuiz: Vue.ref(false), courseCompletionState: Vue.ref('IN_PROGRESS'), trainingRunFinished: Vue.ref(false),
         trainingRunMetrics: Vue.ref({ totalSteps: 3, stepsCompleted: steps }), anchor: Vue.ref({ deployed: false }),
         engineRunning: Vue.ref(false), engineStarting: Vue.ref(false), isBoatInPortZone: Vue.ref(true), stats: Vue.ref({ speedKnots: 0 }) };
@@ -93,6 +93,7 @@ test('docking automatically opens the assigned quiz or simulation results with z
       scope.run(() => vm.runInContext(app.slice(watcherStart, app.indexOf('\n});', watcherStart) + 4), context));
       try {
         for (const [name, value] of [['engineRunning', true], ['engineStarting', true], ['isBoatInPortZone', false],
+          ['showCinematicLoading', true],
           ['isTrainingReviewMode', true], ['showPostDockingQuiz', true], ['missionCompleteModal', {}],
           ['activeScreen', 'dashboard'], ['courseCompletionState', 'SAVING_SIMULATION'], ['courseCompletionState', 'RESULTS']]) {
           const previous = context[name].value;

@@ -51,7 +51,7 @@ test('App opens quiz or results from the sample pier position at 0/2, 1/2 and 2/
       stats: Vue.ref({ boatX: boat.x, boatZ: boat.z, rotationDeg: boat.headingDeg, speedKnots: 0 }),
       boatObject: { userData: { loaMeters: boat.length, beamMeters: boat.beam } },
       activeTrainingModule: Vue.ref({ id: 'sample', steps: [{}, {}] }), activeCoursePractical: Vue.ref({}),
-      activeScreen: Vue.ref('simulation'), isTrainingReviewMode: Vue.ref(false), missionCompleteModal: Vue.ref(null),
+      activeScreen: Vue.ref('simulation'), showCinematicLoading: Vue.ref(false), isTrainingReviewMode: Vue.ref(false), missionCompleteModal: Vue.ref(null),
       showPostDockingQuiz: Vue.ref(false), courseCompletionState: Vue.ref('IN_PROGRESS'),
       trainingRunFinished: Vue.ref(completedSteps === 2), trainingRunMetrics: Vue.ref({ stepsCompleted: completedSteps, totalSteps: 2 }),
       anchor: Vue.ref({ deployed: false }), engineRunning: Vue.ref(false), engineStarting: Vue.ref(false),

@@ -5,6 +5,10 @@ import { resolve, dirname } from 'node:path';
 // A successful Rollup compile must still leave executable HTML for both routes.
 // In particular, relative multi-page input paths can lose injection on Windows.
 const output = resolve('dist');
+const buildInfo = JSON.parse(readFileSync(resolve(output, 'build-info.json'), 'utf8'));
+assert.ok(/^[a-f0-9]{40}$/.test(buildInfo.revision) || buildInfo.revision === 'unknown', 'Build revision must be recorded');
+assert.ok(Number.isFinite(Date.parse(buildInfo.builtAt)), 'Build timestamp must be recorded');
+console.log(`PASS build-info.json: ${buildInfo.revision}`);
 for (const entry of ['index.html', 'experiments/maritime.html']) {
   const path = resolve(output, entry), html = readFileSync(path, 'utf8');
   const scripts = [...html.matchAll(/<script\b[^>]*type="module"[^>]*src="([^"]+)"[^>]*>/g)].map(match => match[1]);
