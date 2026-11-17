@@ -1,8 +1,10 @@
+import { encounterSafetyScore } from './vesselEncounter.js';
+
 // Common practical rubric, aligned to lesson outcomes; not academic grade weights.
 export const SIMULATION_WEIGHTS = Object.freeze({ completion: .40, accuracy: .40, safety: .20 });
-export const SIMULATION_SCORING_VERSION = 'simulation-v2';
+export const SIMULATION_SCORING_VERSION = 'simulation-v3';
 const mean = values => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
-const encounterPassed = encounter => encounter?.successful === true && encounter.accuracy === 100;
+const encounterPassed = encounter => encounter?.resolved === true && encounter.successful === true && encounter.accuracy === 100;
 export function simulationScoringInputs(state, run = null, encounter = null) {
   const required = run?.totalSteps ?? state.objectivesRequired ?? 0;
   const completed = run?.stepsCompleted ?? state.objectivesCompleted?.length ?? 0;
@@ -16,13 +18,12 @@ export function simulationScoringInputs(state, run = null, encounter = null) {
     accuracy.push(Math.max(0, 100 - executionPenalties.reduce((sum, event) => sum + event.amount, 0)));
   }
   if (state.dockingScore != null) accuracy.push(state.dockingScore);
-  if (encounter?.resolved) accuracy.push(encounter.accuracy);
-  const total = required + (encounter ? 1 : 0);
   return {
-    completion: total > 0 ? Math.max(0, Math.min(100, (completed + (encounterPassed(encounter) ? 1 : 0)) / total * 100)) : null,
-    accuracy: mean(accuracy.filter(Number.isFinite)), safety: state.safetyScore ?? null,
+    completion: required > 0 ? Math.max(0, Math.min(100, completed / required * 100)) : null,
+    accuracy: mean(accuracy.filter(Number.isFinite)) ?? (required > 0 ? 0 : null),
+    safety: encounterSafetyScore(state.safetyScore ?? null, encounter),
     criticalSafetyFailure: !!encounter?.collision,
-    requiredExerciseFailed: !!encounter?.resolved && !encounterPassed(encounter),
+    requiredExerciseFailed: !!encounter && !encounterPassed(encounter),
     steering: state.totalDeviationSamples > 0 || state.headingHistory?.length > 1 ? state.steeringScore : null,
     course: state.objectivesCompleted?.length ? state.courseScore : null,
     docking: state.dockingScore, time: state.timeScore,
@@ -42,7 +43,7 @@ export function simulationPerformance(scores, passScore = 70) {
   if (!weight) throw new Error('No simulation assessment data was recorded.');
   const score = Math.round(applicable.reduce((sum, key) => sum + criteria[key] * SIMULATION_WEIGHTS[key], 0) / weight);
   const assessmentComplete = criteria.completion != null && criteria.accuracy != null && criteria.safety != null;
-  return { score, passed: assessmentComplete && score >= passScore && scores.criticalSafetyFailure !== true && scores.requiredExerciseFailed !== true, passScore,
+  return { score, passed: assessmentComplete && score >= passScore && scores.criticalSafetyFailure !== true, passScore,
     scoringVersion: SIMULATION_SCORING_VERSION, assessmentComplete, criticalSafetyFailure: scores.criticalSafetyFailure === true,
     requiredExerciseFailed: scores.requiredExerciseFailed === true,
     rubric: Object.fromEntries(Object.keys(criteria).map(key => [key, { score: criteria[key], weight: SIMULATION_WEIGHTS[key], assessed: criteria[key] != null }])),
@@ -56,13 +57,13 @@ export function validDockingCompletion(evidence) {
     && evidence.anchored === true && evidence.engineStopped === true && evidence.inPort === true
     && Number.isFinite(evidence.speedKnots) && Math.abs(evidence.speedKnots) <= 2;
 }
-
 // The backend derives objective completion from counts instead of accepting a
 // separately supplied completion percentage. The caller validates the exercise.
 export function completedSimulationScores(scores, completion, encounter = null) {
-  const total = completion.totalSteps + (encounter ? 1 : 0);
-  return { ...scores, completion: Math.min(100, (completion.completedSteps + (encounterPassed(encounter) ? 1 : 0)) / total * 100),
-    safety: encounter?.collision ? 0 : encounter && !encounter.successful && scores.safety != null ? Math.min(scores.safety, 80) : scores.safety,
+  const accuracy = Object.hasOwn(scores, 'accuracy') ? scores.accuracy : mean([scores.steering, scores.course, scores.docking].filter(Number.isFinite));
+  return { ...scores, completion: Math.min(100, completion.completedSteps / completion.totalSteps * 100),
+    accuracy: accuracy ?? 0,
+    safety: encounterSafetyScore(scores.safety, encounter),
     requiredExerciseFailed: !!encounter && !encounterPassed(encounter),
     criticalSafetyFailure: scores.criticalSafetyFailure === true || encounter?.collision === true };
 }

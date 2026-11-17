@@ -81,8 +81,8 @@ try {
     await new Promise(r=>setTimeout(r,0));await s.loadMissionDatesFromFirestore();})()`);
   await browser.waitFor('!!(s.initComplete && s.islandGroup && s.boatObject)', 120000);
   const results = [];
-  for (const [steps, hasQuiz] of [[0, true], [1, true], [0, false], [2, false]]) {
-    console.log('CASE', steps, hasQuiz);
+  for (const [steps, hasQuiz, encounterDone] of [[0, true, false], [1, true, false], [0, false, false], [2, false, false], [2, false, true]]) {
+    console.log('CASE', steps, hasQuiz, encounterDone);
     missionSaves = 0; quizSaves = 0;
     fixture.records.mission_score = {}; fixture.records.quiz_score = {};
     fixture.records.quiz.q.published = hasQuiz;
@@ -91,7 +91,7 @@ try {
       await s.launchCourseSimulation({target:{id:${JSON.stringify(sample.id)}},activityId:${JSON.stringify(activityId)},
         syllabusId:${JSON.stringify(syllabusId)},lessonId:${JSON.stringify(moduleId)},fail:e=>{throw e;}});})()`);
     await browser.waitFor('!!(s.activeScreen==="simulation" && s.trainingStepBaseline && !s.showCinematicLoading && s.boatObject)', 90000);
-    await browser.evaluate(`(()=>{s.encounterSetupError='';Object.assign(s.vesselEncounterState,{resolved:true,successful:true,accuracy:100,minimumClearance:200,collision:false});
+    await browser.evaluate(`(()=>{s.encounterSetupError='';Object.assign(s.vesselEncounterState,{resolved:${encounterDone},successful:${encounterDone},accuracy:${encounterDone ? 100 : 0},minimumClearance:${encounterDone ? 200 : 'Infinity'},collision:false});
       s.trainingRunMetrics.stepsCompleted=${steps};s.trainingRunMetrics.totalSteps=2;s.currentTrainingStep=${steps === 0 ? 0 : 1};s.trainingRunFinished=${steps === 2};
       s.boatObject.position.x=(125.8544-125.7)*Math.PI/180*6371000;s.boatObject.position.z=(7.0611-7.1)*Math.PI/180*6371000;s.syncStatsBoatXZ();
       s.engineRunning=false;s.engineStarting=false;s.simulationRunning=false;})()`);
@@ -110,6 +110,9 @@ try {
     assert.equal(await browser.evaluate('s.showPostDockingQuiz'), hasQuiz);
     assert.equal(missionSaves, 1);
     assert.equal(fixture.records.mission_score.saved.completion.completedSteps, steps);
+    assert.equal(fixture.records.mission_score.saved.performanceMetrics.objectiveCompletion, steps / 2 * 100);
+    assert.equal(fixture.records.mission_score.saved.performanceMetrics.safetyCompliance, encounterDone ? 100 : 0);
+    assert.equal(fixture.records.mission_score.saved.encounter.resolved, encounterDone);
     if (hasQuiz) {
       await browser.waitFor('Number(getComputedStyle(document.querySelector(".quiz-wrapper")).opacity) >= .99');
       if (steps === 0) await browser.screenshot('full-app-zero-steps-quiz');
@@ -119,13 +122,18 @@ try {
       assert.equal(fixture.records.quiz_score.saved.score, 100);
     } else assert.equal(quizSaves, 0);
     assert.equal(await browser.evaluate('s.missionCompleteModal.stepsLabel'), `${steps}/2`);
-    if (!hasQuiz && steps === 0) await browser.screenshot('full-app-zero-steps-results');
-    results.push({ steps, hasQuiz, missionSaves, quizSaves, score: fixture.records.mission_score.saved.score,
+    if (!hasQuiz && steps === 0) {
+      await browser.waitFor('Number(getComputedStyle(document.querySelector(".mission-complete-overlay")).opacity) >= .99');
+      await browser.evaluate('s.dismissTrainingNotification()');
+      await browser.screenshot('full-app-zero-steps-results');
+    }
+    results.push({ steps, hasQuiz, encounterDone, missionSaves, quizSaves, score: fixture.records.mission_score.saved.score,
+      safety: fixture.records.mission_score.saved.performanceMetrics.safetyCompliance,
       state: await browser.evaluate('s.courseCompletionState') });
   }
   writeFileSync(resolve(directory, 'verification.json'), JSON.stringify({ results, browserErrors: browser.errors }, null, 2));
   assert.deepEqual(browser.errors, []);
-  console.log('PASS full app: actual anchor clicks with no animation frames, real API persistence, assigned quiz submission and direct results with unfinished steps.');
+  console.log('PASS full app: unfinished vessel exercises reduce Safety Compliance while actual anchor clicks, real API saves, assigned quizzes and direct simulation results all work.');
 } catch (error) {
   if (browser) {
     const diagnostic = await browser.evaluate(`JSON.parse(JSON.stringify({screen:window.s?.activeScreen,loading:window.s?.showCinematicLoading,

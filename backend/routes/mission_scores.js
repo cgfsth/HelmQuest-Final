@@ -5,7 +5,7 @@ import { saveMissionResult } from '../services/scorePersistence.js';
 import { canonicalMissionId, readMissionReward } from '../services/missionRewards.js';
 import { loadRankSettings, synchronizeStudentProgression } from '../services/progression.js';
 import { simulationPerformance, validDockingCompletion, completedSimulationScores } from '../../shared/simulationPerformance.js';
-import { normalizeEncounter, validEncounterResult } from '../../shared/vesselEncounter.js';
+import { normalizeEncounter, normalizeEncounterAttempt } from '../../shared/vesselEncounter.js';
 
 const router = express.Router();
 
@@ -25,8 +25,8 @@ router.post('/', async (req, res) => {
       if (!validDockingCompletion(req.body.completion)) return res.status(409).json({ message: 'Dock in the assigned port, stop the engine and deploy the anchor before reporting.' });
       let config;
       try { config = normalizeEncounter(mission.data.encounter); } catch (error) { return res.status(400).json({ message: error.message }); }
-      encounter = req.body.encounter || null;
-      if (!validEncounterResult(config, encounter)) return res.status(409).json({ message: 'Finish the assigned vessel exercise first.' });
+      try { encounter = normalizeEncounterAttempt(config, req.body.encounter || null); }
+      catch (error) { return res.status(409).json({ message: error.message }); }
       try { assessment = simulationPerformance(completedSimulationScores(req.body.scores, req.body.completion, encounter), Number(mission.data.pass_score ?? mission.data.passScore ?? 70)); }
       catch (error) { return res.status(400).json({ message: error.message }); }
       if (!assessment.assessmentComplete) return res.status(409).json({ message: 'Some simulation performance criteria were not recorded.' });

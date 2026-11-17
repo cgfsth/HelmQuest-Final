@@ -15,7 +15,7 @@
       :storage-notice="tutorialStorageNotice"
       @next="advanceStudentTour" @back="previousStudentTourStep" @close="closeStudentTour" @choose-mission="chooseMissionForTour" />
     <VesselEncounterPanel v-if="activeScreen === 'simulation' && !simulationNeedsLandscape && !tutorialVisible" :status="encounterStatus" />
-    <div v-if="activeScreen === 'simulation' && encounterSetupError" class="encounter-setup-error" role="alert">{{ encounterSetupError }} Exit and restart the mission to retry.</div>
+    <div v-if="activeScreen === 'simulation' && encounterSetupError" class="encounter-setup-error" role="alert">{{ encounterSetupError }} You can finish this attempt; the vessel exercise will be recorded as incomplete in Safety Compliance.</div>
     <InventoryModal/>
     <PostDockingQuizModal 
       :quiz="postDockingQuizData || {}" 
@@ -2759,7 +2759,7 @@
           <ul class="mission-result-breakdown">
             <li v-for="(label, key) in missionCompleteModal.performanceMetrics ? (missionCompleteModal.performanceMetrics.objectiveCompletion != null ? { objectiveCompletion: 'Objective completion · 40%', taskAccuracy: 'Task accuracy · 40%', safetyCompliance: 'Safety compliance · 20%' } : { steeringPrecision: 'Steering Precision', courseAccuracy: 'Course Accuracy', dockingAccuracy: 'Docking Accuracy', timeEfficiency: 'Time Efficiency', safetyCompliance: 'Safety Compliance' }) : {}" :key="key"><span>{{ label }}</span><strong>{{ missionCompleteModal.performanceMetrics[key] == null ? 'Not assessed' : Math.round(missionCompleteModal.performanceMetrics[key] * 10) / 10 + '%' }}</strong></li>
             <li v-if="missionCompleteModal.criticalSafetyFailure"><span>Vessel collision</span><strong>Safety requirement not met</strong></li>
-            <li v-else-if="missionCompleteModal.requiredExerciseFailed"><span>Vessel exercise</span><strong>Required clearance or response not met</strong></li>
+            <li v-else-if="missionCompleteModal.requiredExerciseFailed"><span>Vessel exercise</span><strong>Incomplete or unsafe response · included in Safety Compliance</strong></li>
             <li v-if="missionCompleteModal.elapsedLabel">
               <span>Time</span>
               <strong>{{ missionCompleteModal.elapsedLabel }}</strong>
@@ -4410,10 +4410,9 @@ async function continueCourseCompletion() {
       onState: snapshot => { if (current()) { courseCompletionState.value = snapshot.state; courseCompletionError.value = snapshot.error; } },
       saveSimulation: async completion => {
         if (run.resumeCompletion && run.integratedSaved) return run.integratedSaved;
-        if (encounterSetupError.value || (vesselEncounterState && !vesselEncounterState.resolved)) throw new Error('Complete the assigned vessel-avoidance exercise before reporting.');
         const scores = run.simulationRawScores ||= currentSimulationScores();
         const report = run.simulationPerformanceReport ||= performanceManager.isActive ? performanceManager.completeMission() : performanceManager.getPerformanceReport();
-        const saved = await firebaseApi.completeLearningSimulation(origin.activityId, { completion, scores, encounter: vesselEncounterResult(vesselEncounterState) });
+        const saved = await firebaseApi.completeLearningSimulation(origin.activityId, { completion, scores, encounter: vesselEncounterResult(vesselEncounterState, module.encounter) });
         if (!current()) throw new Error('Student session changed.');
         if (!saved.data) throw new Error('The simulation result was not saved. Try again.');
         run.integratedSaved = saved;
@@ -4431,7 +4430,7 @@ async function continueCourseCompletion() {
         return saved;
       },
       findQuiz: async () => {
-        if (run.integratedSaved?.skipped && !['simulation-v1', 'simulation-v2'].includes(run.integratedSaved.data?.scoringVersion)) return { quiz: null, saved: null };
+        if (run.integratedSaved?.skipped && !['simulation-v1', 'simulation-v2', 'simulation-v3'].includes(run.integratedSaved.data?.scoringVersion)) return { quiz: null, saved: null };
         return firebaseApi.getLearningMissionQuiz(origin.activityId);
       },
       saveQuiz: (quiz, answers) => firebaseApi.submitLearningMissionQuiz(origin.activityId, { quizId: quiz.id, answers }),
@@ -7662,7 +7661,7 @@ function updateTrainingEncounter(delta) {
 function currentSimulationScores() {
   const state = performanceManager.state;
   state.safetyScore = calculateSafetyCompliance(trainingRunMetrics.value);
-  const inputs = simulationScoringInputs(state, trainingRunMetrics.value, vesselEncounterResult(vesselEncounterState));
+  const inputs = simulationScoringInputs(state, trainingRunMetrics.value, vesselEncounterResult(vesselEncounterState, activeTrainingModule.value?.encounter));
   state.scoringInputs = inputs;
   return inputs;
 }
@@ -10334,10 +10333,6 @@ async function openMissionCompleteModal(module) {
   try {
   const passScore = mission?.passScore ?? MODULE_PASS_SCORES[module.id] ?? 80;
   
-  if (encounterSetupError.value || (vesselEncounterState && !vesselEncounterState.resolved)) {
-    trainingFeedback.value = 'Finish the assigned vessel-avoidance exercise before reporting.';
-    return;
-  }
   const simulationInputs = currentSimulationScores();
   // Complete performance tracking and get report
   let performanceReport = null;
@@ -10391,7 +10386,7 @@ async function openMissionCompleteModal(module) {
       saved = await saveMissionScoreToFirestore({
         studentId: currentUser.value.id, missionId: mission.id,
         missionTitle: mission?.title ?? module.title, score, passed, completedAt: new Date(),
-        scores: simulationInputs, completion: courseDockingEvidence(), encounter: vesselEncounterResult(vesselEncounterState)
+        scores: simulationInputs, completion: courseDockingEvidence(), encounter: vesselEncounterResult(vesselEncounterState, module.encounter)
       });
     } catch (error) {
       console.error('Failed to save mission score to Firestore:', error);
@@ -12453,11 +12448,6 @@ function exitTraining() {
 
 function completeTrainingReview(module) {
   const run = trainingRunMetrics.value;
-  if (currentTrainingStep.value === module.steps.length - 1 &&
-      (encounterSetupError.value || (vesselEncounterState && !vesselEncounterState.resolved))) {
-    trainingFeedback.value = 'Complete the vessel-avoidance exercise, then return to port.';
-    return;
-  }
   trainingStepSuccess.value = true;
   showTrainingNotification(
     'Training complete!',
@@ -12546,11 +12536,6 @@ function checkTrainingStep() {
     return;
   }
 
-  if (currentTrainingStep.value === module.steps.length - 1 &&
-      (encounterSetupError.value || (vesselEncounterState && !vesselEncounterState.resolved))) {
-    trainingFeedback.value = 'Complete the vessel-avoidance exercise, then return to port.';
-    return;
-  }
   trainingStepSuccess.value = true;
   trainingStepError.value = false;
   trainingFeedback.value = '✓ Step completed!';

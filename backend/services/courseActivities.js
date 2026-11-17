@@ -5,7 +5,7 @@ import { missionOwner } from '../../shared/missionAccess.js';
 import { createPresentationPreview } from './presentationPreview.js';
 import { OFFICIAL_SYLLABUS, OFFICIAL_SYLLABUS_KEY } from '../../shared/officialSyllabus.js';
 import { simulationPerformance, validDockingCompletion, completedSimulationScores } from '../../shared/simulationPerformance.js';
-import { normalizeEncounter, validEncounterResult } from '../../shared/vesselEncounter.js';
+import { normalizeEncounter, normalizeEncounterAttempt } from '../../shared/vesselEncounter.js';
 import { selectMissionQuiz, gradeMissionQuiz } from '../../shared/missionQuiz.js';
 
 const fail = (status, message) => { throw new MaterialsError(status, message); };
@@ -350,7 +350,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     let simulationResult = null;
     if (data.type === 'simulation') {
       const records = await col('mission_score').where('studentId', '==', user.id).get();
-      simulationResult = records.docs.map(doc => doc.data()).find(r => canonicalMissionId(r.missionId) === canonicalMissionId(data.targetId) && r.scoringVersion === 'simulation-v1' && r.completion?.verified) || null;
+      simulationResult = records.docs.map(doc => doc.data()).find(r => canonicalMissionId(r.missionId) === canonicalMissionId(data.targetId) && ['simulation-v1', 'simulation-v2', 'simulation-v3'].includes(r.scoringVersion) && r.completion?.verified) || null;
     }
     return { type: data.type, target, activityId: id, simulationResult };
   }
@@ -393,8 +393,8 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     let encounter;
     try {
       const config = normalizeEncounter(item.mission.data().encounter);
-      encounter = body.encounter || null;
-      if (!validEncounterResult(config, encounter)) fail(409, 'Finish the assigned vessel-avoidance exercise before reporting.');
+      try { encounter = normalizeEncounterAttempt(config, body.encounter || null); }
+      catch (error) { fail(409, error.message); }
       performance = simulationPerformance(completedSimulationScores(body.scores || {}, body.completion, encounter), Number(item.mission.data().pass_score ?? item.mission.data().passScore ?? 70));
       if (!performance.assessmentComplete) fail(409, 'Some performance criteria were not recorded. Complete the practical exercise before reporting.');
     }
@@ -407,7 +407,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     const item = await practical(user, id);
     const records = await col('mission_score').where('studentId', '==', user.id).get();
     const results = records.docs.map(doc => ({ ...doc.data(), id: doc.id })).filter(r => canonicalMissionId(r.missionId) === canonicalMissionId(item.data.targetId));
-    const simulation = results.find(r => ['simulation-v1', 'simulation-v2'].includes(r.scoringVersion) && r.completion?.verified) || null;
+    const simulation = results.find(r => ['simulation-v1', 'simulation-v2', 'simulation-v3'].includes(r.scoringVersion) && r.completion?.verified) || null;
     if (!simulation) fail(409, 'Save the completed simulation before checking its quiz.');
     const [quizDocs, assignmentDocs, scores] = await Promise.all([col('quiz').get(), col('quiz_assignments').get(), col('quiz_score').where('studentId', '==', user.id).get()]);
     const quiz = selectMissionQuiz({ missionId: item.data.targetId, instructorId: item.syllabus.instructorId,

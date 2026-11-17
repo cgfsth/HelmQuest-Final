@@ -6,6 +6,8 @@ Docking ends the attempt even with unfinished buoy steps. At the port, stop the 
 
 Starting another mission clears the previous quiz/report state and keeps the loading cover active until the boat, harbor and encounter are initialized. Completion checks remain disabled during loading, preventing a previous deployed anchor from submitting an empty new attempt before its scene is ready.
 
+An unfinished vessel-avoidance exercise does not block reporting. Its saved summary remains explicitly incomplete and caps Safety Compliance (20%) at zero. It does not change objective completion or task accuracy. A quiz still opens when assigned; otherwise results appear directly.
+
 Verify the complete Vue app, actual Anchor button and backend course/quiz routes using `node scripts/verify-full-app-docking.mjs`. This uses an isolated in-memory database and tests unfinished steps with and without an assigned quiz. It does not write production scores. Production builds include `/build-info.json`; check its revision after deployment rather than treating a successful GitHub push as proof that the live site has updated.
 
 The Post-Docking Quiz System is an automated assessment feature that presents students with training-related quiz questions immediately after successfully completing a docking maneuver. This system integrates seamlessly with HelmQuest's existing quiz management infrastructure and provides instant feedback to enhance the learning experience.

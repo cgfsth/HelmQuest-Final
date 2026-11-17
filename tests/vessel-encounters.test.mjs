@@ -56,13 +56,16 @@ test('a crossing still presents a real collision risk while the student accelera
     assert.ok(state.collision || state.minimumClearance < state.config.clearance, `no close-quarters risk at ${topSpeed} knots: ${state.minimumClearance} m`);
   }
 });
-test('idle waiting, warnings alone, and unresolved/forged exercise summaries do not earn a completion', () => {
+test('an unfinished exercise is a valid zero-safety attempt; forged success is still rejected', () => {
   const own = { x: 0, z: 0, speed: 0, heading: 0, length: 60 };
   const state = createVesselEncounter({ type: 'anchored' }, own);
   for (let frame = 0; frame < 10000; frame++) updateVesselEncounter(state, own, .1);
   assert.equal(state.resolved, false);
   assert.equal(state.events.length, 0);
-  assert.equal(validEncounterResult(state.config, vesselEncounterResult(state)), false);
+  assert.equal(validEncounterResult(state.config, vesselEncounterResult(state)), true);
+  const attempt = simulationScoringInputs({ safetyScore: 100 }, { totalSteps: 2, stepsCompleted: 0 }, vesselEncounterResult(state));
+  assert.equal(attempt.safety, 0);
+  assert.equal(attempt.completion, 0);
   assert.equal(validEncounterResult(state.config, { ...vesselEncounterResult(state), resolved: true, successful: true }), false);
   assert.throws(() => normalizeEncounter({ clearance: 200, warningDistance: 300 }), /valid vessel/);
 });
@@ -171,9 +174,38 @@ test('one rubric is used for all modules, preserves zero values, and excludes qu
   assert.equal(simulationPerformance({ ...scores, accuracy: null, steering: null }).assessmentComplete, false);
   assert.throws(() => simulationPerformance({ ...scores, completion: NaN }), /Invalid/);
   const input = simulationScoringInputs({ steeringScore: 100, courseScore: 100, safetyScore: 100 }, { totalSteps: 2, stepsCompleted: 0 });
-  assert.equal(input.accuracy, null, 'untouched defaults do not prove proficiency');
+  assert.equal(input.accuracy, 0, 'untouched defaults earn no task-accuracy points');
   const derived = completedSimulationScores(scores, { totalSteps: 4, completedSteps: 4 }, { successful: false, collision: true });
-  assert.equal(derived.completion, 80); assert.equal(derived.criticalSafetyFailure, true);
+  assert.equal(derived.completion, 100); assert.equal(derived.criticalSafetyFailure, true);
+});
+
+test('vessel completion, response and clearance affect only Safety Compliance and do not block the weighted result', () => {
+  const state = { steeringScore: 90, headingHistory: [{}, {}], objectivesCompleted: [{}, {}], penalties: [], safetyScore: 95 };
+  const run = { totalSteps: 2, stepsCompleted: 2 };
+  const baseline = simulationScoringInputs(state, run);
+  for (const [patch, safety] of [[{ resolved: false, successful: false, accuracy: 0 }, 0],
+    [{ resolved: true, successful: true, accuracy: 50 }, 50], [{ resolved: true, successful: true, accuracy: 100 }, 95]]) {
+    const encounter = { type: 'crossing-red', collision: false, minimumClearance: 200, ...patch };
+    const inputs = simulationScoringInputs(state, run, encounter);
+    assert.equal(inputs.completion, baseline.completion);
+    assert.equal(inputs.accuracy, baseline.accuracy);
+    assert.equal(inputs.safety, safety);
+    const serverInputs = completedSimulationScores(inputs, { completedSteps: 2, totalSteps: 2 }, encounter);
+    assert.deepEqual(serverInputs, inputs, 'client and server must not apply the penalty twice');
+    const result = simulationPerformance(inputs);
+    assert.equal(result.score, Math.round(100 * .4 + baseline.accuracy * .4 + safety * .2));
+    assert.equal(result.passed, true, 'an incomplete exercise affects its weighted safety score rather than forcing a failure');
+  }
+});
+
+test('missing vessel setup still records the assigned exercise as incomplete without mutating a live encounter', () => {
+  const settings = { type: 'crossing-red', clearance: 100, warningDistance: 600 };
+  const result = vesselEncounterResult(null, settings);
+  assert.equal(result.resolved, false); assert.equal(result.minimumClearance, null);
+  assert.equal(validEncounterResult(settings, result), true);
+  const inputs = completedSimulationScores({ accuracy: null, safety: 100 }, { completedSteps: 0, totalSteps: 2 }, result);
+  assert.equal(simulationPerformance(inputs).score, 0);
+  assert.equal(inputs.safety, 0);
 });
 
 test('correct task execution is not penalized for absent waypoint, anchoring or docking subtasks', () => {

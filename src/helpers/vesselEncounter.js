@@ -1,4 +1,4 @@
-import { normalizeEncounter, ENCOUNTER_VESSEL_RADIUS } from '../../shared/vesselEncounter.js';
+import { normalizeEncounter, normalizeEncounterAttempt, ENCOUNTER_VESSEL_RADIUS } from '../../shared/vesselEncounter.js';
 
 const radians = degrees => degrees * Math.PI / 180;
 const forward = heading => ({ x: Math.sin(radians(heading)), z: -Math.cos(radians(heading)) });
@@ -138,11 +138,12 @@ export function updateVesselEncounter(state, own, delta) {
   state.previousOwn = { ...own };
   return state;
 }
-export function vesselEncounterResult(state) {
-  if (!state) return null;
-  return { type: state.config.type, resolved: state.resolved, successful: state.successful, collision: state.collision,
-    accuracy: state.accuracy, minimumClearance: Number.isFinite(state.minimumClearance) ? state.minimumClearance : 0,
+export function vesselEncounterResult(state, settings) {
+  const config = normalizeEncounter(settings ?? state?.config);
+  const result = !state ? null : { type: state.config.type, resolved: state.resolved, successful: state.successful, collision: state.collision,
+    accuracy: state.accuracy, minimumClearance: Number.isFinite(state.minimumClearance) ? state.minimumClearance : null,
     events: state.events.map(value => ({ ...value })) };
+  return normalizeEncounterAttempt(config, result);
 }
 export function vesselEncounterGuidance(state) {
   if (!state) return null;
