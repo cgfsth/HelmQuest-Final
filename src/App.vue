@@ -459,6 +459,7 @@
       <div class="quiz-editor-card glass-card mission-editor-card" role="dialog" aria-modal="true" aria-labelledby="mission-editor-title">
         <h2 id="mission-editor-title">{{ missionEditorModal.isNew ? '🧭 Create New Mission' : '✏️ Edit Mission' }}</h2>
         <p v-if="missionEditorModal.courseContext" class="mission-editor-context">{{ missionEditorModal.courseContext.syllabusTitle }} · {{ missionEditorModal.courseContext.moduleTitle }}</p>
+        <label v-if="missionEditorModal.courseContext" class="quiz-field"><span><input type="checkbox" v-model="missionEditorModal.data.allowRetakes" :disabled="missionSaving" /> Allow retakes after a failed simulation</span></label>
 
         <div class="quiz-editor-content" :inert="missionSaving">
           <!-- Basic Info -->
@@ -10777,6 +10778,7 @@ function openMissionCreator(courseContext = null) {
     data: {
       id: newId,
       title: courseContext ? `${courseContext.moduleTitle} mission`.slice(0, 180) : `Mission ${nextIdx}: New Mission`,
+      allowRetakes: true,
       description: courseContext?.description || '',
       difficulty: 'Beginner',
       duration: '5-10 minutes',
@@ -10810,6 +10812,7 @@ async function openCourseMissionEditor(context) {
   openMissionEditor(mission);
   if (missionEditorModal.value) {
     missionEditorModal.value.courseContext = context;
+    missionEditorModal.value.data.allowRetakes = context.allowRetakes !== false;
     const localDate = value => { if (!value) return ''; const date = new Date(value); return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
     if (context.availableFrom) missionEditorModal.value.data.openDate = localDate(context.availableFrom);
     if (context.availableUntil) missionEditorModal.value.data.deadline = localDate(context.availableUntil);
@@ -11048,6 +11051,7 @@ async function saveMissionEditor() {
         const context = editor.courseContext;
         const saved = await firebaseApi.saveModuleMission(context.syllabusId, context.moduleId, {
           missionId: cleaned.id, mission: firestoreMission, published: context.published,
+          allowRetakes: data.allowRetakes !== false,
           activityId: context.activityId, revision: context.revision
         });
         if (currentUser.value?.id !== instructorId || userRole.value !== 'instructor' || missionEditorModal.value !== editor) return;

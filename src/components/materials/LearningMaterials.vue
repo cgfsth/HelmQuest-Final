@@ -9,10 +9,14 @@
       <div class="lc-detail-instructions"><h3>Instructions</h3><p>{{ activityDetail.instructions || (activityDetail.type === 'simulation' ? 'Complete the linked mission in the HelmQuest maritime simulator. Your saved mission results determine completion.' : 'Answer the questions in the existing HelmQuest quiz. Your saved submission determines completion.') }}</p></div>
       <p><strong>{{ activityDetail.type === 'simulation' ? 'Assigned mission:' : 'Assigned quiz:' }}</strong> {{ linkedTitle(activityDetail) }}</p>
       <p v-if="activityDetail.completionRule === 'pass'">{{ activityDetail.passScore != null ? 'Required score: ' + activityDetail.passScore + '%' : 'Meet the linked activity’s passing requirements.' }}</p>
+      <div v-if="!manager && !preview && activityDetail.type === 'simulation' && currentSimulationAttempt.attempted" class="lc-simulation-result" :class="currentSimulationAttempt.passed ? 'lc-simulation-result--passed' : 'lc-simulation-result--failed'" role="status">
+        <strong>{{ currentSimulationAttempt.passed ? 'Passed' : 'Failed' }} · Score: {{ currentSimulationAttempt.score == null ? 'Not recorded' : currentSimulationAttempt.score + '%' }}</strong>
+        <p v-if="!currentSimulationAttempt.passed">{{ activityDetail.allowRetakes === false ? 'Retakes are disabled. Ask your instructor to allow a retake.' : 'You can retry this simulation to improve your score.' }}</p>
+      </div>
       <p v-if="error" class="lm-alert lm-error" role="alert">{{ error }}</p>
       <p v-if="!manager && !preview && activityDetail.type === 'simulation' && !currentSimulationAccess.canStart" class="lm-alert" role="status">{{ currentSimulationAccess.message }}</p>
       <p v-if="preview || manager" class="lc-preview-note">Student preview. Use a student account to start this activity and record progress.</p>
-      <button v-else type="button" class="lm-primary" :disabled="busy || (activityDetail.type === 'simulation' && !currentSimulationAccess.canStart)" @click="startActivity">{{ busy ? 'Opening…' : activityDetail.type === 'simulation' ? 'Start Simulation' : courseProgress[activityDetail.id]?.status === 'Done' ? 'View Quiz Results' : 'Start Quiz' }}</button>
+      <button v-else type="button" class="lm-primary" :disabled="busy || (activityDetail.type === 'simulation' && !currentSimulationAccess.canStart)" @click="startActivity">{{ busy ? 'Opening…' : activityDetail.type === 'simulation' ? simulationActionLabel : courseProgress[activityDetail.id]?.status === 'Done' ? 'View Quiz Results' : 'Start Quiz' }}</button>
     </section>
     <template v-else>
       <div class="lm-toolbar" :class="{ 'lc-course-toolbar': selected }">
@@ -43,7 +47,7 @@
         </div>
         <div v-else-if="!selected" class="lm-empty"><BookOpen :size="36" /><h3>{{ search || filter ? 'No matching syllabi' : 'No syllabi yet' }}</h3><p>{{ manager ? 'Create a syllabus and upload its PDF to start your course library.' : 'Your instructor’s uploaded course materials will appear here.' }}</p></div>
         <p v-else-if="preview && selected.published === false" class="lm-empty">This course is unpublished. Students will see it after you publish it.</p>
-        <CourseOutline v-else :simulation-access="simulationAccess" :mission-authoring="role === 'instructor' && !preview" :mission-quiz-label="missionQuizLabel" :mission-quizzes-loading="missionQuizzesLoading" @create-mission="createModuleMission" @edit-mission="editModuleMission" @edit-mission-quiz="item => emit('edit-mission-quiz', { missionId: item.targetId, title: item.title })" :syllabus="selected" :official="official" :focused-lesson-id="lessonId" :modules="modules" :activities="activities" :progress="preview ? {} : courseProgress" :manager="manager && !preview" :preview="preview" :busy="busy" @select-lesson="selectLesson" @open="openActivity" @edit-section="edit" @remove-section="confirmDelete" @add-activity="addActivity" @edit-activity="item => edit('activity', item)" @remove-activity="item => confirmDelete('activity', item)" @move-activity="moveActivity" @move-module="move" />
+        <CourseOutline v-else @set-retakes="setRetakes" :simulation-access="simulationAccess" :mission-authoring="role === 'instructor' && !preview" :mission-quiz-label="missionQuizLabel" :mission-quizzes-loading="missionQuizzesLoading" @create-mission="createModuleMission" @edit-mission="editModuleMission" @edit-mission-quiz="item => emit('edit-mission-quiz', { missionId: item.targetId, title: item.title })" :syllabus="selected" :official="official" :focused-lesson-id="lessonId" :modules="modules" :activities="activities" :progress="preview ? {} : courseProgress" :manager="manager && !preview" :preview="preview" :busy="busy" @select-lesson="selectLesson" @open="openActivity" @edit-section="edit" @remove-section="confirmDelete" @add-activity="addActivity" @edit-activity="item => edit('activity', item)" @remove-activity="item => confirmDelete('activity', item)" @move-activity="moveActivity" @move-module="move" />
       </template>
     </template>
     <Teleport to="body">
@@ -67,6 +71,7 @@
                 <label>Activity instructions<textarea v-model="form.instructions" rows="4" maxlength="5000" :disabled="busy" /></label>
                 <template v-if="form.type === 'simulation'"><p class="lm-alert">{{ PRACTICAL_ALIGNMENT[modules.find(m => m.id === form.moduleId)?.officialSectionId]?.guidance || 'Choose a mission whose actual objectives match this lesson.' }}</p><label>Quiz after successful docking<select v-model="form.quizPolicy" :disabled="busy"><option value="inherit">Use the mission’s assigned quiz, if published</option><option value="none">No quiz — show simulation results</option><option value="assigned">Assign a specific instructor quiz</option></select></label><label v-if="form.quizPolicy === 'assigned'">Assigned quiz<select v-model="form.quizId" required :disabled="busy"><option value="" disabled>Choose a quiz</option><option v-for="quiz in catalog.quizzes" :key="quiz.id" :value="quiz.id">{{ quiz.title }}</option></select></label></template>
                 <label>Completion requirement<select v-model="form.completionRule" :disabled="busy"><option value="complete">Complete the activity</option><option value="pass">Complete and meet the passing requirement</option></select></label>
+                <label v-if="form.type === 'simulation'" class="lc-publish"><input v-model="form.allowRetakes" type="checkbox" :disabled="busy" /> Allow retakes after a failed simulation</label>
                 <label v-if="form.completionRule === 'pass'">Passing score (%)<input v-model="form.passScore" type="number" min="0" max="100" step="0.1" placeholder="Use the mission / quiz passing result" :disabled="busy" /></label>
               </template>
               <label v-else class="lm-upload"><Upload :size="24" /><strong>{{ editor.id ? 'Replace document (optional)' : editor.kind === 'module' ? 'Module PDF (optional)' : form.type === 'presentation' ? 'Upload presentation' : 'Upload PDF' }}</strong><span>{{ file?.name || editor.sourceFileName || editor.fileName || 'Choose a learning document' }}</span><input type="file" :accept="form.type === 'presentation' ? '.ppt,.pptx,.pdf' : 'application/pdf,.pdf'" :required="!editor.id && editor.kind !== 'module'" :disabled="busy" @change="chooseFile" /><small>{{ form.type === 'presentation' ? 'PPT, PPTX or PDF · Slides are converted to a private, read-only PDF preview.' : 'PDF' }} · Maximum 15 MB</small></label>
@@ -102,7 +107,14 @@ const manager = computed(() => ['instructor', 'admin'].includes(props.role));
 const syllabi = ref([]), modules = ref([]), instructors = ref([]), selected = ref(null), document = ref(null);
 const activities = ref([]), courseProgress = ref({}), catalog = ref({ missions: [], quizzes: [] }), preview = ref(false), activityDetail = ref(null);
 const simulationAccess = ref({});
-const currentSimulationAccess = computed(() => simulationAccess.value[activityDetail.value?.moduleId] || { canStart: false, message: 'View the PDF lessons in this module before starting the simulation. Refresh the course to check your reading progress.' });
+const currentSimulationAttempt = computed(() => courseProgress.value[activityDetail.value?.id]?.simulation || { attempted: false, passed: false, score: null });
+const simulationActionLabel = computed(() => currentSimulationAttempt.value.passed ? 'View Simulation Results' : currentSimulationAttempt.value.attempted ? 'Retry Simulation' : 'Start Simulation');
+const currentSimulationAccess = computed(() => {
+  const access = simulationAccess.value[activityDetail.value?.moduleId] || { canStart: false, message: 'View the PDF lessons in this module before starting the simulation. Refresh the course to check your reading progress.' };
+  if (!access.canStart) return access;
+  if (currentSimulationAttempt.value.attempted && !currentSimulationAttempt.value.passed && activityDetail.value?.allowRetakes === false) return { ...access, canStart: false, message: 'Retakes are disabled for this simulation. Ask your instructor to allow a retake.' };
+  return access;
+});
 const official = ref(null), lessonId = ref(props.initialLessonId || '');
 const loading = ref(false), busy = ref(false), ready = ref(false), error = ref(''), notice = ref(''), cleanupPending = ref(false);
 const search = ref(''), filter = ref(''), editor = ref(null), removal = ref(null), modal = ref(null), modalError = ref('');
@@ -141,7 +153,7 @@ function missionContext(moduleId, item = {}) {
   const ticket = identity, syllabusId = selected.value.id;
   return { syllabusId, syllabusTitle: selected.value.title, moduleId, moduleTitle: module.title, officialSectionId: module.officialSectionId || '', description: module.description || '',
     missionId: item.targetId, activityId: item.id, revision: item.revision, published: item.published !== false,
-    availableFrom: item.availableFrom, availableUntil: item.availableUntil,
+    availableFrom: item.availableFrom, availableUntil: item.availableUntil, allowRetakes: item.allowRetakes !== false,
     onSaved: async () => { if (ticket === identity && selected.value?.id === syllabusId) { notice.value = 'Mission saved in this module.'; await load(syllabusId); } } };
 }
 function createModuleMission(moduleId) {
@@ -195,7 +207,7 @@ function edit(kind, item = {}) {
   form.value = { title: item.title || '', description: item.description || '', instructorId: item.instructorId || (props.role === 'instructor' ? props.currentUser.id : ''), moduleNumber: item.moduleNumber || Math.max(0, ...modules.value.map(module => module.moduleNumber)) + 1, revision: item.revision,
     ...(kind === 'syllabus' ? { officialSyllabusKey: item.id ? item.officialSyllabusKey || '' : OFFICIAL_SYLLABUS_KEY } : {}),
     objectives: item.objectives || '', announcement: item.announcement || '', published: item.id ? item.published !== false : kind !== 'activity',
-    ...(kind === 'activity' ? { moduleId: item.moduleId || '', type: item.type || 'pdf', targetId: item.targetId || '', instructions: item.instructions || '', completionRule: item.completionRule || 'pass', passScore: item.passScore ?? '', quizPolicy: item.quizPolicy || 'inherit', quizId: item.quizId || '', availableFrom: localDate(item.availableFrom), availableUntil: localDate(item.availableUntil) } : {}) };
+    ...(kind === 'activity' ? { moduleId: item.moduleId || '', type: item.type || 'pdf', targetId: item.targetId || '', instructions: item.instructions || '', completionRule: item.completionRule || 'pass', passScore: item.passScore ?? '', allowRetakes: item.allowRetakes !== false, quizPolicy: item.quizPolicy || 'inherit', quizId: item.quizId || '', availableFrom: localDate(item.availableFrom), availableUntil: localDate(item.availableUntil) } : {}) };
   if (kind === 'syllabus' && !item.id) setCourseTemplate();
   beginModal();
 }
@@ -250,6 +262,19 @@ async function moveActivity(item, delta) {
   const ticket = identity, operation = mutation = new AbortController(); busy.value = true; error.value = '';
   try { await api.reorderLearningActivities(selected.value.id, { moduleId: item.moduleId, ids: group.map(a => a.id), revision: selected.value.revision }, { signal: operation.signal }); if (ticket === identity && !operation.signal.aborted) await refresh(); }
   catch (err) { if (ticket === identity && !operation.signal.aborted) error.value = err.message; }
+  finally { if (ticket === identity && mutation === operation) busy.value = false; }
+}
+
+async function setRetakes(item, allowed) {
+  if (busy.value || !manager.value || preview.value || item.type !== 'simulation') return;
+  const ticket = identity, operation = mutation = new AbortController();
+  busy.value = true; error.value = ''; notice.value = '';
+  try {
+    await api.saveLearningMaterial({ kind: 'activity', id: item.id, fields: { ...item, allowRetakes: allowed }, signal: operation.signal });
+    if (ticket !== identity || operation.signal.aborted) return;
+    await refresh();
+    if (ticket === identity) notice.value = allowed ? 'Simulation retakes allowed.' : 'Simulation retakes disabled.';
+  } catch (err) { if (ticket === identity && !operation.signal.aborted) error.value = err.message || 'Unable to update retakes.'; }
   finally { if (ticket === identity && mutation === operation) busy.value = false; }
 }
 async function remove() {

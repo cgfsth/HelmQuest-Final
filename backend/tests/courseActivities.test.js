@@ -95,6 +95,48 @@ test('opening simulations never completes them; saved results and CUSTOM aliases
   expect((await f.course.course(student, syllabusId)).progress[id]).toMatchObject({ status: 'Done', requirements: [{ done: true }, { done: true }] });
 });
 
+test('simulation progress shows the latest saved failure, including zero, and keeps a pass authoritative', async () => {
+  const { id } = await add({ type: 'simulation', targetId: 'mission' }, null);
+  f.records.mission_score = {
+    older: { studentId: 'sa', missionId: 'mission', score: 40, passed: false, completedAt: '2026-11-01T00:00:00Z' },
+    latest: { studentId: 'sa', missionId: 'CUSTOM-mission', score: 0, passed: false, completedAt: '2026-11-02T00:00:00Z' },
+    foreign: { studentId: 'sb', missionId: 'mission', score: 100, passed: true }
+  };
+  expect((await f.course.course(student, syllabusId)).progress[id].simulation).toEqual({ attempted: true, score: 0, passed: false, canRetry: true });
+  f.records.mission_score.older.passed = true; f.records.mission_score.older.score = 85;
+  expect((await f.course.course(student, syllabusId)).progress[id].simulation).toMatchObject({ score: 85, passed: true, canRetry: false });
+});
+
+test('instructor retake policy persists, blocks failed relaunches on the server, and can be re-enabled', async () => {
+  const { id } = await add({ type: 'simulation', targetId: 'mission', allowRetakes: false }, null);
+  await viewModulePdf(f, student, moduleId);
+  const path = `/learning-materials/activities/${id}`;
+  await request(f.app).post(path + '/launch').set(headers('sa', 'student')).expect(200);
+  f.records.mission_score = { failed: { studentId: 'sa', missionId: 'CUSTOM-mission', score: 40, passed: false, scoringVersion: 'simulation-v3', completion: { verified: true } } };
+  const course = await f.course.course(student, syllabusId);
+  expect(course.activities.find(a => a.id === id).allowRetakes).toBe(false);
+  expect(course.progress[id].simulation).toMatchObject({ score: 40, passed: false, canRetry: false });
+  const blocked = await request(f.app).post(path + '/launch').set(headers('sa', 'student')).expect(403);
+  expect(blocked.body.message).toMatch(/Retakes are disabled/);
+  await request(f.app).post(path + '/progress').set(headers('sa', 'student')).send({ event: 'started' }).expect(403);
+  await request(f.app).put(path).set(headers('sa', 'student')).field('type', 'simulation').field('title', 'Practice').field('allowRetakes', 'true').expect(403);
+  await request(f.app).put(path).set(headers('b')).field('type', 'simulation').field('title', 'Practice').field('allowRetakes', 'true').expect(404);
+  await request(f.app).put(path).set(headers()).field('type', 'simulation').field('title', 'Practice').field('targetId', 'mission').field('published', 'true').field('revision', '1').field('allowRetakes', 'true').expect(200);
+  expect(f.records.learning_activities[id].allowRetakes).toBe(true);
+  const allowed = await request(f.app).post(path + '/launch').set(headers('sa', 'student')).expect(200);
+  expect(allowed.body.simulationResult).toBeNull();
+  expect((await f.course.course(student, syllabusId)).progress[id].simulation.canRetry).toBe(true);
+  await f.course.save(owner, null, null, id, payload({ type: 'simulation', targetId: 'mission', revision: 2 }), null);
+  expect(f.records.learning_activities[id].allowRetakes).toBe(true);
+});
+
+test('invalid retake settings are rejected and existing simulations keep retakes enabled by default', async () => {
+  await expect(add({ type: 'simulation', targetId: 'mission', allowRetakes: 'invalid' }, null)).rejects.toMatchObject({ status: 400 });
+  const { id } = await add({ type: 'simulation', targetId: 'mission' }, null);
+  delete f.records.learning_activities[id].allowRetakes;
+  expect((await f.course.course(student, syllabusId)).activities.find(a => a.id === id).allowRetakes).toBe(true);
+});
+
 test('reordering course content preserves viewed documents; replacing a file requires a new view', async () => {
   const { id } = await add(), second = await add({ title: 'More reading' });
   const initial = await f.course.course(student, syllabusId);

@@ -21,9 +21,27 @@ const summary = doc => {
   const d = doc.data();
   return { id: doc.id, syllabusId: d.syllabusId, moduleId: d.moduleId, type: d.type, title: d.title, description: d.description,
     objectives: d.objectives, instructions: d.instructions, order: d.order, published: d.published !== false, completionRule: d.completionRule,
-    passScore: d.passScore, targetId: d.targetId, targetTitle: d.targetTitle, quizPolicy: d.quizPolicy || 'inherit', quizId: d.quizId || '', availableFrom: d.availableFrom, availableUntil: d.availableUntil,
+    passScore: d.passScore, targetId: d.targetId, targetTitle: d.targetTitle, allowRetakes: d.allowRetakes !== false, quizPolicy: d.quizPolicy || 'inherit', quizId: d.quizId || '', availableFrom: d.availableFrom, availableUntil: d.availableUntil,
     fileName: d.fileName, sourceFileName: d.sourceFileName, documentVersion: documentVersion(d), revision: d.revision, updatedAt: date(d.updatedAt) };
 };
+
+// A passed result stays authoritative; otherwise show the most recent attempt.
+export function simulationAttempt(results = [], allowRetakes = true) {
+  const time = value => { const parsed = Date.parse(date(value) || ''); return Number.isFinite(parsed) ? parsed : 0; };
+  const ordered = [...results].sort((a, b) => Number(hasMissionCompletion(b)) - Number(hasMissionCompletion(a))
+    || time(b.completedAt || b.updatedAt || b.createdAt) - time(a.completedAt || a.updatedAt || a.createdAt)
+    || String(a.id || '').localeCompare(String(b.id || '')));
+  const result = ordered[0] || null, passed = !!result && hasMissionCompletion(result);
+  const score = result?.score != null && Number.isFinite(Number(result.score)) ? Number(result.score) : null;
+  return { result, attempted: !!result, score, passed, canRetry: !!result && !passed && allowRetakes !== false };
+}
+
+function retakesSetting(value, previous = true) {
+  if (value === undefined) return previous !== false;
+  if (value === true || value === 'true') return true;
+  if (value === false || value === 'false') return false;
+  fail(400, 'Choose whether to allow simulation retakes.');
+}
 
 export function activityCompletion(activity, { viewed = false, started = false, results = [] } = {}) {
   const requirements = isFile(activity.type) ? [{ label: activity.type === 'presentation' ? 'View the presentation' : 'View the document', done: viewed }] : [
@@ -108,8 +126,13 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
       const missions = missionScores.docs.map(doc => doc.data()), quizzes = quizScores.docs.map(doc => doc.data());
       for (const a of activities) {
         const state = viewed.get(a.id) || {};
+        const results = a.type === 'simulation' ? missions.filter(r => canonicalMissionId(r.missionId) === canonicalMissionId(a.targetId)) : a.type === 'quiz' ? quizzes.filter(r => r.quizId === a.targetId) : [];
         progress[a.id] = activityCompletion(a, { viewed: !!state.viewedAt && state.documentVersion === a.documentVersion, started: !!state.startedAt,
-          results: a.type === 'simulation' ? missions.filter(r => canonicalMissionId(r.missionId) === canonicalMissionId(a.targetId)) : a.type === 'quiz' ? quizzes.filter(r => r.quizId === a.targetId) : [] });
+          results });
+        if (a.type === 'simulation') {
+          const { result, ...attempt } = simulationAttempt(results, a.allowRetakes);
+          progress[a.id].simulation = attempt;
+        }
       }
       for (const d of [detail.syllabus, ...detail.modules].filter(d => d.fileName)) {
         const key = `${d.id === id ? 'syllabus' : 'module'}-${d.id}`;
@@ -167,6 +190,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
       const activityData = { ...(old || {}), type: 'simulation', syllabusId, moduleId, title,
         description, objectives: (input.learning_objectives || []).join('\n'), instructions: old?.instructions || '',
         targetId: body.missionId, targetTitle: title, completionRule: old?.completionRule || 'pass', passScore: old?.passScore ?? null,
+        allowRetakes: retakesSetting(body.allowRetakes, old?.allowRetakes),
         quizPolicy: old?.quizPolicy || 'inherit', quizId: old?.quizId || '',
         availableFrom: input.opendate || null, availableUntil: input.deadline || null,
         published: body.published !== false, status: 'active', revision: savedRevision,
@@ -228,6 +252,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
         const pending = [...new Set([...(old?.pendingFileDeletes || []), ...(storagePath && old?.storagePath ? [old.storagePath] : [])])];
         if (pending.length > 50) fail(409, 'Retry pending file cleanup before replacing this document.');
         const data = { title, description, objectives, instructions, type, syllabusId, moduleId: moduleId || null, targetId, targetTitle, completionRule, passScore,
+          ...(type === 'simulation' ? { allowRetakes: retakesSetting(body.allowRetakes, old?.allowRetakes) } : {}),
           quizPolicy, quizId: quizPolicy === 'assigned' ? body.quizId : '',
           ...dates, published: body.published === true || body.published === 'true', status: 'active', revision: (old?.revision || 0) + 1,
           order: old?.order ?? siblings.docs.filter(d => (d.data().moduleId || null) === (moduleId || null)).length,
@@ -313,6 +338,11 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
         const views = await tx.get(col('learning_activity_progress').where('studentId', '==', user.id));
         const access = modulePdfAccess(fresh.moduleId, module?.data(), docs, new Map(views.docs.map(doc => [doc.data().activityId, doc.data()])), true);
         if (!access.canStart) fail(403, access.message);
+        if (body.event === 'started' && fresh.allowRetakes === false) {
+          const scores = await tx.get(col('mission_score').where('studentId', '==', user.id));
+          const attempt = simulationAttempt(scores.docs.map(doc => doc.data()).filter(r => canonicalMissionId(r.missionId) === canonicalMissionId(fresh.targetId)), false);
+          if (attempt.attempted && !attempt.passed) fail(403, 'Retakes are disabled for this simulation. Ask your instructor to allow a retake.');
+        }
       }
       if (body.event === 'viewed' && (body.kind ? body.documentVersion !== documentVersion(fresh) : Number(body.revision) !== fresh.revision)) fail(409, 'This document changed. Open the latest version.');
       const state = { ...(previous.exists ? previous.data() : {}), studentId: user.id, activityId,
@@ -350,7 +380,9 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     let simulationResult = null;
     if (data.type === 'simulation') {
       const records = await col('mission_score').where('studentId', '==', user.id).get();
-      simulationResult = records.docs.map(doc => doc.data()).find(r => canonicalMissionId(r.missionId) === canonicalMissionId(data.targetId) && ['simulation-v1', 'simulation-v2', 'simulation-v3'].includes(r.scoringVersion) && r.completion?.verified) || null;
+      const attempt = simulationAttempt(records.docs.map(doc => ({ ...doc.data(), id: doc.id })).filter(r => canonicalMissionId(r.missionId) === canonicalMissionId(data.targetId)), data.allowRetakes);
+      // Failed attempts must start a fresh run, never resume the saved failure.
+      if (attempt.passed && ['simulation-v1', 'simulation-v2', 'simulation-v3'].includes(attempt.result.scoringVersion) && attempt.result.completion?.verified) simulationResult = attempt.result;
     }
     return { type: data.type, target, activityId: id, simulationResult };
   }

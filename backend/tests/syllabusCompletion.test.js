@@ -36,6 +36,20 @@ test('new scoring-version results can resume their saved simulation and assigned
   const quiz = await request(f.app).get(`/learning-materials/activities/${activityId}/mission-quiz`).set(headers()).expect(200);
   expect(quiz.body.quiz.id).toBe('q');
 });
+
+test('a failed simulation starts a fresh retake, saves an improved score, and resumes only the passed result', async () => {
+  const failed = await complete({ scores: { accuracy: 50, safety: 0 }, completion: { ...completed, completedSteps: 1 } }).expect(200);
+  expect(failed.body.data.passed).toBe(false);
+  const retry = await request(f.app).post(`/learning-materials/activities/${activityId}/launch`).set(headers()).expect(200);
+  expect(retry.body.simulationResult).toBeNull();
+  expect((await f.course.course(student, syllabusId)).progress[activityId].simulation).toMatchObject({ score: failed.body.data.score, passed: false, canRetry: true });
+  const passed = await complete().expect(200);
+  expect(passed.body.data.passed).toBe(true);
+  f.records.learning_activities[activityId].allowRetakes = false;
+  const resume = await request(f.app).post(`/learning-materials/activities/${activityId}/launch`).set(headers()).expect(200);
+  expect(resume.body.simulationResult.score).toBe(passed.body.data.score);
+  expect((await f.course.course(student, syllabusId)).progress[activityId].simulation).toMatchObject({ score: passed.body.data.score, passed: true, canRetry: false });
+});
 test('official course creation uses existing collections and the exact syllabus section order', async () => {
   const course = await f.course.course(student, syllabusId);
   expect(course.modules.map(m => m.title)).toEqual(OFFICIAL_SYLLABUS.sections.map(s => s.title)); expect(course.modules).toHaveLength(8);

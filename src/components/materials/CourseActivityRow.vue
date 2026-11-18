@@ -7,6 +7,8 @@
       </span>
     </button>
     <div class="lc-activity-trailing">
+      <button v-if="manager && activity.type === 'simulation'" type="button" class="lc-retakes-toggle" :disabled="busy" :aria-pressed="activity.allowRetakes !== false" @click="$emit('set-retakes', activity, activity.allowRetakes === false)">Allow retakes: {{ activity.allowRetakes !== false ? 'On' : 'Off' }}</button>
+      <span v-if="!manager && !preview && activity.type === 'simulation' && state.simulation?.attempted" class="lc-simulation-score">{{ state.simulation.passed ? 'Passed' : 'Failed' }} · {{ state.simulation.score == null ? 'Score not recorded' : state.simulation.score + '%' }}</span>
       <div v-if="manager && missionAuthoring && activity.type === 'simulation'" class="lc-mission-tools">
         <button type="button" :disabled="busy" @click="$emit('edit-mission', activity)"><Pencil :size="15" /> Edit mission</button>
         <button type="button" class="lc-mission-quiz" :disabled="busy || missionQuizzesLoading" @click="$emit('edit-mission-quiz', activity)">{{ missionQuizLabel(activity.targetId) }}</button>
@@ -20,7 +22,7 @@
 import { computed } from 'vue';
 import { ArrowDown, ArrowUp, Check, ChevronDown, Circle, FileText, Pencil, Presentation, Ship, ClipboardList, Trash2 } from '@lucide/vue';
 const props = defineProps({ activity: { type: Object, required: true }, progress: Object, simulationAccess: Object, missionAuthoring: Boolean, missionQuizLabel: { type: Function, default: () => 'Create / edit quiz' }, missionQuizzesLoading: Boolean, manager: Boolean, preview: Boolean, busy: Boolean, first: Boolean, last: Boolean });
-defineEmits(['edit-mission', 'edit-mission-quiz', 'open', 'edit', 'move', 'remove']);
+defineEmits(['set-retakes', 'edit-mission', 'edit-mission-quiz', 'open', 'edit', 'move', 'remove']);
 const icons = { pdf: FileText, presentation: Presentation, simulation: Ship, quiz: ClipboardList };
 const state = computed(() => props.progress || { status: 'To do', requirements: [
   { label: ['pdf', 'presentation'].includes(props.activity.type) ? props.activity.type === 'presentation' ? 'View the presentation' : 'View the document' : props.activity.type === 'simulation' ? 'Complete the assigned simulation' : 'Complete the quiz', done: false },

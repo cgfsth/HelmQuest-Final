@@ -13,6 +13,7 @@ const directory = resolve('../.tmp/module-mission-authoring'); mkdirSync(directo
 const pdfPath = resolve(directory, 'module-lesson.pdf'); writeFileSync(pdfPath, samplePdf());
 const fixture = materialsFixture({ middleware(req, res, next) {
   res.setHeader('Access-Control-Allow-Origin', '*'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
   if (req.method === 'OPTIONS') return res.sendStatus(204); next();
 } });
 fixture.app.post('/auth/demo-login', (req, res) => { const student = req.body.email.startsWith('student'); res.json({ sessionToken: issueSession(student ? 'sa' : 'a', student ? 'student' : 'instructor') }); });
@@ -39,6 +40,7 @@ import LearningMaterials from '/src/components/materials/LearningMaterials.vue';
 import * as firebaseApi from '/src/api/firebaseApi.js';
 import {canViewMission,canManageMission,missionOwner} from '/shared/missionAccess.js';
 import {getCourseSettings} from '/src/helpers/courseSettings.js';
+import {normalizeEncounter} from '/shared/vesselEncounter.js';
 const {ref}=Vue,currentUser=ref({id:'a',name:'Instructor'}),userRole=ref('instructor'),isAuthenticated=ref(true),trainingModules=ref([]),progressData=ref({courseSettings:{moduleOrder:[],customMissions:[]}}),missionEditorModal=ref(null),missionEditorError=ref(''),missionSaving=ref(false),missionCatalogLoading=ref(false),missionCatalogError=ref('');
 window.firebaseApi=firebaseApi;function saveProgress(){}function showAchievement(){}async function persistMissionQuiz(){}
 ${functions}
@@ -114,7 +116,38 @@ try {
   await browser.click('Start Simulation');
   await browser.waitFor('window.fixture.launches.length === 1');
   assert.deepEqual(await browser.evaluate('window.fixture.launches[0]'), { missionId, moduleId: secondModule, syllabusId });
+  fixture.records.mission_score = { attempt: { studentId: 'sa', missionId: 'CUSTOM-' + missionId, score: 40, passed: false, scoringVersion: 'simulation-v3', completion: { verified: true } } };
+  await browser.click('Back to Module');
+  await browser.waitFor('!document.querySelector(".lc-detail") && document.body.textContent.includes("Failed")');
+  await browser.clickExpression(simulationButton);
+  await browser.waitFor('document.querySelector(".lc-simulation-result")?.textContent.includes("40%")');
+  for (const width of [1365, 375]) {
+    await browser.viewport(width);
+    assert.equal(await browser.evaluate('document.documentElement.scrollWidth<=innerWidth'), true);
+    await browser.screenshot('failed-simulation-retry-' + width);
+  }
+  await browser.click('Retry Simulation');
+  await browser.waitFor('window.fixture.launches.length === 2');
+  await browser.evaluate('window.fixture.login("instructor")');
+  await browser.waitFor('document.querySelector(".lc-retakes-toggle")?.getAttribute("aria-pressed") === "true"');
+  await browser.click('Allow retakes: On');
+  await browser.waitFor('document.querySelector(".lc-retakes-toggle")?.getAttribute("aria-pressed") === "false" && !document.querySelector(".lc-retakes-toggle").disabled');
+  assert.equal(fixture.records.learning_activities[activityId].allowRetakes, false);
+  await browser.screenshot('instructor-retakes-disabled');
+  await browser.evaluate('window.fixture.login("student")');
+  await browser.waitFor(`(${simulationButton}) && !(${simulationButton}).disabled`);
+  await browser.clickExpression(simulationButton);
+  await browser.waitFor('document.querySelector(".lc-detail .lm-primary")?.disabled === true');
+  assert.match(await browser.evaluate('document.querySelector(".lc-simulation-result").textContent'), /40%.*Retakes are disabled/s);
+  await browser.screenshot('student-retakes-disabled');
+  // Successful results remain readable even with retakes disabled.
+  fixture.records.mission_score.attempt.passed = true; fixture.records.mission_score.attempt.score = 85;
+  await browser.click('Back to Module');
+  await browser.waitFor('!document.querySelector(".lc-detail") && document.body.textContent.includes("Passed")');
+  await browser.clickExpression(simulationButton);
+  await browser.waitFor('document.querySelector(".lc-detail .lm-primary")?.textContent === "View Simulation Results"');
+  assert.equal(await browser.evaluate('document.querySelector(".lc-detail .lm-primary").disabled'), false);
   assert.deepEqual(browser.errors, []);
-  console.log('PASS: PDF upload required for authoring, failed PDF open keeps simulation locked, successful rendering unlocks it, per-module creation/editing/retry/quiz controls, correct student launch and mobile layouts.');
+  console.log('PASS: PDF prerequisites, module mission authoring, student launch, failed score/retry, instructor retake toggle, disabled student retry, passed-result access and mobile layouts.');
   console.log('Screenshots: ' + directory);
 } finally { browser?.close(); apiServer.closeAllConnections(); await new Promise(resolve => apiServer.close(resolve)); await vite.close(); }
