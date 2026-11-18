@@ -2584,6 +2584,7 @@
             </svg>
           </button>
           <button
+            v-if="isQuickSailMode"
             type="button"
             class="icon-btn"
             :class="{ 'icon-btn--storm': stormMode }"
@@ -2665,6 +2666,7 @@
           {{ gpsCoords.lat }}°N · {{ gpsCoords.lon }}°E
         </div>
         <button
+          v-if="isQuickSailMode"
           type="button"
           class="helm-weather-btn"
           :class="{ 'helm-weather-btn--active': stormMode }"
@@ -2673,7 +2675,7 @@
           {{ stormMode ? 'Stop rain' : 'Rain' }}
         </button>
       </div>
-      <p class="helm-bridge-hint">C — camera · R — rain · WASD — helm · mouse — look</p>
+      <p class="helm-bridge-hint">C — camera · <template v-if="isQuickSailMode">R — rain · </template>WASD — helm · mouse — look</p>
     </div>
 
     <div v-if="activeCoursePractical && !missionCompleteModal && !showPostDockingQuiz && ['SAVING_SIMULATION', 'MISSION_COMPLETED', 'QUIZ_CHECKING', 'QUIZ_LOOKUP_FAILED', 'SAVE_FAILED'].includes(courseCompletionState)" class="report-mission-overlay">
@@ -13505,7 +13507,8 @@ async function proceedWithAuthentication(user) {
 
 
 function toggleStormMode() {
-  if (activeScreen.value !== 'simulation') return;
+  // Mission weather is fixed by the instructor's difficulty setting.
+  if (activeScreen.value !== 'simulation' || !isQuickSailMode.value) return;
 
   stormMode.value = !stormMode.value;
   if (stormMode.value) {
@@ -15823,7 +15826,7 @@ function setupInputs() {
       toggleControlsGuide();
       return;
     }
-    // Rain / clear skies with R key
+    // Rain / clear skies with R key (Quick Sail only; guarded by toggleStormMode).
     if (event.code === 'KeyR' && !event.repeat) {
       toggleStormMode();
       return;

@@ -22,6 +22,7 @@ function simulation() {
     physics: { value: {} }, stats: { value: { state: 'NORMAL' } },
     selectedBoatType: { value: 'medium' }, activeBoatModelFile: { value: '' },
     activeMission: { value: null }, activeScreen: { value: 'simulation' },
+    isQuickSailMode: { value: true },
     stormMode: { value: false }, wind: { value: { speed: 0.1 } },
     simulationWeatherPreset: { value: 'day' },
     difficultyLevel: { value: 'Easy' }, trawlNetCapacity: { value: 30 },
@@ -129,26 +130,45 @@ test('changing vessel size leaves the same large ocean waves in Advanced weather
   }
 });
 
-test('clearing mission rain restores the selected boat waves and ocean animation', () => {
-  const { context, waves } = simulation();
-  context.chooseBoatAndSail('large');
-  const calm = waves();
-  context.activeMission.value = { difficulty: 'Advanced' };
-  context.applyLevelWeather({});
-  assert.ok(waves().amplitude >= RAIN_PHYSICS.waveAmplitude);
-  context.toggleStormMode();
-  assert.deepEqual(waves(), calm);
-});
+function weatherKeyboard(context) {
+  const handlers = new Map();
+  context.window = { addEventListener: (type, handler) => handlers.set(type, handler) };
+  for (const name of ['tutorialVisible', 'showPostDockingQuiz', 'courseCompletionPaused', 'exitFinalConfirmVisible', 'exitConfirmVisible', 'gearInfoPopup']) {
+    context[name] = { value: false };
+  }
+  vm.runInContext(appFunction('setupInputs'), context);
+  context.setupInputs();
+  return () => handlers.get('keydown')({ code: 'KeyR', key: 'r', repeat: false });
+}
+
+for (const difficulty of ['Beginner', 'Intermediate', 'Advanced']) {
+  test(`${difficulty} mission weather ignores R and direct weather-button calls`, () => {
+    const { context, waves } = simulation();
+    context.isQuickSailMode.value = false;
+    context.activeMission.value = { difficulty };
+    context.applyLevelWeather({});
+    const snapshot = () => JSON.stringify({ waves: waves(), wind: context.wind.value.speed,
+      preset: context.simulationWeatherPreset.value, environment: context.environmentPreset,
+      rain: context.rainActive, storm: context.stormMode.value, calm: context.calmWeatherSnapshot });
+    const before = snapshot(), pressR = weatherKeyboard(context);
+    for (let i = 0; i < 3; i++) {
+      pressR();
+      context.toggleStormMode();
+      assert.equal(snapshot(), before);
+    }
+  });
+}
 
 test('temporarily enabling rain restores Intermediate clouds, wind and waves when switched off', () => {
   const { context, waves } = simulation();
+  const pressR = weatherKeyboard(context);
   context.applyLevelWeather({ difficulty: ' intermediate ' });
   const before = waves();
   const windBefore = context.wind.value.speed;
-  context.toggleStormMode();
+  pressR();
   assert.equal(context.environmentPreset, 'rain');
   assert.equal(context.rainActive, true);
-  context.toggleStormMode();
+  pressR();
   assert.equal(context.environmentPreset, 'cloudy');
   assert.equal(context.rainActive, false);
   assert.equal(context.wind.value.speed, windBefore);
