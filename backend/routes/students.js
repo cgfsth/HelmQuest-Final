@@ -285,6 +285,7 @@ router.post('/login', async (req, res) => {
     // Find student by email
     const snapshot = await db.collection('students')
       .where('email', '==', email.toLowerCase())
+      .limit(1)
       .get();
     
     if (snapshot.empty) {
@@ -309,8 +310,11 @@ router.post('/login', async (req, res) => {
 
     // Return student data WITHOUT password
     const settings = await loadRankSettings();
-    const synchronized = await synchronizeStudentProgression(studentDoc.ref, settings);
-    const { password: _, ...studentWithoutPassword } = synchronized;
+    // Login only needs the profile already read for authentication. Progression
+    // writes belong to rewards/profile sync, not an extra login transaction.
+    const { password: _, ...studentWithoutPassword } = {
+      ...studentData, ...studentProgressionFields(studentData, settings)
+    };
     
     res.json({ 
       message: 'Login successful', 

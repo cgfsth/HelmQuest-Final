@@ -32,15 +32,15 @@ export function clearSession() {
   sessionEpoch++;
 }
 
-async function loginWithSession(endpoint, email, password) {
+async function loginWithSession(endpoint, email, password, options = {}) {
   clearSession();
-  const response = await apiFetch(endpoint, { method: 'POST', body: JSON.stringify({ email, password }) });
+  const response = await apiFetch(endpoint, { method: 'POST', body: JSON.stringify({ email, password }), timeoutMs: 20000, ...options });
   sessionToken = response.sessionToken || null;
   return response;
 }
 
-export async function loginDemo(email, password) {
-  return loginWithSession('/auth/demo-login', email, password);
+export async function loginDemo(email, password, options = {}) {
+  return loginWithSession('/auth/demo-login', email, password, options);
 }
 
 export function changePassword(currentPassword, newPassword, options = {}) {
@@ -340,8 +340,8 @@ export async function createStudent(studentData) {
  * @param {string} password - Plain text password
  * @returns {Promise} Resolves to student data or rejects with error
  */
-export async function loginStudent(email, password) {
-  return loginWithSession('/students/login', email, password);
+export async function loginStudent(email, password, options = {}) {
+  return loginWithSession('/students/login', email, password, options);
 }
 
 /**
@@ -381,8 +381,8 @@ export async function loginStudent(email, password) {
  *   console.error('Login failed:', error.message);
  * }
  */
-export async function loginInstructor(email, password) {
-  return loginWithSession('/auth/instructor-login', email, password);
+export async function loginInstructor(email, password, options = {}) {
+  return loginWithSession('/auth/instructor-login', email, password, options);
 }
 
 export async function getPendingStudents(instructorId = null) {
@@ -461,7 +461,7 @@ export async function updateMission(missionId, missionData) {
 
 export async function getAllMissions(moduleId = null) {
   const params = moduleId ? `?moduleId=${moduleId}` : '';
-  return apiFetch(`/missions${params}`);
+  return apiFetch(`/missions${params}`, { timeoutMs: 20000 });
 }
 
 export async function getMission(missionId) {

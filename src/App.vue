@@ -925,11 +925,15 @@
             </div>
           </div>
 
-          <div class="hub-sidebar-profile">
-            <div class="hub-sidebar-avatar">{{ (currentUser.name || 'I').charAt(0).toUpperCase() }}</div>
+          <button type="button" class="hub-sidebar-profile hub-sidebar-profile--settings"
+            :class="{ 'hub-sidebar-profile--active': instructorTab === 'settings' }"
+            :aria-current="instructorTab === 'settings' ? 'page' : undefined"
+            aria-label="Open account settings" @click="selectInstructorTab('settings')">
+            <span class="hub-sidebar-avatar">{{ (currentUser.name || 'I').charAt(0).toUpperCase() }}</span>
             <strong class="hub-sidebar-name">{{ currentUser.name }}</strong>
             <span class="hub-sidebar-rank">Instructor</span>
-          </div>
+            <span class="hub-sidebar-settings-hint"><Settings :size="13" aria-hidden="true" /> Settings</span>
+          </button>
 
           <nav class="hub-sidebar-nav" aria-label="Instructor sections">
             <button
@@ -977,6 +981,7 @@
               <span v-else-if="instructorTab === 'quizzes'">📝 Quiz Management</span>
               <span v-else-if="instructorTab === 'leaderboards'">🏆 Leaderboards</span>
               <span v-else-if="instructorTab === 'materials'">Syllabus Management</span>
+              <span v-else-if="instructorTab === 'settings'">Settings</span>
               <span v-else>Instructor Console</span>
             </h1>
             <p class="instructor-header-subtitle">
@@ -985,6 +990,7 @@
               <span v-else-if="instructorTab === 'quizzes'">Create and manage quizzes for mission assessments.</span>
               <span v-else-if="instructorTab === 'leaderboards'">View student rankings by performance and track class progress.</span>
               <span v-else-if="instructorTab === 'materials'">Manage syllabus documents and learning modules for your class.</span>
+              <span v-else-if="instructorTab === 'settings'">View your account details and manage your password.</span>
               <span v-else>Manage your courses and students.</span>
             </p>
           </div>
@@ -1000,6 +1006,8 @@
         </header>
 
         <LearningMaterials v-if="instructorTab === 'materials'" :key="currentUser.id" :current-user="currentUser" role="instructor" :prepare-access="prepareLearningMaterialsAccess" :mission-quiz-label="getQuizButtonText" :mission-quizzes-loading="missionQuizzesLoading" @create-mission="openCourseMissionCreator" @edit-mission="openCourseMissionEditor" @edit-mission-quiz="({ missionId, title }) => startCreatingQuiz(missionId, title)" />
+
+        <StudentSettings v-if="instructorTab === 'settings'" :key="currentUser.id" :current-user="currentUser" account-role="instructor" />
 
         <section v-show="instructorTab === 'overview'" class="instructor-overview" aria-label="Class overview">
           <div class="overview-toolbar">
@@ -2759,7 +2767,6 @@
           <ul class="mission-result-breakdown">
             <li v-for="(label, key) in missionCompleteModal.performanceMetrics ? (missionCompleteModal.performanceMetrics.objectiveCompletion != null ? { objectiveCompletion: 'Objective completion · 40%', taskAccuracy: 'Task accuracy · 40%', safetyCompliance: 'Safety compliance · 20%' } : { steeringPrecision: 'Steering Precision', courseAccuracy: 'Course Accuracy', dockingAccuracy: 'Docking Accuracy', timeEfficiency: 'Time Efficiency', safetyCompliance: 'Safety Compliance' }) : {}" :key="key"><span>{{ label }}</span><strong>{{ missionCompleteModal.performanceMetrics[key] == null ? 'Not assessed' : Math.round(missionCompleteModal.performanceMetrics[key] * 10) / 10 + '%' }}</strong></li>
             <li v-if="missionCompleteModal.criticalSafetyFailure"><span>Vessel collision</span><strong>Safety requirement not met</strong></li>
-            <li v-else-if="missionCompleteModal.requiredExerciseFailed"><span>Vessel exercise</span><strong>Incomplete or unsafe response · included in Safety Compliance</strong></li>
             <li v-if="missionCompleteModal.elapsedLabel">
               <span>Time</span>
               <strong>{{ missionCompleteModal.elapsedLabel }}</strong>
@@ -10037,15 +10044,15 @@ function refreshInstructorReviewAwards(studentId) {
   };
 }
 
-async function syncStudentMotivation() {
+async function syncStudentMotivation({ freshProfile = false } = {}) {
   const studentId = currentUser.value?.id;
   if (!studentId || userRole.value !== 'student') return;
-  await refreshCurrentUser();
+  if (!freshProfile) await refreshCurrentUser();
 
   // Fetch XP from Firestore API
   let xpData = { totalXp: 0, missionsCompleted: 0 };
   try {
-    const response = await fetch(`${API_BASE_URL}/mission-scores/student/${studentId}/total-xp`);
+    const response = await fetch(`${API_BASE_URL}/mission-scores/student/${studentId}/total-xp`, { signal: AbortSignal.timeout(20000) });
     if (response.ok) {
       xpData = await response.json();
     }
@@ -10072,7 +10079,7 @@ async function syncStudentMotivation() {
   demoStudent.value.xpNextAt = summary.xpNextAt;
 }
 
-async function applyStoredStudentProgress() {
+async function applyStoredStudentProgress(options = {}) {
   const studentId = currentUser.value.id;
   if (!studentId) return;
 
@@ -10080,7 +10087,7 @@ async function applyStoredStudentProgress() {
   trainingModules.value.forEach((module) => {
     module.completed = completedModuleIds.includes(module.id);
   });
-  await syncStudentMotivation();
+  await syncStudentMotivation(options);
 }
 
 function formatCertificateDate(isoDate) {
@@ -13308,7 +13315,9 @@ async function mockAuthenticate(event) {
           await tryStudentAuthenticationFallback(email, password);
         } else {
           console.error('Instructor login error:', error);
-          authError.value = error?.message?.includes('Failed to fetch')
+          authError.value = error?.name === 'TimeoutError'
+            ? 'The login server is taking too long to respond. Please try again.'
+            : error?.message?.includes('Failed to fetch')
             ? 'Login service is unavailable. Please start the backend server and try again.'
             : 'Invalid instructor credentials.';
         }
@@ -13323,7 +13332,9 @@ async function mockAuthenticate(event) {
 
     authError.value = 'Invalid email or password. Use one of the demo accounts below.';
   } catch (error) {
-    authError.value = error?.message || 'Login service is unavailable. Please try again.';
+    authError.value = error?.name === 'TimeoutError'
+      ? 'The login server is taking too long to respond. Please try again.'
+      : error?.message || 'Login service is unavailable. Please try again.';
   } finally {
     authSubmitting.value = false;
   }
@@ -13362,10 +13373,13 @@ async function tryStudentAuthenticationFallback(email, password) {
       rank: studentData.rank,
       rankId: studentData.rankId,
       badges: studentData.badges,
+      rankSettings: response.rankSettings,
     });
   } catch (error) {
     console.error('Student login error:', error);
-    authError.value = error?.message?.includes('Failed to fetch')
+    authError.value = error?.name === 'TimeoutError'
+      ? 'The login server is taking too long to respond. Please try again.'
+      : error?.message?.includes('Failed to fetch')
       ? 'Login service is unavailable. Please start the backend server and try again.'
       : 'Invalid email or password.';
   }
@@ -13439,6 +13453,9 @@ async function proceedWithAuthentication(user) {
     
     // Load user progress and preferences
     progressData.value = loadProgress();
+    if (user.rankSettings) {
+      progressData.value.courseSettings = { ...progressData.value.courseSettings, ...user.rankSettings };
+    }
     applySavedLevelCreator();
     if (user.role !== 'admin') await loadMissionDatesFromFirestore();
 
@@ -13450,7 +13467,8 @@ async function proceedWithAuthentication(user) {
 
     // Role-specific initialization
     if (user.role === 'student') {
-      await applyStoredStudentProgress();
+      // The login response already contains the current XP, rank and badges.
+      await applyStoredStudentProgress({ freshProfile: !!user.rankSettings });
     } else if (user.role === 'instructor') {
       refreshInstructorProgress();
       // Each instructor tab loads its own class-scoped data when it becomes visible.

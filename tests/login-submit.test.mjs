@@ -100,6 +100,17 @@ test('a failed attempt restores the button and a single retry succeeds', async (
   assert.equal(view.authError.value, '');
 });
 
+for (const role of ['student', 'instructor']) {
+  test(`${role}: server timeout releases Sign In and explains the server delay`, async () => {
+    const view = login({ role, api: async () => { throw Object.assign(new Error('Request timed out'), { name: 'TimeoutError' }); } });
+    await view.mockAuthenticate();
+    assert.equal(view.authSubmitting.value, false);
+    assert.equal(view.users.length, 0);
+    assert.match(view.authError.value, /server.*taking too long/);
+    assert.doesNotMatch(view.authError.value, /Invalid/);
+  });
+}
+
 test('autofilled values are taken from the form before the controls are disabled', async () => {
   const form = { elements: {} };
   const view = login({ FormData: class {
@@ -152,7 +163,7 @@ function handoff({ loadMissions = async () => {}, loadStudent = async () => {} }
     showCinematicLoading: ref(false), loadingHint: ref(''), isAuthenticated: ref(false),
     userRole: ref(null), currentUser: ref(null), progressData: ref({}), adminLoginMode: ref(false), hubTab: ref('missions'),
     loadProgress: () => ({}), applySavedLevelCreator() {}, loadMissionDatesFromFirestore: loadMissions,
-    applyStoredStudentProgress: async () => { calls.push('student-progress'); await loadStudent(); },
+    applyStoredStudentProgress: async options => { calls.push('student-progress'); await loadStudent(options); },
     syncStudentMotivation() { throw new Error('Student progress already syncs motivation; do not load it twice'); },
     refreshInstructorProgress() { calls.push('instructor-progress'); }, fetchInstructorRecentActivities() {},
     goToScreen: screen => screens.push(screen), showAchievement() {},
@@ -186,4 +197,14 @@ test('initialization failures release the loading overlay and return to a retrya
   assert.equal(view.currentUser.value, null);
   assert.deepEqual(view.screens, ['auth']);
   assert.deepEqual(view.calls, ['clear-session']);
+});
+
+test('login reuses the server profile and rank settings during dashboard initialization', async () => {
+  let options;
+  const view = handoff({ loadStudent: async value => { options = value; } });
+  const rankSettings = { ranks: [{ id: 'deck_cadet', minXp: 0 }] };
+  await view.proceed({ id: 's1', role: 'student', rankSettings });
+  assert.deepEqual(options, { freshProfile: true });
+  assert.deepEqual(view.progressData.value.courseSettings.ranks, rankSettings.ranks);
+  assert.deepEqual(view.screens, ['dashboard']);
 });

@@ -382,11 +382,12 @@ test('repeated mission retries preserve duplicate marker, XP and badges', async 
   expect(bucket('students').get('student').badges).toHaveLength(2);
 });
 
-test('login repairs persisted fields and retains state across sign out/sign in', async () => {
+test('login returns normalized progression without a transaction or profile write', async () => {
   bucket('students').set('student', {
     xp: 2000, total_xp: 2000, rank: 'Deck Hand', email: 'student@dnsc.edu.ph',
     password: await bcrypt.hash('password', 4), badges: ['Welcome Aboard', 'welcome-aboard']
   });
+  const transaction = jest.spyOn(db, 'runTransaction');
   for (let login = 0; login < 2; login++) {
     const response = await request(app).post('/students/login').send({ email: 'student@dnsc.edu.ph', password: 'password' }).expect(200);
     expect(response.body.student.rankId).toBe('bosun');
@@ -394,6 +395,9 @@ test('login repairs persisted fields and retains state across sign out/sign in',
     expect(response.body.student.badges).toHaveLength(4);
     expect(response.body.student).not.toHaveProperty('password');
   }
+  expect(transaction).not.toHaveBeenCalled();
+  expect(updates).toEqual([]);
+  transaction.mockRestore();
 });
 
 test('signup initializes Deck Cadet and Welcome Aboard without missions', async () => {

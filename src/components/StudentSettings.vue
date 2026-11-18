@@ -1,11 +1,11 @@
 <template>
-  <section class="student-settings" aria-label="Account and simulation settings">
+  <section class="student-settings" :aria-label="isInstructor ? 'Account settings' : 'Account and simulation settings'">
     <div class="ss-grid">
       <section class="ss-card" aria-labelledby="ss-account-heading">
-        <div class="ss-card-heading"><UserRound :size="21" aria-hidden="true" /><div><h2 id="ss-account-heading">Your account</h2><p>Your training profile and sign-in details.</p></div></div>
-        <div class="ss-identity"><span class="ss-avatar" aria-hidden="true">{{ (currentUser.name || 'S').charAt(0).toUpperCase() }}</span><div><strong>{{ currentUser.name }}</strong><span>{{ rank || 'Student' }}</span></div></div>
-        <dl class="ss-account-details"><div><dt>Email address</dt><dd>{{ currentUser.email || 'Not provided' }}</dd></div><div><dt>Student ID</dt><dd>{{ studentId || currentUser.studentId || 'Not provided' }}</dd></div><div><dt>Account type</dt><dd>Student</dd></div></dl>
-        <p class="ss-note">Contact your instructor to correct your name, email, or student ID.</p>
+        <div class="ss-card-heading"><UserRound :size="21" aria-hidden="true" /><div><h2 id="ss-account-heading">Your account</h2><p>Your profile and sign-in details.</p></div></div>
+        <div class="ss-identity"><span class="ss-avatar" aria-hidden="true">{{ (currentUser.name || (isInstructor ? 'I' : 'S')).charAt(0).toUpperCase() }}</span><div><strong>{{ currentUser.name }}</strong><span>{{ isInstructor ? 'Instructor' : (rank || 'Student') }}</span></div></div>
+        <dl class="ss-account-details"><div><dt>Email address</dt><dd>{{ currentUser.email || 'Not provided' }}</dd></div><div v-if="!isInstructor"><dt>Student ID</dt><dd>{{ studentId || currentUser.studentId || 'Not provided' }}</dd></div><div><dt>Account type</dt><dd>{{ isInstructor ? 'Instructor' : 'Student' }}</dd></div></dl>
+        <p class="ss-note">{{ isInstructor ? 'Contact your administrator to correct your name or email.' : 'Contact your instructor to correct your name, email, or student ID.' }}</p>
       </section>
       <section class="ss-card" aria-labelledby="ss-password-heading">
         <div class="ss-card-heading"><ShieldCheck :size="21" aria-hidden="true" /><div><h2 id="ss-password-heading">Change password</h2><p>Keep your HelmQuest account secure.</p></div></div>
@@ -25,7 +25,7 @@
         </form>
       </section>
     </div>
-    <section class="ss-card ss-preferences" aria-labelledby="ss-preferences-heading">
+    <section v-if="!isInstructor" class="ss-card ss-preferences" aria-labelledby="ss-preferences-heading">
       <div class="ss-card-heading"><SlidersHorizontal :size="21" aria-hidden="true" /><div><h2 id="ss-preferences-heading">Simulation preferences</h2><p>Changes apply automatically and are saved for your account on this browser.</p></div></div>
       <div class="ss-preference-grid">
         <label class="ss-setting" for="ss-volume"><span><strong>Music volume</strong><small>Set to 0 to mute background music.</small></span><span class="ss-volume"><input id="ss-volume" type="range" min="0" max="1" step="0.05" :value="preferences.soundVolume" @input="updatePreference('soundVolume', Number($event.target.value))" /><output for="ss-volume">{{ Math.round(preferences.soundVolume * 100) }}%</output></span></label>
@@ -45,8 +45,9 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { Check, Eye, EyeOff, LockKeyhole, RotateCcw, ShieldCheck, SlidersHorizontal, UserRound } from '@lucide/vue';
 import { changePassword } from '../api/firebaseApi.js';
-const props = defineProps({ currentUser: { type: Object, required: true }, studentId: String, rank: String, preferences: { type: Object, required: true }, storageNotice: String });
+const props = defineProps({ currentUser: { type: Object, required: true }, accountRole: { type: String, default: 'student' }, studentId: String, rank: String, preferences: { type: Object, default: () => ({}) }, storageNotice: String });
 const emit = defineEmits(['update:preferences', 'reset-preferences']);
+const isInstructor = computed(() => props.accountRole === 'instructor');
 const demoAccount = computed(() => props.currentUser.email?.toLowerCase().endsWith('@helmquest.local'));
 const currentPassword = ref(''), newPassword = ref(''), confirmation = ref('');
 const showPasswords = ref(false), saving = ref(false), passwordError = ref(''), passwordSuccess = ref('');
