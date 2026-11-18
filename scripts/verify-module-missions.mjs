@@ -113,6 +113,7 @@ try {
   await browser.waitFor(`!document.querySelector('.lm-reader') && (${simulationButton}) && !(${simulationButton}).disabled`);
   await browser.screenshot('simulation-unlocked-after-pdf-view');
   await browser.clickExpression(`[...document.querySelectorAll('.lc-activity-open')].find(button=>button.textContent.includes('Revised Docking Mission'))`);
+  await browser.waitFor('document.querySelector(".lc-detail .lm-primary")?.textContent === "Start Simulation" && !document.querySelector(".lc-detail .lm-primary").disabled');
   await browser.click('Start Simulation');
   await browser.waitFor('window.fixture.launches.length === 1');
   assert.deepEqual(await browser.evaluate('window.fixture.launches[0]'), { missionId, moduleId: secondModule, syllabusId });
@@ -126,6 +127,7 @@ try {
     assert.equal(await browser.evaluate('document.documentElement.scrollWidth<=innerWidth'), true);
     await browser.screenshot('failed-simulation-retry-' + width);
   }
+  await browser.waitFor('document.querySelector(".lc-detail .lm-primary")?.textContent === "Retry Simulation" && !document.querySelector(".lc-detail .lm-primary").disabled');
   await browser.click('Retry Simulation');
   await browser.waitFor('window.fixture.launches.length === 2');
   await browser.evaluate('window.fixture.login("instructor")');
@@ -137,7 +139,7 @@ try {
   await browser.evaluate('window.fixture.login("student")');
   await browser.waitFor(`(${simulationButton}) && !(${simulationButton}).disabled`);
   await browser.clickExpression(simulationButton);
-  await browser.waitFor('document.querySelector(".lc-detail .lm-primary")?.disabled === true');
+  await browser.waitFor('document.querySelector(".lc-simulation-result")?.textContent.includes("Retakes are disabled") && !document.querySelector(".lc-detail .lm-primary")');
   assert.match(await browser.evaluate('document.querySelector(".lc-simulation-result").textContent'), /40%.*Retakes are disabled/s);
   await browser.screenshot('student-retakes-disabled');
   // Successful results remain readable even with retakes disabled.

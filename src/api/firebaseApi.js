@@ -534,8 +534,8 @@ export async function updateCourseSettings(settings) {
  * @param {string} studentId - The student's ID
  * @returns {Promise<Object>} Response containing scores array and count
  */
-export async function getMissionScores(studentId) {
-  return apiFetch(`/mission-scores/${studentId}`);
+export async function getMissionScores(studentId, options = {}) {
+  return apiFetch(`/mission-scores/${studentId}`, { timeoutMs: 20000, ...options });
 }
 
 /**

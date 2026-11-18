@@ -137,6 +137,17 @@ test('invalid retake settings are rejected and existing simulations keep retakes
   expect((await f.course.course(student, syllabusId)).activities.find(a => a.id === id).allowRetakes).toBe(true);
 });
 
+test('entering a simulation counts as an attempt even before a result is submitted', async () => {
+  const { id } = await add({ type: 'simulation', targetId: 'mission', allowRetakes: false }, null);
+  await viewModulePdf(f, student, moduleId);
+  const path = `/learning-materials/activities/${id}/launch`;
+  await request(f.app).post(path).set(headers('sa', 'student')).expect(200);
+  expect((await f.course.course(student, syllabusId)).progress[id].simulation).toMatchObject({ attempted: true, score: null, passed: false, canRetry: false });
+  await request(f.app).post(path).set(headers('sa', 'student')).expect(403);
+  f.records.learning_activities[id].allowRetakes = true;
+  await request(f.app).post(path).set(headers('sa', 'student')).expect(200);
+});
+
 test('reordering course content preserves viewed documents; replacing a file requires a new view', async () => {
   const { id } = await add(), second = await add({ title: 'More reading' });
   const initial = await f.course.course(student, syllabusId);

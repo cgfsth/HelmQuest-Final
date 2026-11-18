@@ -10,13 +10,14 @@
       <p><strong>{{ activityDetail.type === 'simulation' ? 'Assigned mission:' : 'Assigned quiz:' }}</strong> {{ linkedTitle(activityDetail) }}</p>
       <p v-if="activityDetail.completionRule === 'pass'">{{ activityDetail.passScore != null ? 'Required score: ' + activityDetail.passScore + '%' : 'Meet the linked activity’s passing requirements.' }}</p>
       <div v-if="!manager && !preview && activityDetail.type === 'simulation' && currentSimulationAttempt.attempted" class="lc-simulation-result" :class="currentSimulationAttempt.passed ? 'lc-simulation-result--passed' : 'lc-simulation-result--failed'" role="status">
-        <strong>{{ currentSimulationAttempt.passed ? 'Passed' : 'Failed' }} · Score: {{ currentSimulationAttempt.score == null ? 'Not recorded' : currentSimulationAttempt.score + '%' }}</strong>
+        <strong>{{ currentSimulationAttempt.passed ? 'Passed' : currentSimulationAttempt.score == null ? 'Attempt started' : 'Failed' }} · Score: {{ currentSimulationAttempt.score == null ? 'Not recorded' : currentSimulationAttempt.score + '%' }}</strong>
         <p v-if="!currentSimulationAttempt.passed">{{ activityDetail.allowRetakes === false ? 'Retakes are disabled. Ask your instructor to allow a retake.' : 'You can retry this simulation to improve your score.' }}</p>
       </div>
-      <p v-if="error" class="lm-alert lm-error" role="alert">{{ error }}</p>
+      <p v-if="error" class="lm-alert lm-error" role="alert">{{ error }} <button v-if="activityDetail.type === 'simulation' && !simulationAttemptReady" type="button" :disabled="loading" @click="openActivity(activityDetail)">Refresh result</button></p>
+      <p v-if="!manager && !preview && activityDetail.type === 'simulation' && loading" role="status">Checking your saved simulation attempt…</p>
       <p v-if="!manager && !preview && activityDetail.type === 'simulation' && !currentSimulationAccess.canStart" class="lm-alert" role="status">{{ currentSimulationAccess.message }}</p>
       <p v-if="preview || manager" class="lc-preview-note">Student preview. Use a student account to start this activity and record progress.</p>
-      <button v-else type="button" class="lm-primary" :disabled="busy || (activityDetail.type === 'simulation' && !currentSimulationAccess.canStart)" @click="startActivity">{{ busy ? 'Opening…' : activityDetail.type === 'simulation' ? simulationActionLabel : courseProgress[activityDetail.id]?.status === 'Done' ? 'View Quiz Results' : 'Start Quiz' }}</button>
+      <button v-else-if="showActivityAction" type="button" class="lm-primary" :disabled="busy || loading || (activityDetail.type === 'simulation' && !currentSimulationAccess.canStart)" @click="startActivity">{{ busy ? 'Opening…' : activityDetail.type === 'simulation' ? simulationActionLabel : courseProgress[activityDetail.id]?.status === 'Done' ? 'View Quiz Results' : 'Start Quiz' }}</button>
     </section>
     <template v-else>
       <div class="lm-toolbar" :class="{ 'lc-course-toolbar': selected }">
@@ -98,6 +99,7 @@ import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, ChevronRight, Eye, FileText, F
 import * as api from '../../api/firebaseApi.js';
 import CourseOutline from './CourseOutline.vue';
 import { OFFICIAL_SYLLABUS, OFFICIAL_SYLLABUS_KEY, PRACTICAL_ALIGNMENT } from '../../../shared/officialSyllabus.js';
+import { simulationAttempt, simulationResultsForActivity } from '../../../shared/simulationAttempts.js';
 import './materials.css';
 import './course.css';
 const PdfDocumentViewer = defineAsyncComponent(() => import('./PdfDocumentViewer.vue'));
@@ -107,8 +109,11 @@ const manager = computed(() => ['instructor', 'admin'].includes(props.role));
 const syllabi = ref([]), modules = ref([]), instructors = ref([]), selected = ref(null), document = ref(null);
 const activities = ref([]), courseProgress = ref({}), catalog = ref({ missions: [], quizzes: [] }), preview = ref(false), activityDetail = ref(null);
 const simulationAccess = ref({});
+const simulationAttemptReady = ref(false);
 const currentSimulationAttempt = computed(() => courseProgress.value[activityDetail.value?.id]?.simulation || { attempted: false, passed: false, score: null });
 const simulationActionLabel = computed(() => currentSimulationAttempt.value.passed ? 'View Simulation Results' : currentSimulationAttempt.value.attempted ? 'Retry Simulation' : 'Start Simulation');
+const showActivityAction = computed(() => activityDetail.value?.type !== 'simulation' || (simulationAttemptReady.value
+  && (!currentSimulationAttempt.value.attempted || currentSimulationAttempt.value.passed || activityDetail.value.allowRetakes !== false)));
 const currentSimulationAccess = computed(() => {
   const access = simulationAccess.value[activityDetail.value?.moduleId] || { canStart: false, message: 'View the PDF lessons in this module before starting the simulation. Refresh the course to check your reading progress.' };
   if (!access.canStart) return access;
@@ -120,9 +125,9 @@ const loading = ref(false), busy = ref(false), ready = ref(false), error = ref('
 const search = ref(''), filter = ref(''), editor = ref(null), removal = ref(null), modal = ref(null), modalError = ref('');
 const form = ref({}), file = ref(null), progress = ref(0);
 const visibleSyllabi = computed(() => syllabi.value.filter(item => (!filter.value || item.instructorId === filter.value) && item.title.toLowerCase().includes(search.value.toLowerCase())));
-let controller, mutation, viewRecording, generation = 0, identity = 0, focusReturn, previousOverflow;
+let controller, mutation, viewRecording, generation = 0, identity = 0, activityOpenRequest = 0, focusReturn, previousOverflow;
 const size = value => value ? value < 1048576 ? Math.ceil(value / 1024) + ' KB' : (value / 1048576).toFixed(1) + ' MB' : '';
-async function load(id = null) {
+async function load(id = null, { withSimulationScores = false } = {}) {
   controller?.abort(); controller = new AbortController();
   const signal = controller.signal, ticket = ++generation;
   loading.value = true; error.value = '';
@@ -134,12 +139,26 @@ async function load(id = null) {
       if (ticket !== generation || signal.aborted) return;
       instructors.value = choices;
     }
-    const result = id ? await api.getLearningCourse(id, { signal }) : await api.listLearningSyllabi({ signal });
+    const [result, savedScores] = await Promise.all([
+      id ? api.getLearningCourse(id, { signal }) : api.listLearningSyllabi({ signal }),
+      id && withSimulationScores && !manager.value ? api.getMissionScores(props.currentUser.id, { signal }) : null
+    ]);
     if (ticket !== generation || signal.aborted) return;
+    if (savedScores) {
+      result.progress ||= {};
+      for (const activity of result.activities.filter(item => item.type === 'simulation')) {
+        const state = result.progress[activity.id] ||= {};
+        const scores = (savedScores.scores || []).filter(score => !score.studentId || score.studentId === props.currentUser.id);
+        const { result: savedResult, ...attempt } = simulationAttempt(simulationResultsForActivity(scores, activity), activity.allowRetakes,
+          state.simulation?.attempted || state.status === 'In Progress' || state.status === 'Done');
+        state.simulation = attempt;
+      }
+    }
     if (id) { selected.value = result.syllabus; modules.value = result.modules; activities.value = result.activities; courseProgress.value = result.progress; simulationAccess.value = result.simulationAccess || {}; official.value = result.official || null; catalog.value = result.catalog || { missions: [], quizzes: [] }; if (!result.modules.some(m => m.id === lessonId.value)) lessonId.value = ''; emit('navigate-course', { syllabusId: id, lessonId: lessonId.value }); }
     else { selected.value = null; syllabi.value = result.syllabi; }
     cleanupPending.value = !!result.cleanupPending || !!result.syllabus?.cleanupPending;
     ready.value = true;
+    return result;
   } catch (err) { if (ticket === generation && !signal.aborted) error.value = err.message || 'Unable to load materials.'; }
   finally { if (ticket === generation) loading.value = false; }
 }
@@ -165,10 +184,20 @@ function editModuleMission(item) {
   const context = missionContext(item.moduleId, item);
   if (context) emit('edit-mission', context);
 }
-function openActivity(item) {
+async function openActivity(item) {
   error.value = '';
   if (item.moduleId) selectLesson(item.moduleId);
-  if (['simulation', 'quiz'].includes(item.type)) { activityDetail.value = item; return; }
+  if (['simulation', 'quiz'].includes(item.type)) {
+    activityDetail.value = item; simulationAttemptReady.value = false;
+    if (item.type !== 'simulation' || manager.value || preview.value) return;
+    const request = ++activityOpenRequest, ticket = identity;
+    const fresh = await load(selected.value?.id, { withSimulationScores: true });
+    if (ticket !== identity || request !== activityOpenRequest || activityDetail.value?.id !== item.id) return;
+    const activity = fresh?.activities.find(activity => activity.id === item.id);
+    if (!activity) { if (!error.value) error.value = 'Unable to check this simulation. Refresh the result before starting.'; return; }
+    activityDetail.value = activity; simulationAttemptReady.value = true;
+    return;
+  }
   document.value = { kind: item.legacy ? item.kind : 'activity', id: item.documentId || item.id, title: item.title, objectives: item.objectives || '', presentation: item.type === 'presentation', revision: item.revision, documentVersion: item.documentVersion };
 }
 async function closeReader() {
@@ -188,6 +217,7 @@ async function documentViewed() {
 const linkedTitle = item => (item.type === 'simulation' ? catalog.value.missions : catalog.value.quizzes).find(target => target.id === item.targetId)?.title || item.targetTitle || item.title;
 async function startActivity() {
   if (busy.value || manager.value || preview.value) return;
+  if (activityDetail.value?.type === 'simulation' && !simulationAttemptReady.value) return;
   if (activityDetail.value?.type === 'simulation' && !currentSimulationAccess.value.canStart) { error.value = currentSimulationAccess.value.message; return; }
   const item = activityDetail.value, ticket = identity, operation = mutation = new AbortController();
   busy.value = true; error.value = '';

@@ -60,6 +60,10 @@ export function materialsFixture({ middleware, bucketOverride, convert, saveQuiz
   const service = createLearningMaterialsService({ db, bucket: () => bucketOverride || bucket, timestamp: () => { state.timestamps++; return new Date('2026-11-10T00:00:00Z'); } });
   const course = createCourseActivitiesService({ db, bucket: () => bucketOverride || bucket, timestamp: () => new Date('2026-11-12T00:00:00Z'), materials: service, convert, saveQuizResult, saveMissionResult });
   const app = express(); app.use(express.json()); if (middleware) app.use(middleware); app.use('/learning-materials', createLearningMaterialsRouter({ service, course, authenticate: createMaterialsAccess({ db }) }));
+  app.get('/mission-scores/:studentId', (req, res) => {
+    const scores = Object.entries(records.mission_score || {}).filter(([, score]) => score.studentId === req.params.studentId).map(([id, score]) => ({ ...score, id }));
+    res.json({ scores, count: scores.length });
+  });
   return { app, service, course, db, bucket, records, files, events, state };
 }
 

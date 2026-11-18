@@ -118,6 +118,7 @@ test('client-side authoring and launch handlers cannot bypass missing PDF prereq
   authoring.createModuleMission('first');
   assert.equal(emitted.length, 0); assert.match(authoring.error.value, /Upload a PDF/);
   const student = { busy: Vue.ref(false), manager: Vue.ref(false), preview: Vue.ref(false), activityDetail: Vue.ref({ type: 'simulation' }),
+    simulationAttemptReady: Vue.ref(true),
     currentSimulationAccess: Vue.ref({ canStart: false, message: 'View the module PDF first.' }), error: Vue.ref(''), api: { launchLearningActivity: () => apiCalls.push(true) } };
   vm.createContext(student); vm.runInContext(extract(materials, 'startActivity'), student);
   await student.startActivity();

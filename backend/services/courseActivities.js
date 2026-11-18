@@ -7,6 +7,7 @@ import { OFFICIAL_SYLLABUS, OFFICIAL_SYLLABUS_KEY } from '../../shared/officialS
 import { simulationPerformance, validDockingCompletion, completedSimulationScores } from '../../shared/simulationPerformance.js';
 import { normalizeEncounter, normalizeEncounterAttempt } from '../../shared/vesselEncounter.js';
 import { selectMissionQuiz, gradeMissionQuiz } from '../../shared/missionQuiz.js';
+import { simulationAttempt } from '../../shared/simulationAttempts.js';
 
 const fail = (status, message) => { throw new MaterialsError(status, message); };
 const validId = id => typeof id === 'string' && /^[\w-]{1,128}$/.test(id);
@@ -24,17 +25,6 @@ const summary = doc => {
     passScore: d.passScore, targetId: d.targetId, targetTitle: d.targetTitle, allowRetakes: d.allowRetakes !== false, quizPolicy: d.quizPolicy || 'inherit', quizId: d.quizId || '', availableFrom: d.availableFrom, availableUntil: d.availableUntil,
     fileName: d.fileName, sourceFileName: d.sourceFileName, documentVersion: documentVersion(d), revision: d.revision, updatedAt: date(d.updatedAt) };
 };
-
-// A passed result stays authoritative; otherwise show the most recent attempt.
-export function simulationAttempt(results = [], allowRetakes = true) {
-  const time = value => { const parsed = Date.parse(date(value) || ''); return Number.isFinite(parsed) ? parsed : 0; };
-  const ordered = [...results].sort((a, b) => Number(hasMissionCompletion(b)) - Number(hasMissionCompletion(a))
-    || time(b.completedAt || b.updatedAt || b.createdAt) - time(a.completedAt || a.updatedAt || a.createdAt)
-    || String(a.id || '').localeCompare(String(b.id || '')));
-  const result = ordered[0] || null, passed = !!result && hasMissionCompletion(result);
-  const score = result?.score != null && Number.isFinite(Number(result.score)) ? Number(result.score) : null;
-  return { result, attempted: !!result, score, passed, canRetry: !!result && !passed && allowRetakes !== false };
-}
 
 function retakesSetting(value, previous = true) {
   if (value === undefined) return previous !== false;
@@ -130,7 +120,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
         progress[a.id] = activityCompletion(a, { viewed: !!state.viewedAt && state.documentVersion === a.documentVersion, started: !!state.startedAt,
           results });
         if (a.type === 'simulation') {
-          const { result, ...attempt } = simulationAttempt(results, a.allowRetakes);
+          const { result, ...attempt } = simulationAttempt(results, a.allowRetakes, !!state.startedAt);
           progress[a.id].simulation = attempt;
         }
       }
@@ -340,7 +330,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
         if (!access.canStart) fail(403, access.message);
         if (body.event === 'started' && fresh.allowRetakes === false) {
           const scores = await tx.get(col('mission_score').where('studentId', '==', user.id));
-          const attempt = simulationAttempt(scores.docs.map(doc => doc.data()).filter(r => canonicalMissionId(r.missionId) === canonicalMissionId(fresh.targetId)), false);
+          const attempt = simulationAttempt(scores.docs.map(doc => doc.data()).filter(r => canonicalMissionId(r.missionId) === canonicalMissionId(fresh.targetId)), false, !!previous.data()?.startedAt);
           if (attempt.attempted && !attempt.passed) fail(403, 'Retakes are disabled for this simulation. Ask your instructor to allow a retake.');
         }
       }
