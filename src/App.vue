@@ -10052,16 +10052,20 @@ async function syncStudentMotivation({ freshProfile = false } = {}) {
   if (!studentId || userRole.value !== 'student') return;
   if (!freshProfile) await refreshCurrentUser();
 
-  // Fetch XP from Firestore API
-  let xpData = { totalXp: 0, missionsCompleted: 0 };
-  try {
-    const response = await fetch(`${API_BASE_URL}/mission-scores/student/${studentId}/total-xp`, { signal: AbortSignal.timeout(20000) });
-    if (response.ok) {
-      xpData = await response.json();
+  // The verified login profile already includes XP and completed missions.
+  // Later refreshes can reconcile the full score history in the background.
+  let xpData = { missionsCompleted: Number(currentUser.value?.completed || 0) };
+  if (!freshProfile) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/mission-scores/student/${studentId}/total-xp`, { signal: AbortSignal.timeout(20000) });
+      if (response.ok) {
+        xpData = await response.json();
+      }
+    } catch (error) {
+      console.warn('Failed to fetch XP from API:', error);
     }
-  } catch (error) {
-    console.warn('Failed to fetch XP from API:', error);
   }
+  if (currentUser.value?.id !== studentId || userRole.value !== 'student') return;
 
   const summary = getStudentMotivationSummary(
     studentId,
@@ -13044,6 +13048,7 @@ function syncUiCursor(screen = activeScreen.value) {
 }
 
 function goToScreen(screen) {
+  if (screen === 'auth') void firebaseApi.warmLoginService();
   if (screen === 'dashboard' && !isAuthenticated.value) {
     screen = 'auth';
   }
@@ -13322,7 +13327,7 @@ async function mockAuthenticate(event) {
         } else {
           console.error('Instructor login error:', error);
           authError.value = error?.name === 'TimeoutError'
-            ? 'The login server is taking too long to respond. Please try again.'
+            ? 'Unable to connect. Please try again.'
             : error?.message?.includes('Failed to fetch')
             ? 'Login service is unavailable. Please start the backend server and try again.'
             : 'Invalid instructor credentials.';
@@ -13339,7 +13344,7 @@ async function mockAuthenticate(event) {
     authError.value = 'Invalid email or password. Use one of the demo accounts below.';
   } catch (error) {
     authError.value = error?.name === 'TimeoutError'
-      ? 'The login server is taking too long to respond. Please try again.'
+      ? 'Unable to connect. Please try again.'
       : error?.message || 'Login service is unavailable. Please try again.';
   } finally {
     authSubmitting.value = false;
@@ -13379,12 +13384,13 @@ async function tryStudentAuthenticationFallback(email, password) {
       rank: studentData.rank,
       rankId: studentData.rankId,
       badges: studentData.badges,
+      completed: studentData.completed,
       rankSettings: response.rankSettings,
     });
   } catch (error) {
     console.error('Student login error:', error);
     authError.value = error?.name === 'TimeoutError'
-      ? 'The login server is taking too long to respond. Please try again.'
+      ? 'Unable to connect. Please try again.'
       : error?.message?.includes('Failed to fetch')
       ? 'Login service is unavailable. Please start the backend server and try again.'
       : 'Invalid email or password.';
@@ -13454,7 +13460,8 @@ async function proceedWithAuthentication(user) {
       total_xp: user.total_xp,
       rank: user.rank,
       rankId: user.rankId,
-      badges: user.badges
+      badges: user.badges,
+      completed: user.completed
     };
     
     // Load user progress and preferences
@@ -13463,7 +13470,7 @@ async function proceedWithAuthentication(user) {
       progressData.value.courseSettings = { ...progressData.value.courseSettings, ...user.rankSettings };
     }
     applySavedLevelCreator();
-    if (user.role !== 'admin') await loadMissionDatesFromFirestore();
+    // The dashboard watcher loads the catalog and records once the view opens.
 
     // Reset login mode flags
     adminLoginMode.value = false;
@@ -13476,7 +13483,6 @@ async function proceedWithAuthentication(user) {
       // The login response already contains the current XP, rank and badges.
       await applyStoredStudentProgress({ freshProfile: !!user.rankSettings });
     } else if (user.role === 'instructor') {
-      refreshInstructorProgress();
       // Each instructor tab loads its own class-scoped data when it becomes visible.
       if (user.role === 'instructor') {
         // Fetch instructor's recent activities on login

@@ -22,8 +22,8 @@
  * - Production: VITE_API_BASE_URL set on the frontend host
  */
 
-export const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL || 'http://localhost:3001/api/v1')
-  .trim().replace(/\/+$/, '');
+import { API_BASE_URL, loginTimeoutMs } from './loginConnection.js';
+export { API_BASE_URL, warmLoginService } from './loginConnection.js';
 let sessionToken = null;
 let sessionEpoch = 0;
 
@@ -34,7 +34,7 @@ export function clearSession() {
 
 async function loginWithSession(endpoint, email, password, options = {}) {
   clearSession();
-  const response = await apiFetch(endpoint, { method: 'POST', body: JSON.stringify({ email, password }), timeoutMs: 20000, ...options });
+  const response = await apiFetch(endpoint, { method: 'POST', body: JSON.stringify({ email, password }), timeoutMs: loginTimeoutMs, ...options });
   sessionToken = response.sessionToken || null;
   return response;
 }

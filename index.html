@@ -5,6 +5,19 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>HelmQuest</title>
+    <script>
+      // Wake the API while the simulation bundle is still downloading.
+      (() => {
+        try {
+          const api = new URL('%VITE_API_BASE_URL%');
+          if (api.hostname.endsWith('.onrender.com')) {
+            fetch(new URL('/health', api), {
+              cache: 'no-store', credentials: 'omit', signal: AbortSignal.timeout(90000)
+            }).catch(() => {});
+          }
+        } catch { /* Local development does not need a server wakeup. */ }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

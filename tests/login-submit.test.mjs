@@ -101,12 +101,13 @@ test('a failed attempt restores the button and a single retry succeeds', async (
 });
 
 for (const role of ['student', 'instructor']) {
-  test(`${role}: server timeout releases Sign In and explains the server delay`, async () => {
+  test(`${role}: an unavailable server releases Sign In without reporting invalid credentials`, async () => {
     const view = login({ role, api: async () => { throw Object.assign(new Error('Request timed out'), { name: 'TimeoutError' }); } });
     await view.mockAuthenticate();
     assert.equal(view.authSubmitting.value, false);
     assert.equal(view.users.length, 0);
-    assert.match(view.authError.value, /server.*taking too long/);
+    assert.match(view.authError.value, /Unable to connect/);
+    assert.doesNotMatch(view.authError.value, /taking too long/);
     assert.doesNotMatch(view.authError.value, /Invalid/);
   });
 }
@@ -174,13 +175,13 @@ function handoff({ loadMissions = async () => {}, loadStudent = async () => {} }
   return { ...dependencies, proceed, screens, calls };
 }
 
-test('dashboard loading remains visible through initialization with no timed delay or duplicate student sync', async () => {
-  const missions = deferred(), student = deferred();
-  const view = handoff({ loadMissions: () => missions.promise, loadStudent: () => student.promise });
+test('login opens the dashboard without waiting for the mission catalog or duplicating student sync', async () => {
+  const student = deferred();
+  const view = handoff({ loadMissions: () => assert.fail('The dashboard watcher loads missions'), loadStudent: () => student.promise });
   const pending = view.proceed({ id: 's1', role: 'student', status: 'active' });
   assert.equal(view.showCinematicLoading.value, true);
   assert.deepEqual(view.screens, []);
-  missions.resolve(); await tick();
+  await tick();
   assert.equal(view.showCinematicLoading.value, true);
   assert.deepEqual(view.calls, ['student-progress']);
   student.resolve(); await pending;
@@ -190,13 +191,13 @@ test('dashboard loading remains visible through initialization with no timed del
 });
 
 test('initialization failures release the loading overlay and return to a retryable login', async () => {
-  const view = handoff({ loadMissions: async () => { throw new Error('dashboard failed'); } });
+  const view = handoff({ loadStudent: async () => { throw new Error('dashboard failed'); } });
   await assert.rejects(view.proceed({ id: 's1', role: 'student' }), /dashboard failed/);
   assert.equal(view.showCinematicLoading.value, false);
   assert.equal(view.isAuthenticated.value, false);
   assert.equal(view.currentUser.value, null);
   assert.deepEqual(view.screens, ['auth']);
-  assert.deepEqual(view.calls, ['clear-session']);
+  assert.deepEqual(view.calls, ['student-progress', 'clear-session']);
 });
 
 test('login reuses the server profile and rank settings during dashboard initialization', async () => {
@@ -207,4 +208,26 @@ test('login reuses the server profile and rank settings during dashboard initial
   assert.deepEqual(options, { freshProfile: true });
   assert.deepEqual(view.progressData.value.courseSettings.ranks, rankSettings.ranks);
   assert.deepEqual(view.screens, ['dashboard']);
+});
+
+test('a verified student profile initializes the overview without any extra network requests', async () => {
+  const dependencies = {
+    currentUser: ref({ id: 's1', name: 'Cadet', completed: 4, xp: 500 }), userRole: ref('student'),
+    progressData: ref({}), navigationMissions: [], totalXP: ref(500), demoStudent: ref({}),
+    refreshCurrentUser: () => assert.fail('The server already verified the profile'),
+    fetch: () => assert.fail('XP history must not hold up login'),
+    getStudentMotivationSummary: () => ({ xp: 500, rank: 'Ordinary Seaman', badgesEarned: 1 }),
+  };
+  const sync = new Function(...Object.keys(dependencies), `${actualFunction('syncStudentMotivation')}; return syncStudentMotivation;`)(...Object.values(dependencies));
+  await sync({ freshProfile: true });
+  assert.equal(dependencies.demoStudent.value.name, 'Cadet');
+  assert.equal(dependencies.demoStudent.value.xp, 500);
+  assert.equal(dependencies.demoStudent.value.completed, 4);
+});
+
+test('instructor login leaves catalog loading to the dashboard and does not fetch it twice', async () => {
+  const view = handoff({ loadMissions: () => assert.fail('The dashboard loads its own catalog') });
+  await view.proceed({ id: 'i1', role: 'instructor' });
+  assert.deepEqual(view.screens, ['dashboard']);
+  assert.deepEqual(view.calls, []);
 });
