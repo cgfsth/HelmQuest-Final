@@ -5,6 +5,7 @@ import * as Vue from 'vue';
 import { compile } from '@vue/compiler-dom';
 import { renderToString } from '@vue/server-renderer';
 import { restoreSavedMissionResults, getLatestMissionResult } from '../src/helpers/progressStore.js';
+import { uniqueTrainingRecords, trainingRecordDate } from '../shared/trainingRecords.js';
 
 const source = readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const stateStart = source.indexOf('// Firestore Training Records Data');
@@ -24,7 +25,7 @@ const module = { id: mission.moduleId, title: mission.title, difficulty: 'Beginn
 function page(api) {
   const dependencies = { ref: Vue.ref, watch: Vue.watch, currentUser: Vue.ref({ id: 'student' }),
     userRole: Vue.ref('student'), activeScreen: Vue.ref('landing'), window: { firebaseApi: api },
-    restoreSavedMissionResults, progressData: Vue.ref({ sessions: [], completedModules: {} }),
+    restoreSavedMissionResults, uniqueTrainingRecords, progressData: Vue.ref({ sessions: [], completedModules: {} }),
     getLatestMissionResult, getMissionsForModule: () => [mission], trainingModules: Vue.ref([module]),
     isMissionLocked: () => false,
     console: { error() {} } };
@@ -41,6 +42,38 @@ function page(api) {
 }
 const quiz = { id: 'saved', quizTitle: 'Saved quiz', 'Quiz-score-percentage': 0, 'raw-score': 0,
   score: 100, correctCount: 9, totalQuestions: 10, submittedAt: '2026-10-06T13:49:23.474Z' };
+
+test('actual mission and quiz tables render one row per activity across repeated refreshes', async () => {
+  const scores = [
+    { id: 'failed', studentId: 'student', missionId: mission.id, missionTitle: 'Saved mission', score: 40, passed: false, completedAt: '2026-11-21' },
+    { id: 'passed', studentId: 'student', missionId: module.id, missionTitle: 'Saved mission', score: 80, passed: true, completedAt: '2026-11-20' },
+  ];
+  const quizzes = [
+    { ...quiz, id: 'older', quizId: 'q1', submittedAt: '2026-10-01' },
+    { ...quiz, quizId: 'q1' },
+  ];
+  const view = page({ getMissionScores: async () => ({ scores }), getQuizScores: async () => ({ scores: quizzes }) });
+  try {
+    for (let refresh = 0; refresh < 3; refresh++) {
+      await view.fetchStudentTrainingRecords();
+      assert.deepEqual(view.firestoreMissionScores.value.map(record => record.id), ['passed']);
+      assert.deepEqual(view.firestoreQuizSubmissions.value.map(record => record.id), ['saved']);
+      assert.equal(((await view.recordsHtml()).match(/class="table-row"/g) || []).length, 1);
+      assert.equal(((await view.html()).match(/class="table-row"/g) || []).length, 1);
+      assert.match(await view.recordsHtml(), /80%/);
+      assert.match(await view.html(), /0\/10/);
+    }
+  } finally { view.scope.stop(); }
+});
+
+test('the displayed date accepts JSON Firestore timestamps and never renders Invalid Date', () => {
+  const start = source.indexOf('function formatCertificateDate(');
+  const end = source.indexOf('\n}', start) + 2;
+  const format = new Function('trainingRecordDate', `${source.slice(start, end)}; return formatCertificateDate;`)(trainingRecordDate);
+  assert.equal(format({ _seconds: 1795219200 }), format('2026-11-21T00:00:00Z'));
+  assert.equal(format('bad date'), 'Date unavailable');
+  assert.equal(format(null), '');
+});
 
 test('actual quiz panel loads saved results and preserves a zero score and correct count', async () => {
   const view = page({ getMissionScores: async () => ({ scores: [] }), getQuizScores: async () => ({ scores: [quiz] }) });
@@ -138,7 +171,7 @@ test('a fresh browser retains the saved mission result in Training Records after
     await view.fetchStudentTrainingRecords();
     const html = await view.recordsHtml();
     assert.match(html, /80%/);
-    assert.match(html, /2026-10-05T04:55:20Z/);
+    assert.match(html, /2026-10-05T04:55:20.000Z/);
     assert.doesNotMatch(html, />\s*Start/);
     assert.deepEqual(view.progressData.value.completedModules.student, [module.id]);
   } finally { view.scope.stop(); }

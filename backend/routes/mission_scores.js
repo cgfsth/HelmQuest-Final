@@ -6,6 +6,7 @@ import { canonicalMissionId, readMissionReward } from '../services/missionReward
 import { loadRankSettings, synchronizeStudentProgression } from '../services/progression.js';
 import { simulationPerformance, validDockingCompletion, completedSimulationScores } from '../../shared/simulationPerformance.js';
 import { normalizeEncounter, normalizeEncounterAttempt } from '../../shared/vesselEncounter.js';
+import { uniqueTrainingRecords } from '../../shared/trainingRecords.js';
 
 const router = express.Router();
 
@@ -55,17 +56,7 @@ router.get('/:studentId', async (req, res) => {
       .where('studentId', '==', studentId)
       .get();
     
-    const scores = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    scores.sort((a, b) => {
-      const getTime = (value) => {
-        if (value?.toMillis) return value.toMillis();
-        if (value?.toDate) return value.toDate().getTime();
-        const time = new Date(value).getTime();
-        return Number.isNaN(time) ? 0 : time;
-      };
-
-      return getTime(b.completedAt) - getTime(a.completedAt);
-    });
+    const scores = uniqueTrainingRecords(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })), 'mission');
     
     res.json({ scores, count: scores.length });
   } catch (error) {

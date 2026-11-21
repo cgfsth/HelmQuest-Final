@@ -2,6 +2,7 @@
 import express from 'express';
 import { db } from '../config/firebase-admin.js';
 import { saveQuizResult } from '../services/scorePersistence.js';
+import { uniqueTrainingRecords } from '../../shared/trainingRecords.js';
 
 const router = express.Router();
 
@@ -98,19 +99,8 @@ router.get('/:studentId', async (req, res) => {
       .where('studentId', '==', studentId)
       .get();
     
-    // Sort after reading: a compound Firestore index must not hide saved results,
-    // and older submissions may have submittedAt/createdAt instead of completedAt.
-    const toIsoDate = value => {
-      if (value === undefined || value === null || value === '') return null;
-      const date = value?.toDate ? value.toDate() : new Date(value);
-      return Number.isNaN(date.getTime()) ? null : date.toISOString();
-    };
-    const scores = snapshot.docs.map(doc => {
-      const data = doc.data();
-      const submittedAt = toIsoDate(data.submittedAt) || toIsoDate(data.completedAt) || toIsoDate(data.createdAt);
-      return { ...data, id: doc.id, submittedAt, completedAt: toIsoDate(data.completedAt) || submittedAt };
-    });
-    scores.sort((a, b) => (Date.parse(b.submittedAt) || 0) - (Date.parse(a.submittedAt) || 0));
+    // Group legacy duplicates after reading, without requiring a compound index.
+    const scores = uniqueTrainingRecords(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })), 'quiz');
     
     res.json({ scores, count: scores.length });
   } catch (error) {

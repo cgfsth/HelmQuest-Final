@@ -109,7 +109,7 @@ test('trusted post-docking quiz persistence works after the saved simulation pas
 });
 
 test('student quiz history reads without a compound index and includes legacy dates and zero scores', async () => {
-  bucket('quiz_score').set('old', { studentId: 'student', quizId: 'quiz', submittedAt: '2026-10-01T00:00:00Z', 'Quiz-score-percentage': 0, 'raw-score': 0 });
+  bucket('quiz_score').set('old', { studentId: 'student', quizId: 'legacy-quiz', submittedAt: '2026-10-01T00:00:00Z', 'Quiz-score-percentage': 0, 'raw-score': 0 });
   bucket('quiz_score').set('new', { ...quizPayload(100), quizTitle: 'Saved quiz' });
   bucket('quiz_score').set('created-only', { studentId: 'student', createdAt: new Date('2026-10-03T00:00:00Z') });
   bucket('quiz_score').set('undated', { studentId: 'student', quizId: 'another-quiz' });
@@ -124,6 +124,31 @@ test('student quiz history reads without a compound index and includes legacy da
   expect(response.body.scores[2]['raw-score']).toBe(0);
   expect(response.body.scores[3].submittedAt).toBeNull();
   expect([...bucket('quiz_score')]).toEqual(before);
+  expect(updates).toHaveLength(0);
+});
+
+test('student history returns one result per mission and quiz without modifying legacy documents', async () => {
+  bucket('mission_score').set('old-fail', missionPayload(20, false, '2026-11-18'));
+  bucket('mission_score').set('earned-pass', { ...missionPayload(80, true, '2026-11-19'), missionId: 'CUSTOM-mission' });
+  bucket('mission_score').set('new-fail', missionPayload(40, false, '2026-11-20'));
+  bucket('mission_score').set('latest-retry', { ...missionPayload(0, false), missionId: 'other-mission', completedAt: { _seconds: 1795219200 } });
+  bucket('mission_score').set('old-retry', { ...missionPayload(50, false, '2026-11-18'), missionId: 'CUSTOM-other-mission' });
+  bucket('mission_score').set('other-student', { ...missionPayload(100, true), studentId: 'other' });
+  bucket('quiz_score').set('old-quiz', quizPayload(100, '2026-11-18'));
+  bucket('quiz_score').set('latest-quiz', { ...quizPayload(0, '2026-11-20'), moduleId: 'other-context' });
+  const before = structuredClone([...collections].map(([name, items]) => [name, [...items]]));
+  for (let refresh = 0; refresh < 2; refresh++) {
+    const missions = await request(app).get('/mission-scores/student').expect(200);
+    expect(missions.body.count).toBe(2);
+    expect(missions.body.scores.map(score => score.id)).toEqual(['latest-retry', 'earned-pass']);
+    expect(missions.body.scores[0].completedAt).toBe('2026-11-21T00:00:00.000Z');
+    expect(missions.body.scores[1].score).toBe(80);
+    const quizzes = await request(app).get('/quiz-scores/student').expect(200);
+    expect(quizzes.body.count).toBe(1);
+    expect(quizzes.body.scores[0].id).toBe('latest-quiz');
+    expect(quizzes.body.scores[0]['Quiz-score-percentage']).toBe(0);
+  }
+  expect([...collections].map(([name, items]) => [name, [...items]])).toEqual(before);
   expect(updates).toHaveLength(0);
 });
 

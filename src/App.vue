@@ -3498,6 +3498,7 @@ import { loadHarborDocks, disposeHarborDockGroup, resolveDockCollision, getActiv
 import { setHarborPoleLightsVisible } from './helpers/harborPoleLights.js';
 import * as firebaseApi from './api/firebaseApi.js';
 import { API_BASE_URL } from './api/firebaseApi.js';
+import { uniqueTrainingRecords, trainingRecordDate } from '../shared/trainingRecords.js';
 import { canViewMission, canManageMission, missionOwner } from '../shared/missionAccess.js';
 
 // Expose firebaseApi to window for global access
@@ -10099,7 +10100,9 @@ async function applyStoredStudentProgress(options = {}) {
 
 function formatCertificateDate(isoDate) {
   if (!isoDate) return '';
-  return new Date(isoDate).toLocaleDateString(undefined, {
+  const date = trainingRecordDate(isoDate);
+  if (!date) return 'Date unavailable';
+  return new Date(date).toLocaleDateString(undefined, {
     year: 'numeric',
     month: 'long',
     day: 'numeric'
@@ -11496,9 +11499,9 @@ async function fetchStudentTrainingRecords() {
   results.forEach((result, index) => {
     const panel = panels[index];
     if (result.status === 'fulfilled' && Array.isArray(result.value?.scores)) {
-      panel.records.value = result.value.scores;
+      panel.records.value = uniqueTrainingRecords(result.value.scores, index === 0 ? 'mission' : 'quiz');
       if (index === 0) {
-        restoreSavedMissionResults(studentId, result.value.scores, progressData.value,
+        restoreSavedMissionResults(studentId, panel.records.value, progressData.value,
           getMissionsForModule, trainingModules.value.map(module => module.id));
       }
     } else {
