@@ -1,6 +1,6 @@
 <template>
   <section class="lm-reader" aria-label="PDF reader">
-    <header class="lm-reader-heading"><button type="button" @click="$emit('back')"><ArrowLeft :size="18" /> Back to Module</button><div><span class="lm-eyebrow">{{ document.presentation ? 'LESSON VIEWER' : 'DOCUMENT READER' }}</span><h2>{{ document.title }}</h2></div></header>
+    <header class="lm-reader-heading"><button type="button" @click="$emit('back')"><ArrowLeft :size="18" /> Back to Lesson</button><div><span class="lm-eyebrow">{{ document.presentation ? 'LESSON VIEWER' : 'DOCUMENT READER' }}</span><h2>{{ document.title }}</h2></div></header>
     <div v-if="document.objectives" class="lc-objectives"><strong>Learning objectives</strong><p>{{ document.objectives }}</p></div>
     <p v-if="loading" class="lm-empty" role="status">Opening PDF document…</p>
     <div v-else-if="error" class="lm-alert lm-error" role="alert"><p>{{ error }}</p><button type="button" @click="load">Try again</button></div>

@@ -102,14 +102,14 @@ try {
   fixture.files.delete(readingPath);
   await browser.clickExpression(`[...document.querySelectorAll('.lc-activity-open')].find(button=>button.textContent.includes('Docking PDF lesson'))`);
   await browser.waitFor('document.querySelector(".lm-reader .lm-error")');
-  await browser.click('Back to Module'); await browser.waitFor('!document.querySelector(".lm-reader") && !document.querySelector(".lm-empty[role=status]")');
+  await browser.click('Back to Lesson'); await browser.waitFor('!document.querySelector(".lm-reader") && !document.querySelector(".lm-empty[role=status]")');
   assert.equal(await browser.evaluate(`(${simulationButton}).disabled`), true);
   assert.equal(Object.values(fixture.records.learning_activity_progress || {}).some(item => item.activityId === readingId && item.viewedAt), false);
   fixture.files.set(readingPath, savedFile);
   await browser.clickExpression(`[...document.querySelectorAll('.lc-activity-open')].find(button=>button.textContent.includes('Docking PDF lesson'))`);
   await browser.waitFor('document.querySelector(".lm-pdf-page canvas")?.width > 0');
   await browser.waitFor('document.querySelector(".lm-pdf-text")?.textContent.length > 0 && !document.querySelector(\'[data-pdf-page="1"] .lm-pdf-placeholder\')');
-  await browser.click('Back to Module');
+  await browser.click('Back to Lesson');
   await browser.waitFor(`!document.querySelector('.lm-reader') && (${simulationButton}) && !(${simulationButton}).disabled`);
   await browser.screenshot('simulation-unlocked-after-pdf-view');
   await browser.clickExpression(`[...document.querySelectorAll('.lc-activity-open')].find(button=>button.textContent.includes('Revised Docking Mission'))`);
@@ -118,7 +118,7 @@ try {
   await browser.waitFor('window.fixture.launches.length === 1');
   assert.deepEqual(await browser.evaluate('window.fixture.launches[0]'), { missionId, moduleId: secondModule, syllabusId });
   fixture.records.mission_score = { attempt: { studentId: 'sa', missionId: 'CUSTOM-' + missionId, score: 40, passed: false, scoringVersion: 'simulation-v3', completion: { verified: true } } };
-  await browser.click('Back to Module');
+  await browser.click('Back to Lesson');
   await browser.waitFor('!document.querySelector(".lc-detail") && document.body.textContent.includes("Failed")');
   await browser.clickExpression(simulationButton);
   await browser.waitFor('document.querySelector(".lc-simulation-result")?.textContent.includes("40%")');
@@ -144,7 +144,7 @@ try {
   await browser.screenshot('student-retakes-disabled');
   // Successful results remain readable even with retakes disabled.
   fixture.records.mission_score.attempt.passed = true; fixture.records.mission_score.attempt.score = 85;
-  await browser.click('Back to Module');
+  await browser.click('Back to Lesson');
   await browser.waitFor('!document.querySelector(".lc-detail") && document.body.textContent.includes("Passed")');
   await browser.clickExpression(simulationButton);
   await browser.waitFor('document.querySelector(".lc-detail .lm-primary")?.textContent === "View Simulation Results"');

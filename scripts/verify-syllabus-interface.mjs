@@ -45,19 +45,19 @@ try {
   assert.equal(await browser.evaluate('document.querySelector(".lc-official-matrix").textContent.includes("Proficient use the terrestrial coordinate system")'), true);
   await browser.clickExpression('document.querySelector(".lc-activity-open")');
   await browser.waitFor('document.querySelector(".lm-pdf-text")?.textContent.length > 0 && !document.querySelector(\'[data-pdf-page="1"] .lm-pdf-placeholder\')');
-  await browser.click('Back to Module');
+  await browser.click('Back to Lesson');
   await browser.waitFor('!document.querySelector(".lm-reader") && document.querySelector(".lc-type-simulation")?.closest(".lc-activity-open").disabled === false');
   await browser.clickExpression(`[...document.querySelectorAll('.lc-activity-open')].find(b=>b.textContent.includes('Navigation practice'))`); await browser.click('Start Simulation');
   await browser.waitFor('window.fixture.launches.length===1'); assert.deepEqual(await browser.evaluate('window.fixture.launches[0]'), { missionId: 'navigation', lessonId: moduleId, syllabusId });
-  await browser.click('Back to Module'); await browser.waitFor('document.querySelector(".lc-type-simulation")?.closest(".lc-activity").querySelector(".lc-status summary")?.textContent.includes("In Progress")');
+  await browser.click('Back to Lesson'); await browser.waitFor('document.querySelector(".lc-type-simulation")?.closest(".lc-activity").querySelector(".lc-status summary")?.textContent.includes("In Progress")');
   fixture.records.mission_score = { saved: { studentId: 'sa', missionId: 'CUSTOM-navigation', score: 90, passed: true } };
   await browser.clickExpression(`document.querySelector('[aria-label="Refresh learning materials"]')`);
   await browser.waitFor('document.querySelector(".lc-type-simulation")?.closest(".lc-activity").querySelector(".lc-status summary")?.textContent.includes("Done")');
   for (const width of [768, 375]) { await browser.viewport(width); assert.equal(await browser.evaluate('document.documentElement.scrollWidth<=innerWidth'), true); await browser.screenshot('official-lesson-' + width); }
   await browser.evaluate('window.fixture.login("instructor")'); await browser.viewport(1365); await browser.waitFor('document.querySelectorAll(".lc-section").length===9');
-  assert.equal(await browser.evaluate('document.body.textContent.includes("Upload a PDF lesson in this module to enable mission creation")'), true);
+  assert.equal(await browser.evaluate('document.body.textContent.includes("Upload a PDF for this lesson to enable mission creation")'), true);
   await browser.clickExpression(`document.querySelector('[aria-labelledby="lc-title-${moduleId}"] .lc-lesson-details')`);
-  await browser.click('Add lesson or activity'); await browser.waitFor('document.querySelector(".lm-form select")');
+  await browser.click('Add resource or activity'); await browser.waitFor('document.querySelector(".lm-form select")');
   await browser.fill('.lm-form input:not([type])', 'Instructor navigation presentation'); await browser.fill('.lm-form select', 'presentation'); await browser.attach(pdfPath);
   await browser.clickExpression('document.querySelector(".lc-publish input")'); await browser.click('Save document');
   await browser.waitFor('!document.querySelector(".lm-modal") && document.body.textContent.includes("Instructor navigation presentation")');

@@ -2,7 +2,7 @@
   <section class="lm" aria-label="Learning materials" :aria-busy="loading || busy">
     <PdfDocumentViewer v-if="document" :key="document.kind + document.id" :document="document" @back="closeReader" @loaded="documentViewed" />
     <section v-else-if="activityDetail" class="lc-course lc-detail">
-      <button type="button" @click="activityDetail = null; refresh()"><ArrowLeft :size="17" /> Back to Module</button>
+      <button type="button" @click="activityDetail = null; refresh()"><ArrowLeft :size="17" /> Back to Lesson</button>
       <span class="lc-label">{{ activityDetail.type === 'simulation' ? 'PRACTICAL SIMULATION' : 'KNOWLEDGE CHECK' }}</span>
       <h2>{{ activityDetail.title }}</h2><p>{{ activityDetail.description }}</p>
       <div v-if="activityDetail.objectives" class="lc-objectives"><strong>Learning objectives</strong><p>{{ activityDetail.objectives }}</p></div>
@@ -42,7 +42,7 @@
           <article v-for="item in visibleSyllabi" :key="item.id" class="lm-card">
             <div class="lm-card-top"><span class="lm-document-icon"><BookOpen :size="24" /></span><span class="lm-tag">SYLLABUS</span></div>
             <h3>{{ item.title }}</h3><p class="lm-description">{{ item.description || 'Course syllabus and supporting reading.' }}</p>
-            <div class="lm-card-meta"><span>{{ item.instructorName }}</span><span><FolderOpen :size="15" /> {{ item.moduleCount }} {{ item.moduleCount === 1 ? 'module' : 'modules' }}</span></div>
+            <div class="lm-card-meta"><span>{{ item.instructorName }}</span><span><FolderOpen :size="15" /> {{ item.moduleCount }} {{ item.moduleCount === 1 ? 'lesson' : 'lessons' }}</span></div>
             <button type="button" class="lm-primary" :disabled="busy" @click="open(item.id)"><Eye :size="17" /> View syllabus <ChevronRight :size="17" /></button>
             <button v-if="manager" type="button" class="lm-danger" :disabled="busy" :aria-label="'Delete syllabus ' + item.title" @click="confirmDelete('syllabus', item)"><Trash2 :size="17" /> Delete syllabus</button>
           </article>
@@ -56,7 +56,7 @@
       <div v-if="editor || removal" class="lm-modal-backdrop" @click.self="closeModal" @keydown.esc="closeModal">
         <section ref="modal" class="lm lm-modal" role="dialog" aria-modal="true" aria-labelledby="lm-dialog-title" tabindex="-1" @keydown.tab="trapFocus">
           <template v-if="editor">
-            <div class="lm-toolbar"><h2 id="lm-dialog-title">{{ editor.id ? 'Edit' : 'Create' }} {{ editor.kind === 'activity' ? 'learning activity' : editor.kind === 'module' ? 'module' : 'syllabus' }}</h2><button type="button" aria-label="Close dialog" :disabled="busy" @click="closeModal"><X :size="20" /></button></div>
+            <div class="lm-toolbar"><h2 id="lm-dialog-title">{{ editor.id ? 'Edit' : 'Create' }} {{ editor.kind === 'activity' ? 'learning activity' : editor.kind === 'module' ? 'lesson' : 'syllabus' }}</h2><button type="button" aria-label="Close dialog" :disabled="busy" @click="closeModal"><X :size="20" /></button></div>
             <form class="lm-form" @submit.prevent="save">
               <label v-if="editor.kind === 'syllabus'">Course structure<select v-model="form.officialSyllabusKey" data-field="course-structure" :disabled="busy || !!editor.id" @change="setCourseTemplate"><option :value="OFFICIAL_SYLLABUS_KEY">Official FISH ELECT 6 · First Semester 2026–2027</option><option value="">Existing custom course</option></select></label>
               <p v-if="form.officialSyllabusKey || editor.officialSectionId" class="lm-alert">Official academic titles, outcomes and week schedule are preserved. Edit instructor notes and uploaded resources separately.</p>
@@ -66,17 +66,17 @@
               <label>Learning objectives<textarea v-model="form.objectives" rows="3" maxlength="2500" :disabled="busy" placeholder="What should students learn?" /></label>
               <label v-if="editor.kind === 'syllabus'">Instructor announcement<textarea v-model="form.announcement" rows="3" maxlength="2500" :disabled="busy" /></label>
               <label v-if="editor.kind === 'syllabus' && role === 'admin'">Assigned instructor<select v-model="form.instructorId" data-field="assigned-instructor" required :disabled="busy"><option value="" disabled>Select an instructor</option><option v-for="item in instructors" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
-              <label v-if="editor.kind === 'module'">Module number<input v-model.number="form.moduleNumber" type="number" min="1" max="999" required :disabled="busy" :readonly="!!editor.officialSectionId" /></label>
+              <label v-if="editor.kind === 'module'">Lesson number<input v-model.number="form.moduleNumber" type="number" min="1" max="999" required :disabled="busy" :readonly="!!editor.officialSectionId" /></label>
               <template v-if="editor.kind === 'activity' && ['simulation', 'quiz'].includes(form.type)">
                 <label>{{ form.type === 'simulation' ? 'Assigned mission' : 'Assigned quiz' }}<select v-model="form.targetId" required :disabled="busy"><option value="" disabled>Select an existing {{ form.type === 'simulation' ? 'mission' : 'quiz' }}</option><option v-for="item in form.type === 'simulation' ? catalog.missions : catalog.quizzes" :key="item.id" :value="item.id">{{ item.title }}</option></select></label>
-                <p v-if="!(form.type === 'simulation' ? catalog.missions : catalog.quizzes).length" class="lm-alert">{{ form.type === 'simulation' ? 'Use Create mission in this module to make and assign a new mission.' : 'Create a quiz from the module’s mission controls first.' }}</p>
+                <p v-if="!(form.type === 'simulation' ? catalog.missions : catalog.quizzes).length" class="lm-alert">{{ form.type === 'simulation' ? 'Use Create mission in this lesson to make and assign a new mission.' : 'Create a quiz from the module’s mission controls first.' }}</p>
                 <label>Activity instructions<textarea v-model="form.instructions" rows="4" maxlength="5000" :disabled="busy" /></label>
                 <template v-if="form.type === 'simulation'"><p class="lm-alert">{{ PRACTICAL_ALIGNMENT[modules.find(m => m.id === form.moduleId)?.officialSectionId]?.guidance || 'Choose a mission whose actual objectives match this lesson.' }}</p><label>Quiz after successful docking<select v-model="form.quizPolicy" :disabled="busy"><option value="inherit">Use the mission’s assigned quiz, if published</option><option value="none">No quiz — show simulation results</option><option value="assigned">Assign a specific instructor quiz</option></select></label><label v-if="form.quizPolicy === 'assigned'">Assigned quiz<select v-model="form.quizId" required :disabled="busy"><option value="" disabled>Choose a quiz</option><option v-for="quiz in catalog.quizzes" :key="quiz.id" :value="quiz.id">{{ quiz.title }}</option></select></label></template>
                 <label>Completion requirement<select v-model="form.completionRule" :disabled="busy"><option value="complete">Complete the activity</option><option value="pass">Complete and meet the passing requirement</option></select></label>
                 <label v-if="form.type === 'simulation'" class="lc-publish"><input v-model="form.allowRetakes" type="checkbox" :disabled="busy" /> Allow retakes after a failed simulation</label>
                 <label v-if="form.completionRule === 'pass'">Passing score (%)<input v-model="form.passScore" type="number" min="0" max="100" step="0.1" placeholder="Use the mission / quiz passing result" :disabled="busy" /></label>
               </template>
-              <label v-else class="lm-upload"><Upload :size="24" /><strong>{{ editor.id ? 'Replace document (optional)' : editor.kind === 'module' ? 'Module PDF (optional)' : form.type === 'presentation' ? 'Upload presentation' : 'Upload PDF' }}</strong><span>{{ file?.name || editor.sourceFileName || editor.fileName || 'Choose a learning document' }}</span><input type="file" :accept="form.type === 'presentation' ? '.ppt,.pptx,.pdf' : 'application/pdf,.pdf'" :required="!editor.id && editor.kind !== 'module'" :disabled="busy" @change="chooseFile" /><small>{{ form.type === 'presentation' ? 'PPT, PPTX or PDF · Slides are converted to a private, read-only PDF preview.' : 'PDF' }} · Maximum 15 MB</small></label>
+              <label v-else class="lm-upload"><Upload :size="24" /><strong>{{ editor.id ? 'Replace document (optional)' : editor.kind === 'module' ? 'Lesson PDF (optional)' : form.type === 'presentation' ? 'Upload presentation' : 'Upload PDF' }}</strong><span>{{ file?.name || editor.sourceFileName || editor.fileName || 'Choose a learning document' }}</span><input type="file" :accept="form.type === 'presentation' ? '.ppt,.pptx,.pdf' : 'application/pdf,.pdf'" :required="!editor.id && editor.kind !== 'module'" :disabled="busy" @change="chooseFile" /><small>{{ form.type === 'presentation' ? 'PPT, PPTX or PDF · Slides are converted to a private, read-only PDF preview.' : 'PDF' }} · Maximum 15 MB</small></label>
               <template v-if="editor.kind === 'activity'"><label>Available from (optional)<input v-model="form.availableFrom" type="datetime-local" :disabled="busy" /></label><label>Available until (optional)<input v-model="form.availableUntil" type="datetime-local" :disabled="busy" /></label></template>
               <label class="lc-publish"><input v-model="form.published" type="checkbox" :disabled="busy" /> Publish to students</label>
               <div v-if="busy" role="status"><label for="lm-progress">{{ progress < 100 ? 'Uploading… ' + progress + '%' : 'Saving document…' }}</label><progress id="lm-progress" :value="progress" max="100" /></div>
@@ -85,8 +85,8 @@
             </form>
           </template>
           <template v-else>
-            <h2 id="lm-dialog-title">Delete {{ removal.kind === 'activity' ? 'activity' : removal.kind === 'module' ? 'module' : 'syllabus' }}?</h2>
-            <p v-if="removal.kind === 'syllabus'">“{{ removal.title }}” and all its modules, uploaded documents, course missions, quizzes, student progress and saved results will be permanently deleted. This cannot be undone.</p>
+            <h2 id="lm-dialog-title">Delete {{ removal.kind === 'activity' ? 'activity' : removal.kind === 'module' ? 'lesson' : 'syllabus' }}?</h2>
+            <p v-if="removal.kind === 'syllabus'">“{{ removal.title }}” and all its lessons, uploaded documents, course missions, quizzes, student progress and saved results will be permanently deleted. This cannot be undone.</p>
             <p v-else>“{{ removal.title }}” will be removed from this course.</p>
             <p v-if="removal.kind === 'syllabus'">XP earned from deleted mission results will be deducted and ranks recalculated. Resources shared with another course remain available to that course.</p><p v-else>Linked missions, quizzes and their saved results are retained.</p><p v-if="removal.kind === 'module'">Delete this section’s learning activities first.</p>
             <p v-if="modalError" class="lm-alert lm-error" role="alert">{{ modalError }}</p><div class="lm-actions lm-form-footer"><button type="button" :disabled="busy" @click="closeModal">Cancel</button><button type="button" class="lm-danger" :disabled="busy" @click="remove">{{ busy ? 'Deleting…' : 'Delete document' }}</button></div>
@@ -119,7 +119,7 @@ const simulationActionLabel = computed(() => currentSimulationAttempt.value.pass
 const showActivityAction = computed(() => activityDetail.value?.type !== 'simulation' || (simulationAttemptReady.value
   && (!currentSimulationAttempt.value.attempted || currentSimulationAttempt.value.passed || activityDetail.value.allowRetakes !== false)));
 const currentSimulationAccess = computed(() => {
-  const access = simulationAccess.value[activityDetail.value?.moduleId] || { canStart: false, message: 'View the PDF lessons in this module before starting the simulation. Refresh the course to check your reading progress.' };
+  const access = simulationAccess.value[activityDetail.value?.moduleId] || { canStart: false, message: 'View the PDF resources in this lesson before starting the simulation. Refresh the course to check your reading progress.' };
   if (!access.canStart) return access;
   if (currentSimulationAttempt.value.attempted && !currentSimulationAttempt.value.passed && activityDetail.value?.allowRetakes === false) return { ...access, canStart: false, message: 'Retakes are disabled for this simulation. Ask your instructor to allow a retake.' };
   return access;
@@ -177,10 +177,10 @@ function missionContext(moduleId, item = {}) {
   return { syllabusId, syllabusTitle: selected.value.title, moduleId, moduleTitle: module.title, officialSectionId: module.officialSectionId || '', description: module.description || '',
     missionId: item.targetId, activityId: item.id, revision: item.revision, published: item.published !== false,
     availableFrom: item.availableFrom, availableUntil: item.availableUntil, allowRetakes: item.allowRetakes !== false,
-    onSaved: async () => { if (ticket === identity && selected.value?.id === syllabusId) { notice.value = 'Mission saved in this module.'; await load(syllabusId); } } };
+    onSaved: async () => { if (ticket === identity && selected.value?.id === syllabusId) { notice.value = 'Mission saved in this lesson.'; await load(syllabusId); } } };
 }
 function createModuleMission(moduleId) {
-  if (!simulationAccess.value[moduleId]?.canCreate) { error.value = 'Upload a PDF lesson in this module before creating a mission.'; return; }
+  if (!simulationAccess.value[moduleId]?.canCreate) { error.value = 'Upload a PDF for this lesson before creating a mission.'; return; }
   const context = missionContext(moduleId);
   if (context) emit('create-mission', context);
 }
@@ -269,7 +269,7 @@ function chooseFile(event) {
 }
 async function save() {
   if (busy.value || !manager.value) return;
-  if (editor.value.kind === 'activity' && form.value.type === 'simulation' && (!editor.value.id || editor.value.targetId !== form.value.targetId) && !simulationAccess.value[form.value.moduleId]?.canCreate) { modalError.value = 'Upload a PDF lesson in this module before linking a simulation.'; return; }
+  if (editor.value.kind === 'activity' && form.value.type === 'simulation' && (!editor.value.id || editor.value.targetId !== form.value.targetId) && !simulationAccess.value[form.value.moduleId]?.canCreate) { modalError.value = 'Upload a PDF for this lesson before linking a simulation.'; return; }
   const needsFile = editor.value.kind === 'syllabus' || (editor.value.kind === 'activity' && ['pdf', 'presentation'].includes(form.value.type));
   if (!editor.value.id && needsFile && !file.value) { modalError.value = 'Choose a learning document.'; return; }
   const current = { ...editor.value }, ticket = identity, operation = mutation = new AbortController();
@@ -328,7 +328,7 @@ async function move(index, delta) {
   if (busy.value || !manager.value) return;
   const ids = modules.value.map(item => item.id); [ids[index], ids[index + delta]] = [ids[index + delta], ids[index]];
   busy.value = true; error.value = ''; const ticket = identity, operation = mutation = new AbortController();
-  try { await api.reorderLearningModules(selected.value.id, ids, selected.value.revision, { signal: operation.signal }); if (ticket === identity && !operation.signal.aborted) { notice.value = 'Module order updated.'; await refresh(); } }
+  try { await api.reorderLearningModules(selected.value.id, ids, selected.value.revision, { signal: operation.signal }); if (ticket === identity && !operation.signal.aborted) { notice.value = 'Lesson order updated.'; await refresh(); } }
   catch (err) { if (ticket === identity && !operation.signal.aborted) error.value = err.message; }
   finally { if (mutation === operation && ticket === identity) busy.value = false; }
 }
