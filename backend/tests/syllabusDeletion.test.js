@@ -3,6 +3,7 @@ import request from 'supertest';
 import { materialsFixture, samplePdf } from './helpers/materialsFixture.js';
 import { issueSession } from '../services/authSession.js';
 import { OFFICIAL_SYLLABUS, OFFICIAL_SYLLABUS_KEY } from '../../shared/officialSyllabus.js';
+import { DEFAULT_RANKS } from '../../shared/progression.js';
 
 const owner = { id: 'a', role: 'instructor' };
 const pdf = () => ({ originalname: 'course.pdf', mimetype: 'application/pdf', buffer: samplePdf() });
@@ -190,4 +191,104 @@ test('retry preserves targets reassigned to another instructor after deletion wa
   expect(f.records.quiz.localQuiz).toEqual({ instructorId: 'b', syllabusId: 'other' });
   expect(f.records.mission_score.local).toBeDefined();expect(f.records.quiz_score.local).toBeDefined();
   expect(f.records.syllabi[id]).toBeUndefined();
+});
+
+function seedAwardedXp(id, moduleId) {
+  seedRelatedRecords(id, moduleId);
+  Object.assign(f.records.students.sa, { xp: 650, total_xp: 650, name: 'Preserved name', rankId: 'ordinary_seaman',
+    badges: [{ id: 'welcome-aboard' }, { id: 'rank-ordinary_seaman' }, { id: 'custom-badge', earnedAt: 'keep' }] });
+  f.records.mission_score.local = { studentId: 'sa', missionId: 'CUSTOM-local', passed: true, score: 95, xpAmount: 300, xpAwarded: true };
+  f.records.mission_score.alias = { ...f.records.mission_score.local, missionId: 'local' };
+  f.records.mission_score.unrelated = { studentId: 'sa', missionId: 'unrelated', passed: true, xpAmount: 150, xpAwarded: true };
+  // Passing scores without credited XP and quiz percentages are not XP awards.
+  f.records.mission_score.legacy = { studentId: 'sa', missionId: 'legacy', passed: true, score: 100, xpAmount: 0 };
+  f.records.quiz_score.local = { studentId: 'sa', quizId: 'localQuiz', score: 100 };
+}
+
+test('deleting awarded scores deducts their original XP once and recalculates rank and badges', async () => {
+  const { id, moduleId } = await course();
+  seedAwardedXp(id, moduleId);
+  f.records.missions.local.xp_reward = 900; // Later reward edits cannot change the reversal.
+  await remove(id, { deleteRecords: true }).expect(200);
+  expect(f.records.students.sa).toMatchObject({ xp: 350, total_xp: 350, rankId: 'deck_cadet', rank: 'Deck Cadet',
+    xpProgress: 70, xpNextAt: 500, name: 'Preserved name', status: 'active' });
+  expect(f.records.students.sa.badges).toEqual([{ id: 'welcome-aboard' }, { id: 'custom-badge', earnedAt: 'keep' }]);
+  expect(f.records.mission_score.unrelated.xpAmount).toBe(150);
+  expect((await f.service.cleanup(owner)).cleanupPending).toBe(false);
+  expect(f.records.students.sa.xp).toBe(350);
+});
+
+test('XP reversal remains atomic and is not applied twice after a lost batch response', async () => {
+  const { id, moduleId } = await course();
+  seedAwardedXp(id, moduleId);
+  const runTransaction = f.db.runTransaction;
+  let calls = 0;
+  f.db.runTransaction = callback => {
+    if (++calls === 2) f.state.loseCommitAcknowledgement = true;
+    return runTransaction(callback);
+  };
+  const result = await remove(id, { deleteRecords: true }).expect(200);
+  expect(result.body.cleanupPending).toBe(true);
+  expect(f.records.students.sa.xp).toBe(350);
+  f.db.runTransaction = runTransaction;
+  expect((await f.service.cleanup(owner)).cleanupPending).toBe(false);
+  expect(f.records.students.sa.xp).toBe(350);
+});
+
+test('failed score cleanup cannot deduct XP without deleting its score records', async () => {
+  const { id, moduleId } = await course();
+  seedAwardedXp(id, moduleId);
+  const runTransaction = f.db.runTransaction;
+  let calls = 0;
+  f.db.runTransaction = callback => {
+    if (++calls === 2) f.state.failCommit = true;
+    return runTransaction(callback);
+  };
+  expect((await remove(id, { deleteRecords: true }).expect(200)).body.cleanupPending).toBe(true);
+  expect(f.records.students.sa.xp).toBe(650);expect(f.records.mission_score.local).toBeDefined();
+  f.state.failCommit = false;f.db.runTransaction = runTransaction;
+  expect((await f.service.cleanup(owner)).cleanupPending).toBe(false);
+  expect(f.records.students.sa.xp).toBe(350);
+});
+
+test('XP reversal preserves a concurrent award and uses configured rank thresholds', async () => {
+  const { id, moduleId } = await course();
+  seedAwardedXp(id, moduleId);
+  f.records.course_settings = { global: { ranks: DEFAULT_RANKS.map(rank => ({ ...rank, minXp: rank.minXp * 0.8 })) } };
+  const runTransaction = f.db.runTransaction;
+  let calls = 0;
+  f.db.runTransaction = callback => {
+    if (++calls === 2) f.state.beforeCommit = async () => {
+      f.records.students.sa.xp += 75;f.records.students.sa.total_xp += 75;
+      f.records.mission_score.newAward = { studentId: 'sa', missionId: 'new-mission', xpAmount: 75, xpAwarded: true };
+    };
+    return runTransaction(callback);
+  };
+  await remove(id, { deleteRecords: true }).expect(200);
+  expect(f.records.students.sa).toMatchObject({ xp: 425, total_xp: 425, rankId: 'ordinary_seaman', xpNextAt: 800 });
+  expect(f.records.mission_score.newAward.xpAmount).toBe(75);
+});
+
+test('duplicate credits across batches are reversed once, while retained shared credits are preserved', async () => {
+  const { id, moduleId } = await course();
+  seedAwardedXp(id, moduleId);
+  for (let index = 0; index < 500; index++) f.records.mission_score[`duplicate-${index}`] = { ...f.records.mission_score.local };
+  f.records.mission_score.retained = { ...f.records.mission_score.local, syllabusId: 'another-course' };
+  await remove(id, { deleteRecords: true }).expect(200);
+  expect(f.records.students.sa.xp).toBe(650);
+  const next = await course();
+  f.records.missions.local = { instructorId: 'a', syllabusId: next.id };
+  delete f.records.mission_score.retained.syllabusId;
+  await remove(next.id, { deleteRecords: true }).expect(200);
+  expect(f.records.students.sa.xp).toBe(350);
+});
+
+test('XP cannot fall below zero, and another student account is unaffected', async () => {
+  const { id, moduleId } = await course();
+  seedAwardedXp(id, moduleId);
+  f.records.students.sa.xp = 100;f.records.students.sa.total_xp = 100;
+  const otherStudent = structuredClone(f.records.students.sb);
+  await remove(id, { deleteRecords: true }).expect(200);
+  expect(f.records.students.sa).toMatchObject({ xp: 0, total_xp: 0, rankId: 'deck_cadet' });
+  expect(f.records.students.sb).toEqual(otherStudent);
 });

@@ -23,7 +23,8 @@ const { id: moduleId } = await fixture.service.save(owner, 'syllabus_modules', n
 await fixture.course.save(owner, customId, moduleId, null, { type: 'pdf', title: 'Lesson resource', published: true }, file);
 fixture.records.missions = { owned: { instructorId: 'a', syllabusId: customId } };
 fixture.records.quiz = { owned: { instructorId: 'a', moduleId: 'owned' } };
-fixture.records.mission_score = { result: { missionId: 'CUSTOM-owned', studentId: 'sa' } };
+Object.assign(fixture.records.students.sa, { xp: 650, total_xp: 650, rankId: 'ordinary_seaman' });
+fixture.records.mission_score = { result: { missionId: 'CUSTOM-owned', studentId: 'sa', xpAmount: 300, xpAwarded: true, passed: true } };
 fixture.records.quiz_score = { result: { quizId: 'owned', studentId: 'sa' } };
 fixture.records.quiz_results = { result: { submissionid: 'result' } };
 fixture.records.learning_activity_progress = { progress: { syllabusId: customId, studentId: 'sa' } };
@@ -74,6 +75,7 @@ try {
   assert.equal(fixture.records.syllabi[customId], undefined);assert.equal(fixture.records.syllabus_modules[moduleId], undefined);
   assert.equal(Object.values(fixture.records.learning_activities).some(item => item.syllabusId === customId), false);
   for (const name of ['missions', 'quiz', 'mission_score', 'quiz_score', 'quiz_results', 'learning_activity_progress']) assert.deepEqual(fixture.records[name], {});
+  assert.equal(fixture.records.students.sa.xp, 350);assert.equal(fixture.records.students.sa.rankId, 'deck_cadet');
   await browser.viewport(375);assert.equal(await browser.evaluate('document.documentElement.scrollWidth<=innerWidth'), true);
   await browser.screenshot('instructor-library-delete-mobile');
   await browser.clickExpression('document.querySelector(".lm-card .lm-danger")');await browser.waitFor('document.querySelector(".lm-modal")');

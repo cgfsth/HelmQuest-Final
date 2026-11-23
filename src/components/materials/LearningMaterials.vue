@@ -88,7 +88,7 @@
             <h2 id="lm-dialog-title">Delete {{ removal.kind === 'activity' ? 'activity' : removal.kind === 'module' ? 'module' : 'syllabus' }}?</h2>
             <p v-if="removal.kind === 'syllabus'">“{{ removal.title }}” and all its modules, uploaded documents, course missions, quizzes, student progress and saved results will be permanently deleted. This cannot be undone.</p>
             <p v-else>“{{ removal.title }}” will be removed from this course.</p>
-            <p v-if="removal.kind === 'syllabus'">Resources shared with another course remain available to that course.</p><p v-else>Linked missions, quizzes and their saved results are retained.</p><p v-if="removal.kind === 'module'">Delete this section’s learning activities first.</p>
+            <p v-if="removal.kind === 'syllabus'">XP earned from deleted mission results will be deducted and ranks recalculated. Resources shared with another course remain available to that course.</p><p v-else>Linked missions, quizzes and their saved results are retained.</p><p v-if="removal.kind === 'module'">Delete this section’s learning activities first.</p>
             <p v-if="modalError" class="lm-alert lm-error" role="alert">{{ modalError }}</p><div class="lm-actions lm-form-footer"><button type="button" :disabled="busy" @click="closeModal">Cancel</button><button type="button" class="lm-danger" :disabled="busy" @click="remove">{{ busy ? 'Deleting…' : 'Delete document' }}</button></div>
           </template>
         </section>

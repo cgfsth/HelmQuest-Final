@@ -1,5 +1,6 @@
 import { missionOwner } from '../../shared/missionAccess.js';
 import { missionIdAliases } from './missionRewards.js';
+import { deleteRecordsWithXp } from './deleteRecordsWithXp.js';
 
 const values = value => (Array.isArray(value) ? value : [value]).filter(value => typeof value === 'string' && value);
 const matches = (data, fields, ids) => fields.some(field => values(data[field]).some(value => ids.has(value)));
@@ -90,11 +91,12 @@ export async function cleanupSyllabusRecords(db, id, scope) {
       if (!selected) continue;
       if (['quiz_assignments', 'quizAssignments'].includes(name) && !ownCourse(data, id) && ['module', 'mission'].includes(data.targetType)
         && Array.isArray(data.targetId) && data.targetId.some(value => !removedTargets.has(value))) {
-        references.push({ ref: doc.ref, patch: { targetId: data.targetId.filter(value => !removedTargets.has(value)) } });
-      } else references.push({ ref: doc.ref });
+        references.push({ ref: doc.ref, collection: name, patch: { targetId: data.targetId.filter(value => !removedTargets.has(value)) } });
+      } else references.push({ ref: doc.ref, collection: name });
     }
   }
-  for (let index = 0; index < references.length; index += 450) {
-    await db.runTransaction(async tx => { for (const { ref, patch } of references.slice(index, index + 450)) { if (patch) tx.update(ref, patch); else tx.delete(ref); } });
+  // At most 225 record writes + 225 affected student updates per transaction.
+  for (let index = 0; index < references.length; index += 225) {
+    await deleteRecordsWithXp(db, references.slice(index, index + 225));
   }
 }

@@ -4524,7 +4524,7 @@ function selectHubTab(tab) {
   if (tab === 'leaderboards') {
     fetchLeaderboardData();
   }
-  if (tab === 'certificates') {
+  if (tab === 'certificates' || tab === 'overview') {
     fetchStudentTrainingRecords();
   }
   
@@ -11488,15 +11488,22 @@ async function fetchStudentTrainingRecords() {
   // One failed endpoint must not prevent the other set of records from loading.
   const results = await Promise.allSettled([
     Promise.resolve().then(() => window.firebaseApi.getMissionScores(studentId)),
-    Promise.resolve().then(() => window.firebaseApi.getQuizScores(studentId))
+    Promise.resolve().then(() => window.firebaseApi.getQuizScores(studentId)),
+    Promise.resolve().then(() => window.firebaseApi.getStudent(studentId))
   ]);
   if (request !== trainingRecordsRequest || currentUser.value?.id !== studentId || userRole.value !== 'student') return;
+
+  const profile = results[2];
+  if (profile.status === 'fulfilled' && profile.value?.student) {
+    currentUser.value = { ...currentUser.value, ...profile.value.student, xp: studentTotalXp(profile.value.student) };
+    if (profile.value.rankSettings) progressData.value.courseSettings = { ...progressData.value.courseSettings, ...profile.value.rankSettings };
+  }
 
   const panels = [
     { records: firestoreMissionScores, error: missionRecordsError, label: 'mission records' },
     { records: firestoreQuizSubmissions, error: quizRecordsError, label: 'quiz results' }
   ];
-  results.forEach((result, index) => {
+  results.slice(0, 2).forEach((result, index) => {
     const panel = panels[index];
     if (result.status === 'fulfilled' && Array.isArray(result.value?.scores)) {
       panel.records.value = uniqueTrainingRecords(result.value.scores, index === 0 ? 'mission' : 'quiz');

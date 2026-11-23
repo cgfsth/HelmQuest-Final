@@ -6,6 +6,7 @@ import { compile } from '@vue/compiler-dom';
 import { renderToString } from '@vue/server-renderer';
 import { restoreSavedMissionResults, getLatestMissionResult } from '../src/helpers/progressStore.js';
 import { uniqueTrainingRecords, trainingRecordDate } from '../shared/trainingRecords.js';
+import { studentTotalXp } from '../shared/progression.js';
 
 const source = readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const stateStart = source.indexOf('// Firestore Training Records Data');
@@ -24,8 +25,8 @@ const module = { id: mission.moduleId, title: mission.title, difficulty: 'Beginn
 
 function page(api) {
   const dependencies = { ref: Vue.ref, watch: Vue.watch, currentUser: Vue.ref({ id: 'student' }),
-    userRole: Vue.ref('student'), activeScreen: Vue.ref('landing'), window: { firebaseApi: api },
-    restoreSavedMissionResults, uniqueTrainingRecords, progressData: Vue.ref({ sessions: [], completedModules: {} }),
+    userRole: Vue.ref('student'), activeScreen: Vue.ref('landing'), window: { firebaseApi: { getStudent: async id => ({ student: { id } }), ...api } },
+    restoreSavedMissionResults, uniqueTrainingRecords, studentTotalXp, progressData: Vue.ref({ sessions: [], completedModules: {} }),
     getLatestMissionResult, getMissionsForModule: () => [mission], trainingModules: Vue.ref([module]),
     isMissionLocked: () => false,
     console: { error() {} } };
@@ -158,9 +159,25 @@ test('reopening Training Records requests fresh results', () => {
   select('certificates');
   select('overview');
   select('certificates');
-  assert.equal(requests, 2);
-  select('missions');
   assert.equal(requests, 3);
+  select('missions');
+  assert.equal(requests, 4);
+});
+
+test('refreshing records accepts lower XP and a zero balance after deleted awards', async () => {
+  let xp = 350;
+  const view = page({ getMissionScores: async () => ({ scores: [] }), getQuizScores: async () => ({ scores: [] }),
+    getStudent: async id => ({ student: { id, xp, total_xp: xp, rankId: 'deck_cadet', badges: [{ id: 'welcome-aboard' }] } }) });
+  try {
+    view.currentUser.value.xp = 650;
+    await view.fetchStudentTrainingRecords();
+    assert.equal(view.currentUser.value.xp, 350);
+    assert.equal(view.currentUser.value.rankId, 'deck_cadet');
+    xp = 0;
+    await view.fetchStudentTrainingRecords();
+    assert.equal(view.currentUser.value.xp, 0);
+    assert.equal(view.currentUser.value.total_xp, 0);
+  } finally { view.scope.stop(); }
 });
 
 test('a fresh browser retains the saved mission result in Training Records after mission navigation is removed', async () => {
