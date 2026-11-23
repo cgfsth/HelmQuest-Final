@@ -122,7 +122,7 @@ const simulationActionLabel = computed(() => currentSimulationAttempt.value.pass
 const showActivityAction = computed(() => activityDetail.value?.type !== 'simulation' || (simulationAttemptReady.value
   && (!currentSimulationAttempt.value.attempted || currentSimulationAttempt.value.passed || currentSimulationAttempt.value.reviewable || activityDetail.value.allowRetakes !== false)));
 const currentSimulationAccess = computed(() => {
-  const access = simulationAccess.value[activityDetail.value?.moduleId] || { canStart: false, message: 'View the PDF resources in this lesson before starting the simulation. Refresh the course to check your reading progress.' };
+  const access = simulationAccess.value[activityDetail.value?.moduleId] || { canStart: false, message: 'Refresh the course to check simulation availability.' };
   if (!access.canStart) return access;
   if (currentSimulationAttempt.value.attempted && !currentSimulationAttempt.value.passed && !currentSimulationAttempt.value.reviewable && activityDetail.value?.allowRetakes === false) return { ...access, canStart: false, message: 'Retakes are disabled for this simulation. Ask your instructor to allow a retake.' };
   return access;

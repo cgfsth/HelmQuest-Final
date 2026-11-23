@@ -66,24 +66,14 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     }
     const documents = pdfs.map(item => ({ id: item.id, kind: item.kind || 'activity', title: item.title,
       viewed: !!viewed.get(item.id)?.viewedAt && viewed.get(item.id)?.documentVersion === (item.documentVersion || documentVersion(item)) }));
-    const hasPdf = documents.length > 0, canStart = hasPdf && documents.every(item => item.viewed);
-    const missing = documents.filter(item => !item.viewed);
-    return { hasPdf, canCreate: hasPdf, canStart,
-      message: !hasPdf ? student ? 'Your instructor must publish a PDF lesson in this module before you can start the simulation.' : 'Upload a PDF lesson in this module before creating or linking a simulation.'
-        : student && !canStart ? `View the PDF ${missing.length === 1 ? 'lesson' : 'lessons'} in this module first: ${missing.map(item => item.title).join(', ')}.` : '', documents };
+    const hasPdf = documents.length > 0;
+    // Reading progress is informative; it never locks a published simulation.
+    return { hasPdf, canCreate: hasPdf, canStart: true,
+      message: !student && !hasPdf ? 'Upload a PDF lesson in this module before creating or linking a simulation.' : '', documents };
   }
   function requireModulePdf(moduleId, module, docs) {
     const access = modulePdfAccess(moduleId, module, docs);
     if (!access.canCreate) fail(400, access.message);
-  }
-  async function requireViewedModulePdfs(user, item) {
-    const [docs, views] = await Promise.all([
-      col('learning_activities').where('syllabusId', '==', item.data.syllabusId).get(),
-      col('learning_activity_progress').where('studentId', '==', user.id).get()
-    ]);
-    const viewed = new Map(views.docs.map(doc => [doc.data().activityId, doc.data()]));
-    const access = modulePdfAccess(item.data.moduleId, item.module, docs, viewed, true);
-    if (!access.canStart) fail(403, access.message);
   }
   async function context(user, syllabusId, moduleId = null, write = false) {
     const parent = await ref('syllabi', syllabusId).get();
@@ -355,10 +345,6 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
       const fresh = source.data();
       if (!body.kind) available(fresh);
       if (!body.kind && fresh.type === 'simulation') {
-        const docs = await tx.get(col('learning_activities').where('syllabusId', '==', fresh.syllabusId));
-        const views = await tx.get(col('learning_activity_progress').where('studentId', '==', user.id));
-        const access = modulePdfAccess(fresh.moduleId, module?.data(), docs, new Map(views.docs.map(doc => [doc.data().activityId, doc.data()])), true);
-        if (!access.canStart) fail(403, access.message);
         if (body.event === 'started' && fresh.allowRetakes === false) {
           const scores = await tx.get(col('mission_score').where('studentId', '==', user.id));
           const attempt = simulationAttempt(scores.docs.map(doc => doc.data()).filter(r => canonicalMissionId(r.missionId) === canonicalMissionId(fresh.targetId)), false, !!previous.data()?.startedAt);
@@ -482,7 +468,6 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
   }
   async function completeSimulation(user, id, body) {
     const item = await practical(user, id);
-    await requireViewedModulePdfs(user, item);
     if (!validDockingCompletion(body.completion)) fail(409, 'Dock in the assigned port, stop the engine and deploy the anchor first.');
     let performance;
     let encounter;

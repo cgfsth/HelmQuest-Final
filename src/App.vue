@@ -4383,7 +4383,7 @@ async function launchCourseSimulation({ target, activityId, syllabusId, lessonId
     if (studentId !== currentUser.value?.id || userRole.value !== 'student') return;
     const mission = findMissionForModule(target.id);
     if (!mission || !trainingModules.value.some(module => module.id === target.id)) throw new Error('The assigned mission is unavailable. Refresh the course or contact your instructor.');
-    // The course launch API enforces this module's PDF views and availability.
+    // The course launch API enforces publication, availability and retakes.
     // Legacy standalone mission locks do not apply to syllabus simulations.
     activeCoursePractical.value = { activityId, syllabusId, lessonId, studentId, lessonRunId };
     courseCompletionFlow?.dispose(); courseCompletionFlow = null; courseCompletionState.value = 'IN_PROGRESS'; courseCompletionError.value = '';

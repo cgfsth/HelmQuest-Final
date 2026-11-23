@@ -30,7 +30,7 @@ const state = computed(() => props.progress || { status: 'To do', requirements: 
 ] });
 const unavailable = computed(() => {
   if (props.manager || props.preview) return '';
-  if (props.activity.type === 'simulation' && !props.simulationAccess?.canStart) return props.simulationAccess?.message || 'View the PDF lessons in this module before starting the simulation.';
+  if (props.activity.type === 'simulation' && !props.simulationAccess?.canStart) return props.simulationAccess?.message || 'Refresh the course to check simulation availability.';
   if (props.activity.availableFrom && Date.parse(props.activity.availableFrom) > Date.now()) return 'Not open yet';
   return props.activity.availableUntil && Date.parse(props.activity.availableUntil) < Date.now() ? 'Activity closed' : '';
 });

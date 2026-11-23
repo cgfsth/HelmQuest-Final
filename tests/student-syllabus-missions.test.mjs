@@ -129,7 +129,7 @@ test('editing a linked mission retains the activity schedule in the mission edit
   assert.match(context.missionEditorModal.value.data.deadline, /^2026-12-10T/);
 });
 
-test('client-side authoring and launch handlers cannot bypass missing PDF prerequisites', async () => {
+test('client-side handlers require PDFs for authoring and availability for student launch', async () => {
   const emitted = [], apiCalls = [];
   const authoring = { simulationAccess: Vue.ref({}), error: Vue.ref(''), emit: (...args) => emitted.push(args), missionContext: () => ({}) };
   vm.createContext(authoring); vm.runInContext(extract(materials, 'createModuleMission'), authoring);
@@ -137,10 +137,10 @@ test('client-side authoring and launch handlers cannot bypass missing PDF prereq
   assert.equal(emitted.length, 0); assert.match(authoring.error.value, /Upload a PDF/);
   const student = { busy: Vue.ref(false), manager: Vue.ref(false), preview: Vue.ref(false), activityDetail: Vue.ref({ type: 'simulation' }),
     simulationAttemptReady: Vue.ref(true),
-    currentSimulationAccess: Vue.ref({ canStart: false, message: 'View the module PDF first.' }), error: Vue.ref(''), api: { launchLearningActivity: () => apiCalls.push(true) } };
+    currentSimulationAccess: Vue.ref({ canStart: false, message: 'Refresh the course to check simulation availability.' }), error: Vue.ref(''), api: { launchLearningActivity: () => apiCalls.push(true) } };
   vm.createContext(student); vm.runInContext(extract(materials, 'startActivity'), student);
   await student.startActivity();
-  assert.equal(apiCalls.length, 0); assert.equal(student.error.value, 'View the module PDF first.');
+  assert.equal(apiCalls.length, 0); assert.equal(student.error.value, 'Refresh the course to check simulation availability.');
 });
 
 test('returning from the PDF reader waits for the saved view before refreshing simulation access', async () => {
