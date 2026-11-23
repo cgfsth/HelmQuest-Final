@@ -7,7 +7,8 @@ import { renderToString } from '@vue/server-renderer';
 import { compile } from '@vue/compiler-dom';
 import { parse } from '@vue/compiler-sfc';
 import { normalizeEncounter } from '../shared/vesselEncounter.js';
-import { Anchor, ArrowDown, ArrowLeft, ArrowUp, BookOpen, ChevronDown, Megaphone, Pencil, Plus, Trash2 } from '@lucide/vue';
+import { LESSON_ALIGNMENT_VERSION, lessonOutcomes, alignLessonMission } from '../shared/lessonAlignment.js';
+import { Anchor, ArrowDown, ArrowLeft, ArrowUp, BookOpen, ChevronDown, Link2, Megaphone, Pencil, Plus, Trash2 } from '@lucide/vue';
 
 const app = readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const outline = readFileSync(new URL('../src/components/materials/CourseOutline.vue', import.meta.url), 'utf8');
@@ -17,7 +18,7 @@ const modules = [{ id: 'first', title: 'Navigation', moduleNumber: 1 }, { id: 's
 
 async function course(manager, hasPdf = true) {
   return renderToString(Vue.createSSRApp({ render,
-    components: { Anchor, ArrowDown, ArrowLeft, ArrowUp, BookOpen, ChevronDown, Megaphone, Pencil, Plus, Trash2,
+    components: { Anchor, ArrowDown, ArrowLeft, ArrowUp, BookOpen, ChevronDown, Link2, Megaphone, Pencil, Plus, Trash2,
       CourseActivityRow: { render: () => null }, OfficialSyllabusMatrix: { render: () => null } },
     setup: () => ({ syllabus: { title: 'Maritime Training' }, visibleModules: modules, displayedModules: modules,
       official: null, focusedLessonId: '', manager, missionAuthoring: manager, missionQuizzesLoading: false, missionQuizLabel: () => 'Create Quiz',
@@ -36,7 +37,7 @@ test('each instructor module has Create mission; students get course content wit
 
 test('the module explains that a PDF is required and disables Create mission until it is uploaded', async () => {
   const blocked = await course(true, false);
-  assert.match(blocked, /Upload a PDF lesson in this module to enable mission creation/);
+  assert.match(blocked, /Upload a PDF for this lesson to enable mission creation/);
   assert.equal((blocked.match(/class="lm-primary lc-create-mission" disabled/g) || []).length, 2);
 });
 
@@ -61,7 +62,7 @@ test('module context carries the exact course, module and saved activity and ign
 
 function editorPage(saveModuleMission) {
   const notifications = [], refreshes = [];
-  const context = { normalizeEncounter, currentUser: Vue.ref({ id: 'teacher' }), userRole: Vue.ref('instructor'),
+  const context = { normalizeEncounter, LESSON_ALIGNMENT_VERSION, lessonOutcomes, alignLessonMission, currentUser: Vue.ref({ id: 'teacher' }), userRole: Vue.ref('instructor'),
     missionEditorModal: Vue.ref(null), missionEditorError: Vue.ref(''), missionSaving: Vue.ref(false),
     trainingModules: Vue.ref([]), progressData: Vue.ref({}), Date, console: { log() {}, error() {} },
     firebaseApi: { saveModuleMission }, window: { firebaseApi: { createMission: () => assert.fail('Must save through the module API') } },

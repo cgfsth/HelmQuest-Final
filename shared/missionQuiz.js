@@ -16,7 +16,8 @@ export function gradeMissionQuiz(quiz, answers) {
   const norm = value => String(value ?? '').trim().toLowerCase();
   const graded = quiz.questions.map((q, index) => {
     const correct = q.type === 'multiple-choice' ? q.options?.find(o => o.isCorrect)?.text : q.correctAnswer;
-    return { questionId: q.id ?? String(index), studentAnswer: normalized[index], correctAnswer: correct ?? '', isCorrect: correct != null && norm(normalized[index]) === norm(correct) };
+    return { questionId: q.id ?? String(index), studentAnswer: normalized[index], correctAnswer: correct ?? '', isCorrect: correct != null && norm(normalized[index]) === norm(correct),
+      ...(q.learningOutcome ? { learningOutcome: q.learningOutcome } : {}) };
   });
   const correct = graded.filter(a => a.isCorrect).length, total = graded.length, score = Math.round(correct / total * 100);
   return { answers: graded, validation: graded.map(a => a.isCorrect), 'raw-score': correct, correctAnswers: correct, totalQuestions: total,

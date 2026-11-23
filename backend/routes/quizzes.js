@@ -2,6 +2,8 @@
 import express from 'express';
 import { db } from '../config/firebase-admin.js';
 import { saveQuizResult, saveQuizGrade } from '../services/scorePersistence.js';
+import { validateLessonQuiz } from '../services/quizLessonAlignment.js';
+import { LessonAlignmentError } from '../../shared/lessonAlignment.js';
 
 const router = express.Router();
 
@@ -66,6 +68,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const quizData = { ...req.body, createdAt: new Date() };
+    try { await validateLessonQuiz(db, quizData); } catch(error) { if(error instanceof LessonAlignmentError)return res.status(400).json({message:error.message}); throw error; }
     const docRef = await db.collection('quiz').add(quizData);
     res.status(201).json({ message: 'Quiz created', quizId: docRef.id });
   } catch (error) {
@@ -76,7 +79,11 @@ router.post('/', async (req, res) => {
 // PUT /api/v1/quizzes/:id - Update quiz
 router.put('/:id', async (req, res) => {
   try {
-    await db.collection('quiz').doc(req.params.id).update({ ...req.body, updatedAt: new Date() });
+    const reference=db.collection('quiz').doc(req.params.id), previous=await reference.get();
+    if(!previous.exists)return res.status(404).json({message:'Quiz not found'});
+    const data={...previous.data(),...req.body,updatedAt:new Date()};
+    try { await validateLessonQuiz(db,data); } catch(error) { if(error instanceof LessonAlignmentError)return res.status(400).json({message:error.message}); throw error; }
+    await reference.update(data);
     res.json({ message: 'Quiz updated successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Server Error', message: error.message });

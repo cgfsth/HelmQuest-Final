@@ -9,6 +9,7 @@ import { normalizeEncounter, normalizeEncounterAttempt } from '../../shared/vess
 import { selectMissionQuiz, gradeMissionQuiz } from '../../shared/missionQuiz.js';
 import { simulationAttempt } from '../../shared/simulationAttempts.js';
 import { normalizeLearningLink } from '../../shared/learningLinks.js';
+import { LESSON_ALIGNMENT_VERSION, alignLessonMission, validateOutcomeQuiz } from '../../shared/lessonAlignment.js';
 
 const fail = (status, message) => { throw new MaterialsError(status, message); };
 const validId = id => typeof id === 'string' && /^[\w-]{1,128}$/.test(id);
@@ -140,7 +141,10 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     if (user.role !== 'instructor') fail(403, 'Only instructors can create module missions.');
     if (!validId(body.missionId) || !moduleId) fail(400, 'Choose a module and a valid mission.');
     const { parent } = await context(user, syllabusId, moduleId, true);
-    const input = body.mission || {};
+    let input = body.mission || {};
+    const lesson = (await ref('syllabus_modules', moduleId).get()).data();
+    try { input = alignLessonMission(input, lesson?.objectives || input.learning_objectives, body.published !== false); }
+    catch (error) { fail(400, error.message); }
     try { input.encounter = normalizeEncounter(input.encounter); } catch (error) { fail(400, error.message); }
     const title = clean(input.mission_title, 180, true);
     const duration = clean(input.estimated_duration, 100, true);
@@ -160,6 +164,8 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
       const siblings = await tx.get(col('learning_activities').where('syllabusId', '==', syllabusId));
       if (!course.exists || course.data().status !== 'active' || !canManageSyllabus(course.data(), user) || course.data().instructorId !== user.id) fail(404, 'Course not found.');
       if (!module.exists || module.data().status !== 'active' || module.data().syllabusId !== syllabusId) fail(404, 'Module not found.');
+      try { alignLessonMission(input, module.data().objectives || input.learning_objectives, body.published !== false); }
+      catch (error) { fail(400, error.message); }
       if (!body.activityId) requireModulePdf(moduleId, module.data(), siblings);
       const old = linked.exists ? linked.data() : null;
       if (body.activityId) {
@@ -352,7 +358,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
   }
   async function launch(user, id) {
     if (user.role !== 'student') fail(403, 'Use a student account to start an activity.');
-    const { data, syllabus } = await activity(user, id); available(data);
+    const { data, syllabus, module } = await activity(user, id); available(data);
     if (data.type === 'quiz') fail(409, 'Quizzes are available after completing and docking in the assigned practical simulation.');
     if (!['simulation', 'quiz'].includes(data.type)) fail(400, 'This activity opens in the document viewer.');
     const doc = await ref(data.type === 'simulation' ? 'missions' : 'quiz', data.targetId).get();
@@ -361,6 +367,15 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     if (data.type === 'quiz') {
       const choices = await catalog({ ...user, role: 'instructor', id: syllabus.instructorId }, data.syllabusId);
       if (!choices.quizzes.some(q => q.id === doc.id)) fail(404, 'The linked quiz is unavailable.');
+    }
+    if (doc.data().outcomeAlignmentVersion === LESSON_ALIGNMENT_VERSION) {
+      try { alignLessonMission(doc.data(), module?.objectives || doc.data().lesson_outcomes, true); }
+      catch(error) { fail(409, 'Your instructor must update this mission to match the current lesson outcomes.'); }
+      const [quizzes, assignments] = await Promise.all([col('quiz').get(), col('quiz_assignments').get()]);
+      const quiz = selectMissionQuiz({missionId:data.targetId,instructorId:syllabus.instructorId,quizzes:quizzes.docs.map(d=>({...d.data(),id:d.id})),assignments:assignments.docs.map(d=>d.data()),policy:data.quizPolicy || 'inherit',quizId:data.quizId});
+      if (!quiz) fail(409, 'Your instructor must assign and publish the lesson’s final quiz before you start this mission.');
+      try { validateOutcomeQuiz(quiz, module?.objectives || doc.data().lesson_outcomes); }
+      catch(error) { fail(409, 'Your instructor must finish linking the final quiz questions to this lesson’s outcomes.'); }
     }
     await record(user, id, { event: 'started' });
     await activity(user, id);
@@ -444,6 +459,11 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     const quiz = selectMissionQuiz({ missionId: item.data.targetId, instructorId: item.syllabus.instructorId,
       quizzes: quizDocs.docs.map(d => ({ ...d.data(), id: d.id })), assignments: assignmentDocs.docs.map(d => d.data()), policy: item.data.quizPolicy || 'inherit', quizId: item.data.quizId });
     const saved = quiz ? scores.docs.map(d => ({ ...d.data(), id: d.id })).find(r => r.quizId === quiz.id) || null : null;
+    if (item.mission.data().outcomeAlignmentVersion === LESSON_ALIGNMENT_VERSION && !saved) {
+      if (!quiz) fail(409, 'The final quiz is not available. Ask your instructor to publish it, then try again.');
+      try { validateOutcomeQuiz(quiz, item.module?.objectives || item.mission.data().lesson_outcomes); }
+      catch(error) { fail(409, 'The final quiz needs an instructor update to cover this lesson’s outcomes.'); }
+    }
     if (quiz) quiz.questions = quiz.questions.map((question, index) => {
       const normalized = { ...question, id: question.id ?? String(index) };
       if (includeAnswers || saved) return normalized;

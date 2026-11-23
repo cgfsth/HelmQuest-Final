@@ -539,6 +539,10 @@
               <h3>⚓ Buoy Checkpoint Content</h3>
               <button class="quiz-add-question-btn" @click="addMissionBuoy()">+ Add Buoy</button>
             </div>
+            <template v-if="missionEditorModal.data.outcomeAlignmentVersion">
+              <p class="field-hint">Link each buoy’s picture and description to a saved lesson outcome. Buoys contain practical tasks and learning material only. Questions appear in the final quiz after docking.</p>
+              <p class="field-hint">Support every lesson outcome with a buoy, then create and publish a final quiz covering those outcomes before students start. Simulation scoring stays completion 40%, accuracy 40%, safety 20%; the quiz is scored separately.</p>
+            </template>
             <div v-if="missionEditorModal.data.buoys.length === 0" class="quiz-empty-state">
               No buoy content yet. Add one buoy for each checkpoint students must inspect.
             </div>
@@ -554,10 +558,10 @@
               <label class="quiz-field">
                 <span>Interaction Type (Task)</span>
                 <select v-model="buoy.requireInteraction" class="quiz-select">
-                  <option value="">None (Just navigate)</option>
+                  <option v-if="!missionEditorModal.data.outcomeAlignmentVersion" value="">None (Just navigate)</option>
                   <option value="photograph">📷 Photograph - Take picture</option>
-                  <option value="verify_id">🔍 Verify ID - Enter buoy ID</option>
-                  <option value="remove_debris">🧹 Clean Debris - Hold to clean</option>
+                  <option v-if="!missionEditorModal.data.outcomeAlignmentVersion" value="verify_id">🔍 Verify ID - Enter buoy ID</option>
+                  <option v-if="!missionEditorModal.data.outcomeAlignmentVersion" value="remove_debris">🧹 Clean Debris - Hold to clean</option>
                   <option value="inspect_buoy">👁️ Inspect - Quick check</option>
                 </select>
                 <span class="field-hint">This determines what students must do at this buoy</span>
@@ -574,6 +578,10 @@
               <label class="quiz-field">
                 <span>Buoy Description</span>
                 <textarea v-model="buoy.description" rows="5" placeholder="Describe what students should learn or identify at this buoy..." class="quiz-textarea"></textarea>
+              </label>
+              <label v-if="missionEditorModal.data.outcomeAlignmentVersion" class="quiz-field">
+                <span>Learning outcome supported by this buoy</span>
+                <select v-model="buoy.learningOutcome" class="quiz-select"><option value="" disabled>Choose a lesson learning outcome</option><option v-for="outcome in lessonOutcomes(missionEditorModal.courseContext?.objectives || missionEditorModal.data.lessonOutcomes)" :key="outcome" :value="outcome">{{ outcome }}</option></select>
               </label>
             </div>
           </div>
@@ -643,6 +651,11 @@
               </label>
               
               <!-- Multiple Choice Options -->
+              <label v-if="quizLearningOutcomes(quizEditorModal.moduleId).length" class="quiz-field">
+                <span>Lesson learning outcome assessed by this final-quiz question</span>
+                <select v-model="question.learningOutcome" class="quiz-select" @change="debouncedSaveDraft"><option value="" disabled>Choose the outcome assessed</option><option v-for="outcome in quizLearningOutcomes(quizEditorModal.moduleId)" :key="outcome" :value="outcome">{{ outcome }}</option></select>
+                <span class="field-hint">Cover every lesson outcome before publishing. Questions appear after mission completion and docking.</span>
+              </label>
               <div v-if="question.type === 'multiple-choice'" class="mc-options">
                 <div class="mc-options-header">
                   <label class="quiz-field-label">Answer Options:</label>
@@ -3368,14 +3381,15 @@
       <div v-if="gearInfoPopup" class="gear-info-popup-backdrop" @click.self="dismissGearInfoPopup">
         <div class="gear-info-popup">
           <div class="gear-info-header">
-            <span class="gear-info-badge">📸 Gear Identified</span>
+            <span class="gear-info-badge">{{ gearInfoPopup.learningOutcome ? 'Checkpoint learning material' : '📸 Gear Identified' }}</span>
             <h2 class="gear-info-title">{{ gearInfoPopup.name }}</h2>
           </div>
           <div class="gear-info-body">
             <div class="gear-info-image-container">
-              <img :src="gearInfoPopup.imageSrc" :alt="gearInfoPopup.name" class="gear-info-image" />
-              <span class="gear-info-image-label">Real-life reference photo</span>
+              <img :src="gearInfoPopup.imageSrc" :alt="gearInfoPopup.name" class="gear-info-image" :class="{ 'gear-info-image--lesson': !!gearInfoPopup.learningOutcome }" />
+              <span class="gear-info-image-label">{{ gearInfoPopup.learningOutcome ? 'Lesson reference image' : 'Real-life reference photo' }}</span>
             </div>
+            <p v-if="gearInfoPopup.learningOutcome" class="gear-info-description"><strong>Learning outcome</strong><br/>{{ gearInfoPopup.learningOutcome }}</p>
             <p class="gear-info-description">{{ gearInfoPopup.description }}</p>
           </div>
           <div class="gear-info-footer">
@@ -3436,6 +3450,7 @@ import { useSimulationPreferences } from './composables/useSimulationPreferences
 import { deriveProgression, studentTotalXp } from '../shared/progression.js';
 import { createMissionCompletionFlow } from './helpers/missionCompletionFlow.js';
 import { validDockingCompletion, simulationScoringInputs, simulationPerformance } from '../shared/simulationPerformance.js';
+import { LESSON_ALIGNMENT_VERSION, lessonOutcomes, alignLessonMission, validateOutcomeQuiz } from '../shared/lessonAlignment.js';
 import { isBoatAtPort } from './helpers/portDocking.js';
 import { normalizeEncounter } from '../shared/vesselEncounter.js';
 import { createVesselEncounter, updateVesselEncounter, vesselEncounterResult, vesselEncounterGuidance } from './helpers/vesselEncounter.js';
@@ -4237,6 +4252,7 @@ function showGearInfoPopup(zoneId) {
     ? {
         name: missionBuoy.name || 'Buoy Checkpoint',
         imageSrc: missionBuoy.imageSrc,
+        learningOutcome: missionBuoy.learningOutcome || '',
         description: missionBuoy.description || 'Buoy checkpoint completed.'
       }
     : GEAR_INFO_DATA[zoneId];
@@ -8367,6 +8383,10 @@ async function startCreatingQuiz(moduleId = quizManagerModal.value?.moduleId, mi
 }
 
 // Open quiz editor modal with given quiz data
+function quizLearningOutcomes(moduleId) {
+  const module = trainingModules.value.find(m => m.id === moduleId);
+  return module?.outcomeAlignmentVersion === LESSON_ALIGNMENT_VERSION ? lessonOutcomes(module.lessonOutcomes || module.objectives) : [];
+}
 function openQuizEditor(quiz, moduleId, isNew) {
   quizManagerModal.value = null;
   quizEditorModal.value = {
@@ -8716,6 +8736,8 @@ async function saveQuiz() {
   
   try {
     // Auto-populate title from mission if empty
+    const outcomes = quizLearningOutcomes(moduleId);
+    if (outcomes.length) validateOutcomeQuiz(quiz, outcomes);
     if (!quiz.title || !quiz.title.trim()) {
       const module = trainingModules.value.find(m => m.id === moduleId);
       quiz.title = module?.title || 'Untitled Quiz';
@@ -9703,6 +9725,7 @@ const BUOY_TASK_TYPES = ['photograph', 'verify_id', 'remove_debris'];
  * appears roughly equally regardless of how many buoys there are.
  */
 function randomizeBuoyTasks(module) {
+  if (module?.outcomeAlignmentVersion === LESSON_ALIGNMENT_VERSION) return;
   if (!module || !Array.isArray(module.buoys) || !module.buoys.length) return;
 
   const buoyZoneIds = new Set(module.buoys.map(b => b.waypointZone).filter(Boolean));
@@ -10735,6 +10758,8 @@ function openMissionEditor(module) {
       openDate: localDate(getModuleSchedule(module.id).openDate),
       deadline: localDate(getModuleSchedule(module.id).deadline),
       encounter: { type: 'none', clearance: 100, warningDistance: 600, ...module.encounter },
+      outcomeAlignmentVersion: module.outcomeAlignmentVersion || '',
+      lessonOutcomes: module.lessonOutcomes || module.objectives || [],
       buoyCount: Array.isArray(module.buoys) ? module.buoys.length : 0,
       buoys: (module.buoys || []).map((buoy, index) => ({
         id: buoy.id || `${module.id}-buoy-${index + 1}`,
@@ -10742,6 +10767,7 @@ function openMissionEditor(module) {
         waypointZone: buoy.waypointZone || `${module.id}-buoy-${index + 1}`,
         imageSrc: buoy.imageSrc || '',
         description: buoy.description || '',
+        learningOutcome: buoy.learningOutcome || '',
         requireInteraction: buoy.requireInteraction || 'inspect_buoy'
       })),
       boatType: module.boatType || 'medium',
@@ -10796,7 +10822,9 @@ function openMissionCreator(courseContext = null) {
       buoyCount: 0,
       buoys: [],
       boatType: 'medium',
-      objectives: [''],
+      outcomeAlignmentVersion: courseContext?.objectives ? LESSON_ALIGNMENT_VERSION : '',
+      lessonOutcomes: lessonOutcomes(courseContext?.objectives),
+      objectives: courseContext?.objectives ? lessonOutcomes(courseContext.objectives) : [''],
       steps: [
         { instruction: '', waypointZone: `${newId}-step-1`, type: 'gps', lat: '', lon: '', heading: '' }
       ],
@@ -10829,7 +10857,8 @@ async function openCourseMissionEditor(context) {
 function addMissionBuoy() {
   if (!missionEditorModal.value) return;
   const data = missionEditorModal.value.data;
-  const index = data.buoys.length + 1;
+  let index = data.buoys.length + 1;
+  while (data.buoys.some(b => b.id === `${data.id}-buoy-${index}`)) index++;
   const buoyId = `${data.id}-buoy-${index}`;
   data.buoys.push({
     id: buoyId,
@@ -10837,7 +10866,8 @@ function addMissionBuoy() {
     waypointZone: buoyId,
     imageSrc: '',
     description: '',
-    requireInteraction: 'photograph' // Default to photograph task
+    learningOutcome: '',
+    requireInteraction: data.outcomeAlignmentVersion ? 'inspect_buoy' : 'photograph'
   });
   data.buoyCount = data.buoys.length;
 }
@@ -10987,12 +11017,15 @@ async function saveMissionEditor() {
       xpReward: Number(data.xpReward), // Store as number
       passScore: Number(data.passScore), // Store as number
       buoyCount: data.buoys.length,
+      outcomeAlignmentVersion: data.outcomeAlignmentVersion || '',
+      lessonOutcomes: lessonOutcomes(editor.courseContext?.objectives || data.lessonOutcomes),
       buoys: data.buoys.map((buoy, index) => ({
         id: buoy.id || `${data.id}-buoy-${index + 1}`,
         name: buoy.name?.trim() || `Buoy ${index + 1}`,
         waypointZone: buoy.waypointZone?.trim() || `${data.id}-buoy-${index + 1}`,
         imageSrc: buoy.imageSrc || '',
         description: buoy.description?.trim() || '',
+        learningOutcome: buoy.learningOutcome || '',
         requireInteraction: buoy.requireInteraction || 'inspect_buoy'
       })),
       boatType: data.boatType || 'medium',
@@ -11030,6 +11063,7 @@ async function saveMissionEditor() {
         pass_score: cleaned.passScore, // Numeric value
         learning_objectives: cleaned.objectives,
         required_boat: cleaned.boatType,
+        outcomeAlignmentVersion: cleaned.outcomeAlignmentVersion,
         encounter: cleaned.encounter,
         steps: cleaned.steps,
         checkpoints: cleaned.buoys.map((buoy) => ({
@@ -11038,6 +11072,7 @@ async function saveMissionEditor() {
           waypointZone: buoy.waypointZone,
           image: buoy.imageSrc,
           description: buoy.description,
+          learningOutcome: buoy.learningOutcome,
           requireInteraction: buoy.requireInteraction,
           required: true
         })),
@@ -11045,7 +11080,8 @@ async function saveMissionEditor() {
           Image: buoy.imageSrc,
           bouy_description: buoy.description,
           checkpoint_id: buoy.waypointZone,
-          require_interaction: buoy.requireInteraction
+          require_interaction: buoy.requireInteraction,
+          learningOutcome: buoy.learningOutcome
         })),
         opendate: cleaned.opendate,
         deadline: cleaned.deadline,
@@ -11056,6 +11092,7 @@ async function saveMissionEditor() {
 
       if (editor.courseContext) {
         const context = editor.courseContext;
+        Object.assign(firestoreMission, alignLessonMission(firestoreMission, context.objectives || cleaned.lessonOutcomes, context.published !== false));
         const saved = await firebaseApi.saveModuleMission(context.syllabusId, context.moduleId, {
           missionId: cleaned.id, mission: firestoreMission, published: context.published,
           allowRetakes: data.allowRetakes !== false,
@@ -11375,7 +11412,8 @@ async function loadMissionDatesFromFirestore() {
               name: `Buoy ${index + 1}`,
               waypointZone: buoy.checkpoint_id || `${mission.id}-buoy-${index + 1}`,
               imageSrc: buoy.Image || '',
-              description: buoy.bouy_description || ''
+              description: buoy.bouy_description || '',
+              learningOutcome: buoy.learningOutcome || mission.checkpoints?.find(c => (c.waypointZone || c.id) === buoy.checkpoint_id)?.learningOutcome || ''
             }))
           : [];
         const remoteBuoyIds = new Set(remoteBuoys.map((buoy) => buoy.waypointZone));
@@ -11383,7 +11421,7 @@ async function loadMissionDatesFromFirestore() {
           .filter((step) => !remoteBuoys.length || remoteBuoyIds.has(step.waypointZone) || step.type === 'dock')
           .map((step) => ({
           ...step,
-          requireInteraction: remoteBuoyIds.has(step.waypointZone)
+          requireInteraction: remoteBuoyIds.has(step.waypointZone) && mission.outcomeAlignmentVersion !== LESSON_ALIGNMENT_VERSION
             ? 'inspect_buoy'
             : step.requireInteraction
           }));
@@ -11399,10 +11437,12 @@ async function loadMissionDatesFromFirestore() {
           passScore: typeof mission.pass_score === 'number' ? mission.pass_score : 70,
           boatType: mission.required_boat || mission.boatType || 'medium',
           encounter: mission.encounter || null,
+          outcomeAlignmentVersion: mission.outcomeAlignmentVersion || '',
+          lessonOutcomes: mission.lesson_outcomes || [],
           objectives: Array.isArray(mission.learning_objectives)
             ? mission.learning_objectives
             : (mission.objectives || []),
-          missionSteps: Array.isArray(mission.mission_steps) 
+          missionSteps: mission.outcomeAlignmentVersion !== LESSON_ALIGNMENT_VERSION && Array.isArray(mission.mission_steps)
             ? mission.mission_steps 
             : [],
           steps: remoteSteps,
@@ -26849,6 +26889,11 @@ kbd.active {
   height: 220px;
   object-fit: cover;
   display: block;
+}
+
+.gear-info-image--lesson {
+  object-fit: contain;
+  background: #0b1829;
 }
 
 .gear-info-image-label {

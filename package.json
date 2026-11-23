@@ -4,6 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "verify:lesson-alignment": "node scripts/verify-lesson-alignment.mjs",
+    "test:lesson-alignment": "node --test tests/lesson-alignment.test.mjs tests/student-syllabus-missions.test.mjs",
     "verify:settings": "node scripts/verify-student-settings.mjs",
     "verify:vessels": "node scripts/verify-vessel-encounters.mjs",
     "test:courses": "node --test tests/course-interface.test.mjs tests/mission-completion-flow.test.mjs",
