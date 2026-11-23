@@ -13,7 +13,8 @@ export function simulationAttempt(results = [], allowRetakes = true, started = f
     || String(a.id || '').localeCompare(String(b.id || '')));
   const result = ordered[0] || null, passed = !!result && passedResult(result), attempted = !!result || started;
   const score = result?.score != null && Number.isFinite(Number(result.score)) ? Number(result.score) : null;
-  return { result, attempted, score, passed, canRetry: attempted && !passed && allowRetakes !== false };
+  const reviewable=result?.lessonScoring?.mode==='knowledge' && result?.completion?.verified===true;
+  return { result, attempted, score, passed, ...(reviewable?{reviewable:true,assessmentStatus:'practice-completed'}:{}), canRetry: attempted && !passed && !reviewable && allowRetakes !== false };
 }
 
 export function simulationResultsForActivity(scores, activity) {

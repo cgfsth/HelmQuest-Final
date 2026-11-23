@@ -10,6 +10,7 @@ import { selectMissionQuiz, gradeMissionQuiz } from '../../shared/missionQuiz.js
 import { simulationAttempt } from '../../shared/simulationAttempts.js';
 import { normalizeLearningLink } from '../../shared/learningLinks.js';
 import { LESSON_ALIGNMENT_VERSION, alignLessonMission, validateOutcomeQuiz } from '../../shared/lessonAlignment.js';
+import { LESSON_SCORING_VERSION, INTEGRATED_SIMULATION_VERSIONS, lessonScoringDefinition, gradeChartTask, gradeLightingTask, scoreLessonSimulation, outcomeQuizScores } from '../../shared/lessonScoring.js';
 
 const fail = (status, message) => { throw new MaterialsError(status, message); };
 const validId = id => typeof id === 'string' && /^[\w-]{1,128}$/.test(id);
@@ -36,7 +37,16 @@ function retakesSetting(value, previous = true) {
   fail(400, 'Choose whether to allow simulation retakes.');
 }
 
-export function activityCompletion(activity, { viewed = false, started = false, results = [] } = {}) {
+export function activityCompletion(activity, { viewed = false, started = false, results = [], quizResults = [] } = {}) {
+  const knowledge=results.find(r=>r.lessonScoring?.mode==='knowledge' && r.completion?.verified);
+  if(knowledge) {
+    const quiz=quizResults.find(q=>q.activityId===activity.id || canonicalMissionId(q.missionId || q.moduleId)===canonicalMissionId(activity.targetId));
+    const threshold=Number(activity.passScore ?? knowledge.passScore ?? 70);
+    const outcomes=outcomeQuizScores(knowledge.lessonScoring,quiz);
+    const requirements=[{label:'Complete the navigation practice',done:true},{label:'Complete the final quiz for the selected learning outcomes',done:outcomes.length>0 && outcomes.every(o=>o.score!=null)},
+      ...(activity.completionRule==='pass'?[{label:`Achieve at least ${threshold}% for each selected knowledge outcome`,done:outcomes.length>0 && outcomes.every(o=>o.score!=null && o.score>=threshold)}]:[])];
+    return {status:requirements.every(r=>r.done)?'Done':'In Progress',requirements};
+  }
   const requirements = isResource(activity.type) ? [{ label: activity.type === 'link' ? 'Open the video link' : activity.type === 'presentation' ? 'View the presentation' : 'View the document', done: viewed }] : [
     { label: activity.type === 'simulation' ? 'Complete the assigned simulation' : 'Complete the quiz', done: results.length > 0 },
     ...(activity.completionRule === 'pass' ? [{ label: activity.passScore !== null && activity.passScore !== undefined ? `Achieve at least ${activity.passScore}%` : 'Meet the configured passing requirements', done: results.some(r => activity.passScore !== null && activity.passScore !== undefined ? Number(r['Quiz-score-percentage'] ?? r.score) >= activity.passScore : hasMissionCompletion(r)) }] : [])
@@ -121,7 +131,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
         const state = viewed.get(a.id) || {};
         const results = a.type === 'simulation' ? missions.filter(r => canonicalMissionId(r.missionId) === canonicalMissionId(a.targetId)) : a.type === 'quiz' ? quizzes.filter(r => r.quizId === a.targetId) : [];
         progress[a.id] = activityCompletion(a, { viewed: !!state.viewedAt && state.documentVersion === a.documentVersion, started: !!state.startedAt,
-          results });
+          results, quizResults:quizzes });
         if (a.type === 'simulation') {
           const { result, ...attempt } = simulationAttempt(results, a.allowRetakes, !!state.startedAt);
           progress[a.id].simulation = attempt;
@@ -145,6 +155,13 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     const lesson = (await ref('syllabus_modules', moduleId).get()).data();
     try { input = alignLessonMission(input, lesson?.objectives || input.learning_objectives, body.published !== false); }
     catch (error) { fail(400, error.message); }
+    if (input.outcomeAlignmentVersion === LESSON_ALIGNMENT_VERSION) {
+      try {
+        const definition=lessonScoringDefinition(lesson?.objectives || input.learning_objectives,input);
+        input={...input,lessonScoring:definition,...(definition?.chart?{chartExercise:definition.chart}:{})};
+        if(body.published!==false && definition?.criteria.some(c=>c.key==='giveWay') && !['crossing-red','crossing-green'].includes(input.encounter?.type)) fail(400,'This lesson needs a crossing-vessel exercise to assess the give-way outcome.');
+      } catch(error) { if(error instanceof MaterialsError)throw error;fail(400,error.message); }
+    }
     try { input.encounter = normalizeEncounter(input.encounter); } catch (error) { fail(400, error.message); }
     const title = clean(input.mission_title, 180, true);
     const duration = clean(input.estimated_duration, 100, true);
@@ -345,7 +362,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
         if (body.event === 'started' && fresh.allowRetakes === false) {
           const scores = await tx.get(col('mission_score').where('studentId', '==', user.id));
           const attempt = simulationAttempt(scores.docs.map(doc => doc.data()).filter(r => canonicalMissionId(r.missionId) === canonicalMissionId(fresh.targetId)), false, !!previous.data()?.startedAt);
-          if (attempt.attempted && !attempt.passed) fail(403, 'Retakes are disabled for this simulation. Ask your instructor to allow a retake.');
+          if (attempt.attempted && !attempt.passed && !attempt.reviewable) fail(403, 'Retakes are disabled for this simulation. Ask your instructor to allow a retake.');
         }
       }
       if (body.event === 'viewed' && (body.kind ? body.documentVersion !== documentVersion(fresh) : Number(body.revision) !== fresh.revision)) fail(409, 'This document changed. Open the latest version.');
@@ -395,9 +412,14 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
       const records = await col('mission_score').where('studentId', '==', user.id).get();
       const attempt = simulationAttempt(records.docs.map(doc => ({ ...doc.data(), id: doc.id })).filter(r => canonicalMissionId(r.missionId) === canonicalMissionId(data.targetId)), data.allowRetakes);
       // Failed attempts must start a fresh run, never resume the saved failure.
-      if (attempt.passed && ['simulation-v1', 'simulation-v2', 'simulation-v3'].includes(attempt.result.scoringVersion) && attempt.result.completion?.verified) simulationResult = attempt.result;
+      if ((attempt.passed || attempt.reviewable) && INTEGRATED_SIMULATION_VERSIONS.includes(attempt.result.scoringVersion) && attempt.result.completion?.verified) simulationResult = attempt.result;
     }
-    return { type: data.type, target, activityId: id, simulationResult };
+    let lessonRunId=null;
+    if(target.lessonScoring?.version===LESSON_SCORING_VERSION && target.lessonScoring.mode==='practical' && !simulationResult) {
+      lessonRunId=randomUUID();const progress=lessonProgress(user.id,id);
+      await db.runTransaction(async tx=>{const state=await tx.get(progress);if(!state.exists)fail(409,'Start this practical again.');tx.update(progress,{lessonRunId,lessonTask:null,lessonTaskClosed:false,lessonTaskStamp:taskStamp(target)});});
+    }
+    return { type: data.type, target, activityId: id, simulationResult, lessonRunId };
   }
   async function submitQuiz(user, id, body) {
     const launched = await launch(user, id);
@@ -431,6 +453,33 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     if (!mission.exists || missionOwner(mission.data()) !== item.syllabus.instructorId) fail(404, 'Assigned mission not found.');
     return { ...item, mission };
   }
+  const lessonProgress=(studentId,id)=>col('learning_activity_progress').doc(createHash('sha256').update(JSON.stringify([studentId,id])).digest('hex'));
+  const canonicalJson=value=>JSON.stringify(value,(_key,item)=>item && typeof item==='object' && !Array.isArray(item)?Object.fromEntries(Object.entries(item).sort(([a],[b])=>a.localeCompare(b))):item);
+  const taskStamp=mission=>createHash('sha256').update(canonicalJson([mission.lessonScoring,mission.encounter,mission.required_boat])).digest('hex');
+  async function lessonTaskState(user,id,body,operation) {
+    const item=await practical(user,id), progress=lessonProgress(user.id,id);
+    return db.runTransaction(async tx=>{
+      const course=await tx.get(item.parent), module=await tx.get(ref('syllabus_modules',item.data.moduleId));
+      const activityDoc=await tx.get(item.doc.ref), missionDoc=await tx.get(item.mission.ref), saved=await tx.get(progress);
+      if(!course.exists || course.data().status!=='active' || !canReadSyllabus(course.data(),user) || !module.exists || module.data().status!=='active' || module.data().published===false || !activityDoc.exists || activityDoc.data().status!=='active' || activityDoc.data().published===false || !missionDoc.exists || missionOwner(missionDoc.data())!==course.data().instructorId)fail(404,'Practical not found.');
+      available(activityDoc.data());const mission=missionDoc.data(),state=saved.data();
+      if(!state || !body.lessonRunId || state.lessonRunId!==body.lessonRunId || state.lessonTaskStamp!==taskStamp(mission))fail(409,'This practical changed or another attempt started. Reopen it from the lesson.');
+      const definition=lessonScoringDefinition(module.data().objectives || mission.lesson_outcomes,mission);
+      if(!definition || canonicalJson(definition)!==canonicalJson(mission.lessonScoring))fail(409,'The lesson outcomes changed. Ask the instructor to update this mission.');
+      return operation({definition,state,tx,progress});
+    });
+  }
+  async function submitLessonTask(user,id,body) {
+    return lessonTaskState(user,id,body,({definition,state,tx,progress})=>{
+      if(state.lessonTaskClosed)fail(409,'This attempt is complete. View its saved results.');
+      if(state.lessonTask)return {saved:true,type:state.lessonTask.type,repeated:true};
+      let task;
+      try {task=definition.lesson===3?gradeChartTask(definition,body):definition.lesson===4?gradeLightingTask(definition,body):null;}
+      catch(error){fail(400,error.message);}
+      if(!task)fail(400,'This lesson has no separate practical instrument task.');
+      tx.update(progress,{lessonTask:task});return {saved:true,type:task.type};
+    });
+  }
   async function completeSimulation(user, id, body) {
     const item = await practical(user, id);
     await requireViewedModulePdfs(user, item);
@@ -442,7 +491,16 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
       try { encounter = normalizeEncounterAttempt(config, body.encounter || null); }
       catch (error) { fail(409, error.message); }
       performance = simulationPerformance(completedSimulationScores(body.scores || {}, body.completion, encounter), Number(item.mission.data().pass_score ?? item.mission.data().passScore ?? 70));
-      if (!performance.assessmentComplete) fail(409, 'Some performance criteria were not recorded. Complete the practical exercise before reporting.');
+      if(item.mission.data().lessonScoring?.version===LESSON_SCORING_VERSION) {
+        const definition=lessonScoringDefinition(item.module.objectives || item.mission.data().lesson_outcomes,item.mission.data());
+        if(!definition || canonicalJson(definition)!==canonicalJson(item.mission.data().lessonScoring))fail(409,'The lesson outcomes changed. Ask the instructor to update this mission.');
+        if(definition.mode==='practical') {
+          performance=await lessonTaskState(user,id,body,({definition,state,tx,progress})=>{
+            const grade=scoreLessonSimulation(definition,state.lessonTask,encounter,performance,performance.passScore,body.safetyEvents);
+            tx.update(progress,{lessonTaskClosed:true});return grade;
+          });
+        } else performance=scoreLessonSimulation(definition,null,encounter,performance,performance.passScore,body.safetyEvents);
+      } else if (!performance.assessmentComplete) fail(409, 'Some performance criteria were not recorded. Complete the practical exercise before reporting.');
     }
     catch (error) { if (error instanceof MaterialsError) throw error; fail(400, error.message); }
     if (!saveMissionResult) fail(503, 'Mission saving is not configured.');
@@ -453,7 +511,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     const item = await practical(user, id);
     const records = await col('mission_score').where('studentId', '==', user.id).get();
     const results = records.docs.map(doc => ({ ...doc.data(), id: doc.id })).filter(r => canonicalMissionId(r.missionId) === canonicalMissionId(item.data.targetId));
-    const simulation = results.find(r => ['simulation-v1', 'simulation-v2', 'simulation-v3'].includes(r.scoringVersion) && r.completion?.verified) || null;
+    const simulation = results.find(r => INTEGRATED_SIMULATION_VERSIONS.includes(r.scoringVersion) && r.completion?.verified) || null;
     if (!simulation) fail(409, 'Save the completed simulation before checking its quiz.');
     const [quizDocs, assignmentDocs, scores] = await Promise.all([col('quiz').get(), col('quiz_assignments').get(), col('quiz_score').where('studentId', '==', user.id).get()]);
     const quiz = selectMissionQuiz({ missionId: item.data.targetId, instructorId: item.syllabus.instructorId,
@@ -488,5 +546,5 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
       missionId: item.data.targetId, moduleId: item.data.targetId, quizId: current.quiz.id, quizTitle: current.quiz.title || 'Quiz',
       ...grade, status: 'graded', completedAt: new Date() }, { allowAfterSimulation: true });
   }
-  return { course, catalog, saveModuleMission, save, remove, reorder, pdf, record, launch, submitQuiz, completeSimulation, practicalQuiz, submitPracticalQuiz };
+  return { course, catalog, saveModuleMission, save, remove, reorder, pdf, record, launch, submitQuiz, submitLessonTask, completeSimulation, practicalQuiz, submitPracticalQuiz };
 }

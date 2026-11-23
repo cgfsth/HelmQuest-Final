@@ -48,7 +48,7 @@ async function missionResult(transaction, studentId, missionId) {
 }
 
 function missionIsLocked(document) {
-  return document && hasMissionCompletion(document.data());
+  return document && (hasMissionCompletion(document.data()) || (document.data().lessonScoring?.mode==='knowledge' && document.data().completion?.verified===true));
 }
 
 export async function saveMissionResult(input) {

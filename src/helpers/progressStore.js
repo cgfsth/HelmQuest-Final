@@ -271,6 +271,7 @@ export function recordMissionSession(sessionInput, progress) {
     if (sessionInput.performanceMetrics) {
       existing.performanceMetrics = sessionInput.performanceMetrics;
     }
+    if(sessionInput.lessonScoring)Object.assign(existing,{lessonScoring:sessionInput.lessonScoring,criticalSafetyFailure:sessionInput.criticalSafetyFailure===true});
     if (typeof sessionInput.elapsedMs === 'number') {
       existing.elapsedMs = sessionInput.elapsedMs;
     }
@@ -287,6 +288,7 @@ export function recordMissionSession(sessionInput, progress) {
       passed: sessionInput.passed,
       completedAt: sessionInput.completedAt || new Date().toISOString(),
       performanceMetrics: sessionInput.performanceMetrics || null,
+      ...(sessionInput.lessonScoring?{lessonScoring:sessionInput.lessonScoring,criticalSafetyFailure:sessionInput.criticalSafetyFailure===true}:{}),
       elapsedMs: typeof sessionInput.elapsedMs === 'number' ? sessionInput.elapsedMs : null
     };
     progress.sessions.unshift(session);
@@ -328,7 +330,8 @@ export function getLatestMissionResult(studentId, missionId, progress) {
     score: session.score,
     passScore: session.passScore,
     passed: session.passed,
-    completedAt: session.completedAt
+    completedAt: session.completedAt,
+    ...(session.lessonScoring?{lessonScoring:session.lessonScoring,performanceMetrics:session.performanceMetrics,criticalSafetyFailure:session.criticalSafetyFailure===true}:{}),
   };
 }
 
@@ -369,6 +372,7 @@ export function restoreSavedMissionResults(studentId, scores, progress, getMissi
       moduleId: mission?.moduleId || score.moduleId || cached?.moduleId ||
         (key.startsWith('custom-mission-') ? key : undefined),
       score: score.score,
+      ...(score.lessonScoring?{lessonScoring:score.lessonScoring,performanceMetrics:score.performanceMetrics,criticalSafetyFailure:score.criticalSafetyFailure===true}:{}),
       passScore: mission?.passScore ?? score.passScore ?? cached?.passScore,
       passed: score.passed === true,
       completedAt: score.completedAt ?? score.updatedAt ?? score.createdAt
@@ -445,7 +449,7 @@ export function buildInstructorStudents(progress) {
 
     const row = aggregates.get(session.studentId);
     row.sessions += 1;
-    row.totalScore += session.score;
+    if(session.score!=null && Number.isFinite(Number(session.score))){row.totalScore+=Number(session.score);row.scoredSessions=(row.scoredSessions || 0)+1;}
     if (session.passed) row.passed += 1;
   }
 
@@ -453,7 +457,7 @@ export function buildInstructorStudents(progress) {
     id: row.id,
     name: row.name,
     sessions: row.sessions,
-    avgScore: row.sessions ? Number((row.totalScore / row.sessions).toFixed(1)) : 0,
+    avgScore: row.scoredSessions ? Number((row.totalScore / row.scoredSessions).toFixed(1)) : 0,
     passed: row.passed,
     feedback: row.feedback,
     badgesEarned: row.badgesEarned ?? 0,
@@ -474,8 +478,9 @@ export function buildInstructorRecentSessions(progress, limit = 10) {
 export function buildInstructorStats(progress) {
   const students = buildInstructorStudents(progress);
   const sessionsCompleted = progress.sessions.length;
-  const averageScore = sessionsCompleted
-    ? progress.sessions.reduce((sum, session) => sum + session.score, 0) / sessionsCompleted
+  const scored=progress.sessions.filter(session=>session.score!=null && Number.isFinite(Number(session.score)));
+  const averageScore = scored.length
+    ? scored.reduce((sum, session) => sum + Number(session.score), 0) / scored.length
     : 0;
 
   return {

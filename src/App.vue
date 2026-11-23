@@ -15,6 +15,7 @@
       :storage-notice="tutorialStorageNotice"
       @next="advanceStudentTour" @back="previousStudentTourStep" @close="closeStudentTour" @choose-mission="chooseMissionForTour" />
     <VesselEncounterPanel v-if="activeScreen === 'simulation' && !simulationNeedsLandscape && !tutorialVisible" :status="encounterStatus" />
+    <LessonAssessmentTools v-if="activeScreen === 'simulation' && activeTrainingModule?.lessonScoring" v-show="!showCinematicLoading && !tutorialVisible && !controlsGuideVisible && !missionCompleteModal && !showPostDockingQuiz && !gearInfoPopup" :key="activeCoursePractical?.lessonRunId || activeTrainingModule.id" :definition="activeTrainingModule.lessonScoring" :activity-id="activeCoursePractical?.activityId" :run-id="activeCoursePractical?.lessonRunId" :review="isTrainingReviewMode" @lights-change="updateLessonNavigationLights" @panel-change="setLessonTaskPanel" />
     <div v-if="activeScreen === 'simulation' && encounterSetupError" class="encounter-setup-error" role="alert">{{ encounterSetupError }} You can finish this attempt; the vessel exercise will be recorded as incomplete in Safety Compliance.</div>
     <InventoryModal/>
     <PostDockingQuizModal 
@@ -541,7 +542,7 @@
             </div>
             <template v-if="missionEditorModal.data.outcomeAlignmentVersion">
               <p class="field-hint">Link each buoy’s picture and description to a saved lesson outcome. Buoys contain practical tasks and learning material only. Questions appear in the final quiz after docking.</p>
-              <p class="field-hint">Support every lesson outcome with a buoy, then create and publish a final quiz covering those outcomes before students start. Simulation scoring stays completion 40%, accuracy 40%, safety 20%; the quiz is scored separately.</p>
+              <p class="field-hint">Support every lesson outcome with a buoy, then create and publish a final quiz covering those outcomes before students start. The lesson’s scoring plan below shows which practical or quiz evidence is assessed.</p>
             </template>
             <div v-if="missionEditorModal.data.buoys.length === 0" class="quiz-empty-state">
               No buoy content yet. Add one buoy for each checkpoint students must inspect.
@@ -585,9 +586,10 @@
               </label>
             </div>
           </div>
+        <LessonScoringSetup v-if="missionEditorModal.courseContext" :outcomes="missionEditorModal.courseContext.objectives" :model="missionEditorModal.data" />
         <fieldset class="mission-encounter-editor" :disabled="missionSaving">
           <legend>Navigation rules &amp; vessel safety exercise</legend>
-          <p>Common rubric: completion 40%, accuracy 40%, safety 20%. Select a vessel exercise that supports this lesson's objectives.</p>
+          <p>Select a vessel exercise that supports this lesson's objectives. Give-way outcomes require a crossing exercise. Other missions use their displayed lesson rubric or the standard practice rubric.</p>
           <label class="quiz-field"><span>Other vessel</span><select class="quiz-input" v-model="missionEditorModal.data.encounter.type"><option value="none">No vessel exercise</option><option value="anchored">Anchored vessel — keep clear</option><option value="crossing-red">Crossing red sidelight — student gives way</option><option value="crossing-green">Crossing green sidelight — other vessel gives way</option></select></label>
           <template v-if="missionEditorModal.data.encounter.type !== 'none'">
             <label class="quiz-field"><span>Minimum hull clearance (metres)</span><input class="quiz-input" type="number" min="30" max="500" v-model.number="missionEditorModal.data.encounter.clearance" /></label>
@@ -1790,8 +1792,8 @@
                             </div>
                           </td>
                           <td class="table-cell-score">
-                            <div class="score-badge" :class="getScoreClass(score.score)">
-                              {{ score.score }}%
+                            <div class="score-badge" :class="score.score==null ? '' : getScoreClass(score.score)">
+                              {{ score.lessonScoring?.mode==='knowledge' ? 'Practice · Final quiz' : score.score==null ? 'Not assessed' : score.score+'%' }}
                             </div>
                           </td>
                         </tr>
@@ -2767,7 +2769,8 @@
           class="mission-complete-modal"
           :class="missionCompleteModal.passed ? 'mission-complete-modal--pass' : 'mission-complete-modal--fail'"
         >
-          <div
+          <LessonScoringResult v-if="missionCompleteModal.lessonScoring" :report="missionCompleteModal.lessonScoring" :quiz-result="missionCompleteModal.quizResult" :pass-score="missionCompleteModal.passScore" :critical-safety-failure="missionCompleteModal.criticalSafetyFailure" />
+          <div v-else
             class="mission-result-hero"
             :class="missionCompleteModal.passed ? 'mission-result-hero--pass' : 'mission-result-hero--fail'"
           >
@@ -2781,7 +2784,7 @@
           <p class="mission-complete-code">{{ missionCompleteModal.id }}</p>
 
           <ul class="mission-result-breakdown">
-            <li v-for="(label, key) in missionCompleteModal.performanceMetrics ? (missionCompleteModal.performanceMetrics.objectiveCompletion != null ? { objectiveCompletion: 'Objective completion · 40%', taskAccuracy: 'Task accuracy · 40%', safetyCompliance: 'Safety compliance · 20%' } : { steeringPrecision: 'Steering Precision', courseAccuracy: 'Course Accuracy', dockingAccuracy: 'Docking Accuracy', timeEfficiency: 'Time Efficiency', safetyCompliance: 'Safety Compliance' }) : {}" :key="key"><span>{{ label }}</span><strong>{{ missionCompleteModal.performanceMetrics[key] == null ? 'Not assessed' : Math.round(missionCompleteModal.performanceMetrics[key] * 10) / 10 + '%' }}</strong></li>
+            <li v-for="(label, key) in !missionCompleteModal.lessonScoring && missionCompleteModal.performanceMetrics ? (missionCompleteModal.performanceMetrics.objectiveCompletion != null ? { objectiveCompletion: 'Objective completion · 40%', taskAccuracy: 'Task accuracy · 40%', safetyCompliance: 'Safety compliance · 20%' } : { steeringPrecision: 'Steering Precision', courseAccuracy: 'Course Accuracy', dockingAccuracy: 'Docking Accuracy', timeEfficiency: 'Time Efficiency', safetyCompliance: 'Safety Compliance' }) : {}" :key="key"><span>{{ label }}</span><strong>{{ missionCompleteModal.performanceMetrics[key] == null ? 'Not assessed' : Math.round(missionCompleteModal.performanceMetrics[key] * 10) / 10 + '%' }}</strong></li>
             <li v-if="missionCompleteModal.criticalSafetyFailure"><span>Vessel collision</span><strong>Safety requirement not met</strong></li>
             <li v-if="missionCompleteModal.elapsedLabel">
               <span>Time</span>
@@ -2813,6 +2816,8 @@
           <p class="mission-complete-hint">
             {{ missionCompleteModal.isSavedReport
               ? 'Saved mission result. Practice runs do not change your score.'
+              : missionCompleteModal.lessonScoring?.mode === 'knowledge'
+              ? 'Simulation practice completed. The final quiz provides the knowledge evidence for this lesson.'
               : missionCompleteModal.passed
               ? 'Great work. Your score is saved. Your instructor may award badges or certificates after review.'
               : 'You finished the run but did not meet the pass score. Retry the mission to improve your result.' }}
@@ -3451,6 +3456,11 @@ import { deriveProgression, studentTotalXp } from '../shared/progression.js';
 import { createMissionCompletionFlow } from './helpers/missionCompletionFlow.js';
 import { validDockingCompletion, simulationScoringInputs, simulationPerformance } from '../shared/simulationPerformance.js';
 import { LESSON_ALIGNMENT_VERSION, lessonOutcomes, alignLessonMission, validateOutcomeQuiz } from '../shared/lessonAlignment.js';
+import { LESSON_SCORING_VERSION, INTEGRATED_SIMULATION_VERSIONS, lessonScoringDefinition, defaultChartExercise } from '../shared/lessonScoring.js';
+import LessonAssessmentTools from './components/LessonAssessmentTools.vue';
+import LessonScoringResult from './components/LessonScoringResult.vue';
+import LessonScoringSetup from './components/LessonScoringSetup.vue';
+import { createStudentNavigationLights } from './helpers/studentNavigationLights.js';
 import { isBoatAtPort } from './helpers/portDocking.js';
 import { normalizeEncounter } from '../shared/vesselEncounter.js';
 import { createVesselEncounter, updateVesselEncounter, vesselEncounterResult, vesselEncounterGuidance } from './helpers/vesselEncounter.js';
@@ -3612,7 +3622,7 @@ import {
   trackProcedureViolation,
   trackCourseDeviation,
   calculatePerformanceBreakdown,
-  recordCollision
+  recordCollision, recordSafetyViolation, observeProcedureSafety
 } from './helpers/missionScoring.js';
 import { performanceManager } from './helpers/performanceManager.js';
 import { crossTrackDistance } from './helpers/navigationMetrics.js';
@@ -4144,6 +4154,28 @@ const boatSelectionModal = ref(null);
 const studentEditorModal = ref(null);
 const menuStartCamera = ref('chase');
 const simulationRunning = ref(false);
+const lessonTaskPanelOpen = ref(false);
+let lessonNavigationLights = null;
+let lessonNavigationLightStates = {};
+let lessonTaskResume = null;
+function setLessonTaskPanel(open) {
+  if(open && !lessonTaskPanelOpen.value) {
+    lessonTaskResume={running:simulationRunning.value,moduleId:activeTrainingModule.value?.id};
+    simulationRunning.value=false;
+    Object.keys(keyStates).forEach(key=>{keyStates[key]=false;});
+  } else if(!open && lessonTaskPanelOpen.value) {
+    if(lessonTaskResume?.running && activeScreen.value==='simulation' && activeTrainingModule.value?.id===lessonTaskResume.moduleId && !missionCompleteModal.value && !showPostDockingQuiz.value && !courseCompletionPaused.value && !tutorialVisible.value && !simulationNeedsLandscape.value)simulationRunning.value=true;
+    lessonTaskResume=null;
+  }
+  lessonTaskPanelOpen.value=open;syncUiCursor();
+}
+function updateLessonNavigationLights(lights) { lessonNavigationLightStates={...lights};lessonNavigationLights?.set(lights); }
+function refreshLessonNavigationLights() {
+  lessonNavigationLights?.dispose();lessonNavigationLights=null;
+  if(boatObject && activeScreen.value==='simulation' && activeTrainingModule.value?.lessonScoring?.lesson===4) {
+    lessonNavigationLights=createStudentNavigationLights(boatObject);lessonNavigationLights.set(lessonNavigationLightStates);syncBoatHeadlights();
+  }
+}
 const uiFirstMode = ref(true);
 const graphicsQuality = ref('medium');
 const waterQuality = ref('medium');
@@ -4394,7 +4426,7 @@ let courseCompletionFlow = null;
 const courseCompletionPaused = computed(() => ['SAVING_SIMULATION', 'MISSION_COMPLETED', 'QUIZ_CHECKING', 'QUIZ_LOOKUP_FAILED', 'QUIZ_PENDING', 'QUIZ_IN_PROGRESS', 'RESULTS', 'SAVE_FAILED'].includes(courseCompletionState.value));
 const courseQuizSaving = ref(false), courseQuizError = ref('');
 function rememberCourse(route) { courseNavigation.value = { studentId: currentUser.value?.id || '', ...(typeof route === 'string' ? { syllabusId: route, lessonId: '' } : route) }; }
-async function launchCourseSimulation({ target, activityId, syllabusId, lessonId, simulationResult, fail }) {
+async function launchCourseSimulation({ target, activityId, syllabusId, lessonId, simulationResult, lessonRunId, fail }) {
   const studentId = currentUser.value?.id;
   try {
     if (userRole.value !== 'student' || !studentId) throw new Error('Please sign in as a student.');
@@ -4404,12 +4436,13 @@ async function launchCourseSimulation({ target, activityId, syllabusId, lessonId
     if (!mission || !trainingModules.value.some(module => module.id === target.id)) throw new Error('The assigned mission is unavailable. Refresh the course or contact your instructor.');
     // The course launch API enforces this module's PDF views and availability.
     // Legacy standalone mission locks do not apply to syllabus simulations.
-    activeCoursePractical.value = { activityId, syllabusId, lessonId, studentId };
+    activeCoursePractical.value = { activityId, syllabusId, lessonId, studentId, lessonRunId };
     courseCompletionFlow?.dispose(); courseCompletionFlow = null; courseCompletionState.value = 'IN_PROGRESS'; courseCompletionError.value = '';
     await startMissionSimulation(mission);
     if (simulationResult && studentId === currentUser.value?.id && activeTrainingModule.value?.id === target.id) {
       trainingRunMetrics.value.integratedSaved = { data: simulationResult, skipped: true, xpAwarded: 0, totalXp: demoStudent.value.xp };
       trainingRunMetrics.value.resumeCompletion = true;
+      await continueCourseCompletion();
     }
   } catch (error) { fail(error); }
 }
@@ -4439,15 +4472,16 @@ async function continueCourseCompletion() {
         if (run.resumeCompletion && run.integratedSaved) return run.integratedSaved;
         const scores = run.simulationRawScores ||= currentSimulationScores();
         const report = run.simulationPerformanceReport ||= performanceManager.isActive ? performanceManager.completeMission() : performanceManager.getPerformanceReport();
-        const saved = await firebaseApi.completeLearningSimulation(origin.activityId, { completion, scores, encounter: vesselEncounterResult(vesselEncounterState, module.encounter) });
+        const safetyEvents=trainingRunMetrics.value.safety.violations.map(({type,timestamp})=>({type,timestamp}));
+        const saved = await firebaseApi.completeLearningSimulation(origin.activityId, { completion, scores, safetyEvents, lessonRunId: origin.lessonRunId, encounter: vesselEncounterResult(vesselEncounterState, module.encounter) });
         if (!current()) throw new Error('Student session changed.');
         if (!saved.data) throw new Error('The simulation result was not saved. Try again.');
         run.integratedSaved = saved;
-        module.completed = saved.data.passed;
+        module.completed = saved.data.passed || saved.data.lessonScoring?.mode==='knowledge';
         try {
-          recordMissionSession({ studentId: origin.studentId, studentName: currentUser.value.name, missionId: mission.id,
+          if(saved.data.score!=null) recordMissionSession({ studentId: origin.studentId, studentName: currentUser.value.name, missionId: mission.id,
             missionTitle: saved.data.missionTitle || module.title, moduleId: module.id, passScore: mission.passScore ?? 70,
-            score: saved.data.score, passed: saved.data.passed, completedAt: saved.data.completedAt, performanceMetrics: saved.data.performanceMetrics }, progressData.value);
+            score: saved.data.score, passed: saved.data.passed, completedAt: saved.data.completedAt, performanceMetrics: saved.data.performanceMetrics, lessonScoring:saved.data.lessonScoring, criticalSafetyFailure:saved.data.criticalSafetyFailure }, progressData.value);
           if (!saved.skipped) processMissionRewards(origin.studentId, progressData.value, { score: saved.data.score, passed: saved.data.passed, missionXpReward: saved.xpAwarded || 0 });
           const profile = progressData.value.studentProfiles?.[origin.studentId];
           if (profile) profile.xp = saved.totalXp;
@@ -4457,7 +4491,7 @@ async function continueCourseCompletion() {
         return saved;
       },
       findQuiz: async () => {
-        if (run.integratedSaved?.skipped && !['simulation-v1', 'simulation-v2', 'simulation-v3'].includes(run.integratedSaved.data?.scoringVersion)) return { quiz: null, saved: null };
+        if (run.integratedSaved?.skipped && !INTEGRATED_SIMULATION_VERSIONS.includes(run.integratedSaved.data?.scoringVersion)) return { quiz: null, saved: null };
         return firebaseApi.getLearningMissionQuiz(origin.activityId);
       },
       saveQuiz: (quiz, answers) => firebaseApi.submitLearningMissionQuiz(origin.activityId, { quizId: quiz.id, answers }),
@@ -4472,6 +4506,7 @@ async function continueCourseCompletion() {
         }
         missionCompleteModal.value = { id: mission.id, title: saved.missionTitle || module.title, score: saved.score, passed: saved.passed,
           passScore: saved.passScore ?? mission.passScore ?? 70, performanceMetrics: metrics, criticalSafetyFailure: saved.criticalSafetyFailure, requiredExerciseFailed: saved.requiredExerciseFailed, xpEarned: simulation.xpAwarded, totalXp: simulation.totalXp,
+          lessonScoring: saved.lessonScoring, quizResult,
           elapsedLabel: formatElapsedDuration((run.endedAt || performance.now()) - run.startedAt), stepsLabel: `${run.stepsCompleted}/${run.totalSteps}`,
           quizScore: quizResult ? quizResult['Quiz-score-percentage'] ?? quizResult.score : undefined,
           quizCorrect: quizResult ? quizResult['raw-score'] ?? quizResult.correctAnswers ?? 0 : undefined,
@@ -4492,7 +4527,7 @@ function viewSavedCourseSimulation() {
   const saved = trainingRunMetrics.value?.integratedSaved;
   if (!saved?.data) return;
   missionCompleteModal.value = { id: saved.data.missionId, title: saved.data.missionTitle, score: saved.data.score, passed: saved.data.passed,
-    passScore: saved.data.passScore, performanceMetrics: saved.data.performanceMetrics, criticalSafetyFailure: saved.data.criticalSafetyFailure, requiredExerciseFailed: saved.data.requiredExerciseFailed, isSavedReport: true, fromLesson: true, quizPending: true };
+    passScore: saved.data.passScore, performanceMetrics: saved.data.performanceMetrics, lessonScoring: saved.data.lessonScoring, criticalSafetyFailure: saved.data.criticalSafetyFailure, requiredExerciseFailed: saved.data.requiredExerciseFailed, isSavedReport: true, fromLesson: true, quizPending: true };
 }
 function showCourseQuizResult(quiz, saved) {
   const detailed = Array.isArray(saved.answers) && Array.isArray(saved.validation);
@@ -7618,7 +7653,9 @@ const activeTrainingElapsedLabel = computed(() => {
   if (!activeTrainingModule.value || isTrainingReviewMode.value) return '';
   const elapsedMs = (trainingRunMetrics.value.endedAt || performance.now()) - trainingRunMetrics.value.startedAt;
   const est = activeTrainingModule.value.duration ?? '';
-  return `Elapsed ${formatElapsedDuration(elapsedMs)}${est ? ` · est. ${est}` : ''} — completion 40% · accuracy 40% · safety 20%`;
+  const plan=activeTrainingModule.value.lessonScoring;
+  const scoring=plan ? (plan.mode==='knowledge'?'Knowledge assessed in final quiz':plan.criteria.map(c=>`${c.label} ${Math.round(c.weight*10000)/100}%`).join(' · ')) : 'completion 40% · accuracy 40% · safety 20%';
+  return `Elapsed ${formatElapsedDuration(elapsedMs)}${est ? ` · est. ${est}` : ''} — ${scoring}`;
 });
 
 const trainingStepSuccess = ref(false);
@@ -7694,6 +7731,8 @@ function currentSimulationScores() {
 }
 watch([activeTrainingModule, activeScreen], ([module, screen]) => {
   if (!module || screen !== 'simulation') clearVesselEncounter();
+  lessonNavigationLightStates={};refreshLessonNavigationLights();
+  if(module?.lessonScoring?.lesson===4 && screen==='simulation') applyEnvironmentPreset('sunset');
 });
 const missionReadyToReport = ref(false);  // New: true when all tasks done, at port, anchor dropped
 const trainingStepError = ref(false);
@@ -10563,6 +10602,7 @@ function openSavedMissionReport(module) {
     id: mission.id, title: mission.title || module.title,
     passScore: saved.passScore ?? mission.passScore ?? 80,
     score: saved.score, passed: saved.passed, isSavedReport: true,
+    ...(saved.lessonScoring?{lessonScoring:saved.lessonScoring,quizResult:submission}:{}),
     ...(saved.performanceMetrics ? { performanceMetrics: saved.performanceMetrics, criticalSafetyFailure: saved.criticalSafetyFailure, requiredExerciseFailed: saved.requiredExerciseFailed } : {}),
     ...(submission ? { quizScore: counts.total, quizCorrect: counts.correct, quizTotal: counts.total } : {})
   };
@@ -10760,6 +10800,8 @@ function openMissionEditor(module) {
       encounter: { type: 'none', clearance: 100, warningDistance: 600, ...module.encounter },
       outcomeAlignmentVersion: module.outcomeAlignmentVersion || '',
       lessonOutcomes: module.lessonOutcomes || module.objectives || [],
+      lessonScoring: module.lessonScoring || null,
+      chartExercise: JSON.parse(JSON.stringify(module.chartExercise || module.lessonScoring?.chart || defaultChartExercise())),
       buoyCount: Array.isArray(module.buoys) ? module.buoys.length : 0,
       buoys: (module.buoys || []).map((buoy, index) => ({
         id: buoy.id || `${module.id}-buoy-${index + 1}`,
@@ -10804,6 +10846,7 @@ function openMissionCreator(courseContext = null) {
   missionEditorError.value = '';
   const nextIdx = trainingModules.value.length + 1;
   const newId = `custom-mission-${Date.now()}`;
+  const lessonPlan = lessonScoringDefinition(courseContext?.objectives);
   missionEditorModal.value = {
     isNew: true,
     originalId: null,
@@ -10818,12 +10861,14 @@ function openMissionCreator(courseContext = null) {
       xpReward: 100, // Numeric value
       passScore: 70, // Numeric value
       openDate: '', deadline: '',
-      encounter: { type: ({ 'lesson-4': 'crossing-red', 'lesson-5': 'crossing-green', 'lesson-6': 'anchored' })[courseContext?.officialSectionId] || 'none', clearance: 100, warningDistance: 600 },
+      encounter: { type: lessonPlan?.criteria.some(c=>c.key==='giveWay') ? 'crossing-red' : 'none', clearance: 100, warningDistance: 600 },
       buoyCount: 0,
       buoys: [],
       boatType: 'medium',
       outcomeAlignmentVersion: courseContext?.objectives ? LESSON_ALIGNMENT_VERSION : '',
       lessonOutcomes: lessonOutcomes(courseContext?.objectives),
+      lessonScoring: lessonPlan,
+      chartExercise: defaultChartExercise(),
       objectives: courseContext?.objectives ? lessonOutcomes(courseContext.objectives) : [''],
       steps: [
         { instruction: '', waypointZone: `${newId}-step-1`, type: 'gps', lat: '', lon: '', heading: '' }
@@ -11019,6 +11064,8 @@ async function saveMissionEditor() {
       buoyCount: data.buoys.length,
       outcomeAlignmentVersion: data.outcomeAlignmentVersion || '',
       lessonOutcomes: lessonOutcomes(editor.courseContext?.objectives || data.lessonOutcomes),
+      lessonScoring: editor.courseContext ? lessonScoringDefinition(editor.courseContext.objectives,{boatType:data.boatType,chartExercise:data.chartExercise}) : data.lessonScoring || null,
+      chartExercise: data.chartExercise,
       buoys: data.buoys.map((buoy, index) => ({
         id: buoy.id || `${data.id}-buoy-${index + 1}`,
         name: buoy.name?.trim() || `Buoy ${index + 1}`,
@@ -11064,6 +11111,7 @@ async function saveMissionEditor() {
         learning_objectives: cleaned.objectives,
         required_boat: cleaned.boatType,
         outcomeAlignmentVersion: cleaned.outcomeAlignmentVersion,
+        chartExercise: data.chartExercise,
         encounter: cleaned.encounter,
         steps: cleaned.steps,
         checkpoints: cleaned.buoys.map((buoy) => ({
@@ -11438,6 +11486,8 @@ async function loadMissionDatesFromFirestore() {
           boatType: mission.required_boat || mission.boatType || 'medium',
           encounter: mission.encounter || null,
           outcomeAlignmentVersion: mission.outcomeAlignmentVersion || '',
+          lessonScoring: mission.lessonScoring || null,
+          chartExercise: mission.chartExercise || null,
           lessonOutcomes: mission.lesson_outcomes || [],
           objectives: Array.isArray(mission.learning_objectives)
             ? mission.learning_objectives
@@ -13075,6 +13125,7 @@ function syncUiCursor(screen = activeScreen.value) {
     instructorReviewModal.value ||
     certificateModal.value ||
     gearInfoPopup.value ||
+    lessonTaskPanelOpen.value ||
     exitConfirmVisible.value ||
     exitFinalConfirmVisible.value ||
     controlsGuideVisible.value ||
@@ -13725,6 +13776,7 @@ function setBoatHeadlightsVisibility(visible) {
 }
 
 function syncBoatHeadlights() {
+  if(activeScreen.value==='simulation' && activeTrainingModule.value?.lessonScoring?.lesson===4) { setBoatHeadlightsVisibility(false);return; }
   const automaticState = environmentPreset === 'sunset' || environmentPreset === 'rain';
   setBoatHeadlightsVisibility(headlightsManuallyToggled ? headlightsManualState : automaticState);
 }
@@ -14291,6 +14343,8 @@ function toggleAnchor() {
       finishAnchorTransition('stowed');
     }
   } else if (boatObject) {
+    if(activeTrainingModule.value && !isTrainingReviewMode.value && Math.abs(stats.value.speedKnots)>2)recordSafetyViolation(trainingRunMetrics.value,'UNSAFE_ANCHOR');
+    if(activeTrainingModule.value && !isTrainingReviewMode.value && isBoatInPortZone.value && (engineRunning.value || engineStarting.value))recordSafetyViolation(trainingRunMetrics.value,'DOCK_ENGINE_RUNNING');
     anchor.value.position.copy(boatObject.position);
     anchor.value.deploying = true;
     speedVel = 0;
@@ -15025,6 +15079,7 @@ function finalizeSpawnedBoat(modelPath = activeBoatModelFile.value) {
   applyChaseCameraScale(lengthMeters);
   attachHelmCockpitToBoat();
   addBoatHeadlights(boatObject, lengthMeters); // Add headlights
+  refreshLessonNavigationLights();
   syncHelmRailingsVisibility();
 
   // A newly loaded model has zero yaw; apply the shared mission/Quick Sail pose before framing it.
@@ -15137,7 +15192,7 @@ function checkAndResolveCollisions() {
     if (activeTrainingModule.value && !isTrainingReviewMode.value) {
       console.log('[Safety] 🚨 BUOY COLLISION DETECTED!');
       console.log('[Safety] Before - Collisions:', trainingRunMetrics.value.safety.collisions.length, 'Violations:', trainingRunMetrics.value.safety.violations.length);
-      recordCollision(trainingRunMetrics.value, 'BUOY', {
+      recordCollision(trainingRunMetrics.value, waypointResolved.collisionType || 'BUOY', {
         speed: Math.abs(stats.value.speedKnots),
         location: { x: boatObject.position.x, z: boatObject.position.z }
       });
@@ -15268,7 +15323,7 @@ function applyWorldCollisionBlocking() {
     
     // Track collision for Safety Compliance score
     if (activeTrainingModule.value && !isTrainingReviewMode.value) {
-      recordCollision(trainingRunMetrics.value, 'BUOY', {
+      recordCollision(trainingRunMetrics.value, waypointResolved.collisionType || 'BUOY', {
         speed: Math.abs(stats.value.speedKnots),
         location: { x: boatObject.position.x, z: boatObject.position.z }
       });
@@ -15356,6 +15411,7 @@ function updateBoatPhysics(delta = 1 / 60) {
   if (!Number.isFinite(wind.value.directionAngle)) wind.value.directionAngle = 90;
 
   if (!isSinking) {
+    if(activeTrainingModule.value && !isTrainingReviewMode.value)observeProcedureSafety(trainingRunMetrics.value,{anchorDown:anchor.value.deployed || anchor.value.deploying || anchor.value.retracting,netDown:['ACTIVE','DEPLOYING','RETRIEVING'].includes(trawlNetState.value),propulsion:keyStates.KeyW || keyStates.KeyS,engineRunning:engineRunning.value});
     // Anchor physics — hold vessel while anchor is deploying, set, or retracting
     if (isAnchorRigEngaged(boatAnchorRig) || anchor.value.deployed || anchor.value.deploying || anchor.value.retracting) {
       speedVel = 0;
@@ -15725,7 +15781,7 @@ function setupInputs() {
       }
       return;
     }
-    if (gearInfoPopup.value) return; // Ignore inputs when the educational popup is open
+    if (gearInfoPopup.value || lessonTaskPanelOpen.value) return; // Ignore driving inputs while reading or using instruments
     if (event.code === 'Backquote') {
       event.preventDefault();
       startExitHold();
@@ -15894,6 +15950,7 @@ function setupInputs() {
     // Check for movement input while anchor is deployed
     if (isAnchorRigEngaged(boatAnchorRig) || anchor.value.deployed || anchor.value.deploying || anchor.value.retracting) {
       if (event.code === 'KeyW' || event.code === 'KeyS' || event.code === 'KeyA' || event.code === 'KeyD') {
+        if(activeTrainingModule.value && !isTrainingReviewMode.value && engineRunning.value && ['KeyW','KeyS'].includes(event.code) && !event.repeat)recordSafetyViolation(trainingRunMetrics.value,'MOVE_WHILE_ANCHORED');
         anchorWarning.value = true;
         setTimeout(() => { anchorWarning.value = false; }, 2000);
         return;
@@ -16361,6 +16418,7 @@ function animate() {
     updateCameras(visualDelta);
 
     if (boatObject) updateTerrainTiles();
+    if(lessonNavigationLights && camera)lessonNavigationLights.update(camera.position);
 
     if (boatObject && boatWakeSystem) {
       const speedKn = stats.value.speedKnots;
@@ -16513,6 +16571,7 @@ const tutorialVisible = computed(() => tutorialEligible.value && tutorialOpen.va
   && !showPostDockingQuiz.value && !showQuizResults.value && !exitConfirmVisible.value && !exitFinalConfirmVisible.value);
 
 function resetCourseCompletion() {
+  lessonTaskPanelOpen.value=false;lessonTaskResume=null;lessonNavigationLights?.dispose();lessonNavigationLights=null;lessonNavigationLightStates={};
   courseCompletionFlow?.dispose(); courseCompletionFlow = null;
   courseCompletionState.value = 'NOT_STARTED'; courseCompletionError.value = ''; activeCoursePractical.value = null;
 }
@@ -16532,13 +16591,13 @@ watch([() => trainingRunMetrics.value.resumeCompletion, activeScreen], ([resumeC
   if (resumeCompletion && activeCoursePractical.value && activeScreen.value === 'simulation') continueCourseCompletion();
 });
 watch([showPostDockingQuiz, courseCompletionState, simulationRunning], ([visible]) => {
-  if (activeScreen.value === 'simulation' && (visible || courseCompletionPaused.value)) {
+  if (activeScreen.value === 'simulation' && (visible || courseCompletionPaused.value || lessonTaskPanelOpen.value)) {
     simulationRunning.value = false;
     Object.keys(keyStates).forEach(key => { keyStates[key] = false; });
   }
 });
 watch([showPostDockingQuiz, courseCompletionState], ([visible]) => {
-  if (!visible && !courseCompletionPaused.value && activeScreen.value === 'simulation' && !simulationNeedsLandscape.value && !tutorialVisible.value) simulationRunning.value = true;
+  if (!visible && !courseCompletionPaused.value && !lessonTaskPanelOpen.value && activeScreen.value === 'simulation' && !simulationNeedsLandscape.value && !tutorialVisible.value) simulationRunning.value = true;
 });
 
 watch(activeScreen, screen => { if (screen === 'simulation') resumeTutorialInSimulation(); });
@@ -16562,7 +16621,7 @@ watch([tutorialVisible, activeScreen], ([visible, screen]) => {
       if (performanceManager.state === paused.state && performanceManager.state.missionStartTime && !performanceManager.state.missionEndTime) {
         performanceManager.state.missionStartTime += duration;
       }
-      simulationRunning.value = !simulationNeedsLandscape.value;
+      simulationRunning.value = !simulationNeedsLandscape.value && !lessonTaskPanelOpen.value && !courseCompletionPaused.value;
     }
   }
   syncUiCursor();
@@ -16570,7 +16629,7 @@ watch([tutorialVisible, activeScreen], ([visible, screen]) => {
 
 watch(simulationNeedsLandscape, (needsLandscape) => {
   if (activeScreen.value !== 'simulation') return;
-  simulationRunning.value = !needsLandscape && !tutorialVisible.value;
+  simulationRunning.value = !needsLandscape && !tutorialVisible.value && !lessonTaskPanelOpen.value && !courseCompletionPaused.value;
   Object.keys(keyStates).forEach(key => { keyStates[key] = false; });
   syncUiCursor();
   nextTick(onWindowResize);

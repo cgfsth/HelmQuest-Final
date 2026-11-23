@@ -4,6 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "verify:lesson-scoring": "node scripts/verify-lesson-scoring.mjs",
+    "test:lesson-scoring": "node --test tests/lesson-scoring.test.mjs",
     "verify:lesson-alignment": "node scripts/verify-lesson-alignment.mjs",
     "test:lesson-alignment": "node --test tests/lesson-alignment.test.mjs tests/student-syllabus-missions.test.mjs",
     "verify:settings": "node scripts/verify-student-settings.mjs",

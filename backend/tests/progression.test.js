@@ -71,7 +71,7 @@ const { default: missionScoresRoutes } = await import('../routes/mission_scores.
 const { default: quizScoresRoutes } = await import('../routes/quiz_scores.js');
 const { default: quizzesRoutes } = await import('../routes/quizzes.js');
 const { reconcileStudentMissionXp } = await import('../services/reconcileMissionXp.js');
-const { saveQuizResult } = await import('../services/scorePersistence.js');
+const { saveQuizResult, saveMissionResult } = await import('../services/scorePersistence.js');
 const app = express();
 app.use(express.json());
 app.use('/students', studentsRoutes);
@@ -522,4 +522,17 @@ test('total-XP lookup deduplicates aliases and uses the same configured reward a
   const response = await request(app).get('/mission-scores/student/student/total-xp').expect(200);
   expect(response.body.totalXp).toBe(100);
   expect(response.body.missionsCompleted).toBe(1);
+});
+
+test('lesson practical scores cannot bypass their instrument grading through the legacy endpoint',async()=>{
+  bucket('missions').set('mission',{xp_reward:500,lessonScoring:{version:'lesson-score-v1'}});
+  await request(app).post('/mission-scores').send(missionPayload(100,true)).expect(409);
+  expect(bucket('mission_score').size).toBe(0);expect(bucket('students').get('student').xp).toBe(0);
+});
+test('knowledge practice remains neutral, persists once and does not lower numeric mission averages',async()=>{
+  const input={...missionPayload(null,false),scoringVersion:'simulation-v4',lessonScoring:{mode:'knowledge'},completion:{verified:true}};
+  const first=await saveMissionResult(input);expect(first.data.score).toBeNull();expect(first.xpAwarded).toBe(0);
+  const repeated=await saveMissionResult({...input,score:100,passed:true});expect(repeated.skipped).toBe(true);expect(repeated.data.score).toBeNull();expect(repeated.xpAwarded).toBe(0);
+  bucket('mission_score').set('practical',{...missionPayload(90,true),missionId:'other'});
+  const average=await request(app).get('/mission-scores/student/student/average').expect(200);expect(average.body.averageScore).toBe(90);
 });

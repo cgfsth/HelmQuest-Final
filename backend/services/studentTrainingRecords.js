@@ -39,7 +39,7 @@ export function buildStudentTrainingRecord({ student, missions = [], quizzes = [
   const missionsDetail = classMissions.map(mission => {
     const result = missionResults.get(canonicalMissionId(mission.id));
     return { missionId: mission.id, title: mission.mission_title || mission.title || 'Mission',
-      score: result ? number(result.score) : null, status: result ? (hasMissionCompletion(result) ? 'Passed' : 'Failed') : 'Not Started',
+      score: result ? number(result.score) : null, status: result ? (result.lessonScoring?.mode==='knowledge' && result.completion?.verified ? 'Practice completed' : hasMissionCompletion(result) ? 'Passed' : 'Failed') : 'Not Started',
       completedAt: result ? date(result.completedAt ?? result.createdAt) : null };
   });
   const quizzesDetail = classQuizzes.map(quiz => {

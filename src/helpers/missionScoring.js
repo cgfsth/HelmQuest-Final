@@ -1,4 +1,5 @@
 import { simulationPerformance } from '../../shared/simulationPerformance.js';
+import { SAFETY_RULES } from '../../shared/simulationSafety.js';
 
 // Compatibility adapter: the shared practical rubric computes every overall
 // score. Quiz marks and elapsed time remain separate diagnostics.
@@ -259,8 +260,7 @@ function calculateTimeEfficiency(telemetry) {
 export function calculateSafetyCompliance(telemetry) {
   // Preserve existing collision penalties and score confirmed vessel-exercise
   // events. The shared rubric applies the safety criterion's overall weight.
-  const penalties = { BUOY_COLLISION: 10, PORT_COLLISION: 15, SHORE_COLLISION: 15,
-    VESSEL_COLLISION: 100, UNSAFE_CLEARANCE: 20, INCORRECT_ENCOUNTER_RESPONSE: 15 };
+  const penalties = Object.fromEntries(Object.entries(SAFETY_RULES).map(([key,rule])=>[key,rule.points]));
   const safety = telemetry.safety || {};
   if (telemetry.procedure?.safetyConcerns > 0) return null;
   // recordCollision writes both arrays. Prefer structured violations so one
@@ -486,6 +486,10 @@ export function recordDockingMetrics(metrics, finalPos, targetPos, finalHeading)
  * @param {string} severity - 'minor', 'moderate', 'severe'
  */
 export function recordSafetyViolation(metrics, violationType, severity = 'moderate') {
+  const now=performance.now(),last=metrics.safety.contactLast ||= {};
+  const continuous=last[violationType]!=null && now-last[violationType]<750;
+  last[violationType]=now;
+  if(continuous)return false;
   metrics.safety.violations.push({
     type: violationType,
     timestamp: performance.now(),
@@ -493,6 +497,16 @@ export function recordSafetyViolation(metrics, violationType, severity = 'modera
   });
   
   metrics.safety.unsafeActions++;
+  return true;
+}
+
+// Only a powered forward/reverse attempt counts; steering alone is not propulsion.
+export function observeProcedureSafety(metrics,{anchorDown,netDown,propulsion,engineRunning}) {
+  const previous=metrics.safety.procedureActive ||= {};
+  for(const [type,active] of Object.entries({MOVE_WHILE_ANCHORED:!!anchorDown && !!propulsion && !!engineRunning,MOVE_WITH_NET:!!netDown && !!propulsion && !!engineRunning})) {
+    if(active && !previous[type])recordSafetyViolation(metrics,type);
+    previous[type]=active;
+  }
 }
 
 /**
@@ -550,14 +564,13 @@ export function markWarningViolated(metrics, warningId) {
  * @param {Object} details - Additional collision details
  */
 export function recordCollision(metrics, collisionType, details = {}) {
+  if(!recordSafetyViolation(metrics, `${collisionType}_COLLISION`, 'severe'))return;
   metrics.safety.collisions.push({
     type: collisionType,
     timestamp: performance.now(),
     ...details
   });
   
-  // Collisions are automatic violations
-  recordSafetyViolation(metrics, `${collisionType}_COLLISION`, 'severe');
 }
 
 /**

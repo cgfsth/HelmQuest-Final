@@ -10,8 +10,9 @@
       <p><strong>{{ activityDetail.type === 'simulation' ? 'Assigned mission:' : 'Assigned quiz:' }}</strong> {{ linkedTitle(activityDetail) }}</p>
       <p v-if="activityDetail.completionRule === 'pass'">{{ activityDetail.passScore != null ? 'Required score: ' + activityDetail.passScore + '%' : 'Meet the linked activity’s passing requirements.' }}</p>
       <div v-if="!manager && !preview && activityDetail.type === 'simulation' && currentSimulationAttempt.attempted" class="lc-simulation-result" :class="currentSimulationAttempt.passed ? 'lc-simulation-result--passed' : 'lc-simulation-result--failed'" role="status">
-        <strong>{{ currentSimulationAttempt.passed ? 'Passed' : currentSimulationAttempt.score == null ? 'Attempt started' : 'Failed' }} · Score: {{ currentSimulationAttempt.score == null ? 'Not recorded' : currentSimulationAttempt.score + '%' }}</strong>
-        <p v-if="!currentSimulationAttempt.passed">{{ activityDetail.allowRetakes === false ? 'Retakes are disabled. Ask your instructor to allow a retake.' : 'You can retry this simulation to improve your score.' }}</p>
+        <strong v-if="currentSimulationAttempt.reviewable">Practice completed · Knowledge assessed in final quiz</strong>
+        <strong v-else>{{ currentSimulationAttempt.passed ? 'Passed' : currentSimulationAttempt.score == null ? 'Attempt started' : 'Failed' }} · Score: {{ currentSimulationAttempt.score == null ? 'Not recorded' : currentSimulationAttempt.score + '%' }}</strong>
+        <p v-if="!currentSimulationAttempt.passed && !currentSimulationAttempt.reviewable">{{ activityDetail.allowRetakes === false ? 'Retakes are disabled. Ask your instructor to allow a retake.' : 'You can retry this simulation to improve your score.' }}</p>
       </div>
       <p v-if="error" class="lm-alert lm-error" role="alert">{{ error }} <button v-if="activityDetail.type === 'simulation' && !simulationAttemptReady" type="button" :disabled="loading" @click="openActivity(activityDetail)">Refresh result</button></p>
       <p v-if="!manager && !preview && activityDetail.type === 'simulation' && loading" role="status">Checking your saved simulation attempt…</p>
@@ -117,13 +118,13 @@ const activities = ref([]), courseProgress = ref({}), catalog = ref({ missions: 
 const simulationAccess = ref({});
 const simulationAttemptReady = ref(false);
 const currentSimulationAttempt = computed(() => courseProgress.value[activityDetail.value?.id]?.simulation || { attempted: false, passed: false, score: null });
-const simulationActionLabel = computed(() => currentSimulationAttempt.value.passed ? 'View Simulation Results' : currentSimulationAttempt.value.attempted ? 'Retry Simulation' : 'Start Simulation');
+const simulationActionLabel = computed(() => currentSimulationAttempt.value.passed || currentSimulationAttempt.value.reviewable ? 'View Simulation Results' : currentSimulationAttempt.value.attempted ? 'Retry Simulation' : 'Start Simulation');
 const showActivityAction = computed(() => activityDetail.value?.type !== 'simulation' || (simulationAttemptReady.value
-  && (!currentSimulationAttempt.value.attempted || currentSimulationAttempt.value.passed || activityDetail.value.allowRetakes !== false)));
+  && (!currentSimulationAttempt.value.attempted || currentSimulationAttempt.value.passed || currentSimulationAttempt.value.reviewable || activityDetail.value.allowRetakes !== false)));
 const currentSimulationAccess = computed(() => {
   const access = simulationAccess.value[activityDetail.value?.moduleId] || { canStart: false, message: 'View the PDF resources in this lesson before starting the simulation. Refresh the course to check your reading progress.' };
   if (!access.canStart) return access;
-  if (currentSimulationAttempt.value.attempted && !currentSimulationAttempt.value.passed && activityDetail.value?.allowRetakes === false) return { ...access, canStart: false, message: 'Retakes are disabled for this simulation. Ask your instructor to allow a retake.' };
+  if (currentSimulationAttempt.value.attempted && !currentSimulationAttempt.value.passed && !currentSimulationAttempt.value.reviewable && activityDetail.value?.allowRetakes === false) return { ...access, canStart: false, message: 'Retakes are disabled for this simulation. Ask your instructor to allow a retake.' };
   return access;
 });
 const official = ref(null), lessonId = ref(props.initialLessonId || '');
@@ -245,7 +246,7 @@ async function startActivity() {
     const result = await api.launchLearningActivity(item.id, { signal: operation.signal });
     if (ticket !== identity || operation.signal.aborted) return;
     const fail = err => { if (ticket === identity) { error.value = err?.message || 'This activity could not be opened.'; busy.value = false; } };
-    emit(result.type === 'simulation' ? 'launch-simulation' : 'launch-quiz', { target: result.target, simulationResult: result.simulationResult, activityId: item.id, syllabusId: selected.value.id, lessonId: item.moduleId, fail });
+    emit(result.type === 'simulation' ? 'launch-simulation' : 'launch-quiz', { target: result.target, simulationResult: result.simulationResult, lessonRunId: result.lessonRunId, activityId: item.id, syllabusId: selected.value.id, lessonId: item.moduleId, fail });
   } catch (err) { if (ticket === identity && !operation.signal.aborted) error.value = err.message; }
   finally { if (ticket === identity && mutation === operation) busy.value = false; }
 }

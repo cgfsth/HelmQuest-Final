@@ -1276,6 +1276,7 @@ export function resolveWaypointCollision(boatX, boatZ, group, boatRadius = 4) {
       const angle = Math.atan2(dz, dx);
       return {
         collided: true,
+        collisionType:zoneId.includes('net')?'NET':'BUOY',
         x: marker.position.x + Math.cos(angle) * minDistance,
         z: marker.position.z + Math.sin(angle) * minDistance
       };

@@ -20,8 +20,9 @@ router.post('/', async (req, res) => {
       });
     }
     let assessment = null, encounter = null;
+    const mission = await readMissionReward(ref => ref.get(), db, missionId);
+    if(mission?.data.lessonScoring) return res.status(409).json({message:'Open this practical from its lesson to record the learning-outcome assessment.'});
     if (req.body.scores) {
-      const mission = await readMissionReward(ref => ref.get(), db, missionId);
       if (!mission) return res.status(404).json({ message: 'Mission not found.' });
       if (!validDockingCompletion(req.body.completion)) return res.status(409).json({ message: 'Dock in the assigned port, stop the engine and deploy the anchor before reporting.' });
       let config;
@@ -79,11 +80,11 @@ router.get('/student/:studentId/average', async (req, res) => {
     }
     
     const scores = snapshot.docs.map(doc => doc.data());
-    const scoreValues = scores.map(s => s.score || 0);
+    const scoreValues = scores.filter(s => s.score != null && Number.isFinite(Number(s.score))).map(s => Number(s.score));
     const passedCount = scores.filter(s => s.passed).length;
     
-    const averageScore = Math.round(scoreValues.reduce((sum, score) => sum + score, 0) / scoreValues.length);
-    const bestScore = Math.max(...scoreValues);
+    const averageScore = scoreValues.length ? Math.round(scoreValues.reduce((sum, score) => sum + score, 0) / scoreValues.length) : 0;
+    const bestScore = scoreValues.length ? Math.max(...scoreValues) : 0;
     
     res.json({ 
       averageScore,
