@@ -9,7 +9,7 @@
       <details v-if="definition.lesson===5"><summary>Three vessel light references</summary>
         <p><b>Power-driven, underway:</b> red port, green starboard, white masthead and stern; vessels 50 m or longer also show a second masthead light.</p>
         <p><b>Sailing, underway:</b> red/green sidelights and a white sternlight. A sailing vessel using propulsion follows the power-driven configuration.</p>
-        <p><b>Trawling:</b> green over white all-round lights; vessels 50 m or longer also show a masthead light abaft and higher. When making way, also sidelights and a sternlight. Other fishing operations have different configurations.</p>
+        <p><b>At anchor:</b> an all-round white light forward and a lower all-round white aft. Vessels under 50 m may show one all-round white where it can best be seen. These three categories follow the Lesson 5 PDF; anchored is an operating status.</p>
       </details>
     </template>
     <template v-else>
