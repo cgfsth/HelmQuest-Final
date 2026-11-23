@@ -11,7 +11,7 @@
       </div></Transition>
     </section>
     <section v-for="(module, index) in displayedModules" :key="module.id" class="lc-section lm-module" :aria-labelledby="'lc-title-' + module.id">
-      <div class="lc-section-heading"><button class="lc-section-toggle" type="button" :aria-expanded="!collapsed[module.id]" :aria-controls="'lc-content-' + module.id" @click="toggle(module.id)"><ChevronDown :size="21" :class="{ 'lc-chevron-closed': collapsed[module.id] }" /><h3 :id="'lc-title-' + module.id">{{ module.title }}</h3></button><span v-if="officialSection(module.officialSectionId)" class="lc-week">{{ officialSection(module.officialSectionId).weeks }}</span><span v-if="module.published === false" class="lc-draft">Draft</span><button v-if="!focusedLessonId" type="button" class="lc-lesson-details" @click="$emit('select-lesson', module.id)">Lesson details</button><div v-if="manager" class="lc-section-tools"><button type="button" :disabled="busy" :aria-label="'Edit lesson ' + module.moduleNumber" @click="$emit('edit-section', 'module', module)"><Pencil :size="16" /></button><template v-if="!module.officialSectionId"><button type="button" :disabled="busy || index === 0" :aria-label="'Move lesson ' + module.moduleNumber + ' up'" @click="$emit('move-module', index, -1)"><ArrowUp :size="16" /></button><button type="button" :disabled="busy || index === visibleModules.length - 1" :aria-label="'Move lesson ' + module.moduleNumber + ' down'" @click="$emit('move-module', index, 1)"><ArrowDown :size="16" /></button><button type="button" :disabled="busy" :aria-label="'Delete lesson ' + module.moduleNumber" @click="$emit('remove-section', 'module', module)"><Trash2 :size="16" /></button></template></div></div>
+      <div class="lc-section-heading"><button class="lc-section-toggle" type="button" :aria-expanded="!collapsed[module.id]" :aria-controls="'lc-content-' + module.id" @click="toggle(module.id)"><ChevronDown :size="21" :class="{ 'lc-chevron-closed': collapsed[module.id] }" /><h3 :id="'lc-title-' + module.id">{{ module.title }}</h3></button><span v-if="officialSection(module.officialSectionId)" class="lc-week">{{ officialSection(module.officialSectionId).weeks }}</span><span v-if="module.published === false" class="lc-draft">Draft</span><button v-if="!focusedLessonId" type="button" class="lc-lesson-details" @click="$emit('select-lesson', module.id)">Lesson details</button><div v-if="manager" class="lc-section-tools"><button type="button" :disabled="busy" @click="$emit('add-link', module.id)"><Link2 :size="16" /> Add video link</button><button type="button" :disabled="busy" :aria-label="'Edit lesson ' + module.moduleNumber" @click="$emit('edit-section', 'module', module)"><Pencil :size="16" /></button><template v-if="!module.officialSectionId"><button type="button" :disabled="busy || index === 0" :aria-label="'Move lesson ' + module.moduleNumber + ' up'" @click="$emit('move-module', index, -1)"><ArrowUp :size="16" /></button><button type="button" :disabled="busy || index === visibleModules.length - 1" :aria-label="'Move lesson ' + module.moduleNumber + ' down'" @click="$emit('move-module', index, 1)"><ArrowDown :size="16" /></button><button type="button" :disabled="busy" :aria-label="'Delete lesson ' + module.moduleNumber" @click="$emit('remove-section', 'module', module)"><Trash2 :size="16" /></button></template></div></div>
       <Transition name="lc-expand"><div v-show="!collapsed[module.id]" :id="'lc-content-' + module.id" class="lc-section-content">
         <p v-if="module.description" class="lc-module-description">{{ module.description }}</p><div v-if="module.objectives" class="lc-objectives"><strong>Learning objectives</strong><p>{{ module.objectives }}</p></div>
         <OfficialSyllabusMatrix v-if="focusedLessonId && officialSection(module.officialSectionId)" :section="officialSection(module.officialSectionId)" />
@@ -28,12 +28,12 @@
 </template>
 <script setup>
 import { computed, ref } from 'vue';
-import { Anchor, ArrowDown, ArrowUp, BookOpen, ChevronDown, Megaphone, Pencil, Plus, Trash2 } from '@lucide/vue';
+import { Anchor, ArrowDown, ArrowUp, BookOpen, ChevronDown, Link2, Megaphone, Pencil, Plus, Trash2 } from '@lucide/vue';
 import CourseActivityRow from './CourseActivityRow.vue';
 import OfficialSyllabusMatrix from './OfficialSyllabusMatrix.vue';
 import { officialSection, PRACTICAL_ALIGNMENT } from '../../../shared/officialSyllabus.js';
 const props = defineProps({ syllabus: { type: Object, required: true }, official: Object, focusedLessonId: String, modules: { type: Array, default: () => [] }, activities: { type: Array, default: () => [] }, progress: { type: Object, default: () => ({}) }, simulationAccess: { type: Object, default: () => ({}) }, missionAuthoring: Boolean, missionQuizLabel: { type: Function, default: () => 'Create / edit quiz' }, missionQuizzesLoading: Boolean, manager: Boolean, preview: Boolean, busy: Boolean });
-defineEmits(['set-retakes', 'create-mission', 'edit-mission', 'edit-mission-quiz', 'open', 'select-lesson', 'edit-section', 'remove-section', 'add-activity', 'edit-activity', 'remove-activity', 'move-activity', 'move-module']);
+defineEmits(['set-retakes', 'create-mission', 'edit-mission', 'edit-mission-quiz', 'open', 'select-lesson', 'edit-section', 'remove-section', 'add-link', 'add-activity', 'edit-activity', 'remove-activity', 'move-activity', 'move-module']);
 const collapsed = ref({});
 const visibleModules = computed(() => props.modules.filter(m => !props.preview || m.published !== false));
 const displayedModules = computed(() => props.focusedLessonId ? visibleModules.value.filter(m => m.id === props.focusedLessonId) : visibleModules.value);
@@ -43,7 +43,7 @@ function toggleAll() { const value = !allCollapsed.value; collapsed.value = Obje
 function rows(moduleId) {
   // Lessons precede the practical activity. Legacy standalone quiz rows remain
   // visible only in management; students take quizzes inside the simulator.
-  const phase = type => type === 'presentation' ? 0 : type === 'pdf' ? 1 : type === 'simulation' ? 2 : 3;
+  const phase = type => type === 'presentation' ? 0 : type === 'pdf' ? 1 : type === 'link' ? 2 : type === 'simulation' ? 3 : 4;
   const items = props.activities.filter(a => (a.moduleId || null) === moduleId && (!props.preview || a.published !== false) && (props.manager || a.type !== 'quiz'));
   const original = moduleId ? props.modules.find(m => m.id === moduleId) : props.syllabus;
   if (original?.fileName) items.push({ ...legacy(original, moduleId ? 'module' : 'syllabus'), order: -1 });

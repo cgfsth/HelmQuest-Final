@@ -8,6 +8,7 @@ import { simulationPerformance, validDockingCompletion, completedSimulationScore
 import { normalizeEncounter, normalizeEncounterAttempt } from '../../shared/vesselEncounter.js';
 import { selectMissionQuiz, gradeMissionQuiz } from '../../shared/missionQuiz.js';
 import { simulationAttempt } from '../../shared/simulationAttempts.js';
+import { normalizeLearningLink } from '../../shared/learningLinks.js';
 
 const fail = (status, message) => { throw new MaterialsError(status, message); };
 const validId = id => typeof id === 'string' && /^[\w-]{1,128}$/.test(id);
@@ -18,12 +19,13 @@ const clean = (value, max, required = false) => {
 const checkRevision = (record, value) => { if (!Number.isInteger(Number(value)) || Number(value) !== record.revision) fail(409, 'This content changed. Refresh before saving again.'); };
 const date = value => value?.toDate ? value.toDate().toISOString() : value instanceof Date ? value.toISOString() : typeof value === 'string' ? value : null;
 const isFile = type => ['pdf', 'presentation'].includes(type);
+const isResource = type => isFile(type) || type === 'link';
 const summary = doc => {
   const d = doc.data();
   return { id: doc.id, syllabusId: d.syllabusId, moduleId: d.moduleId, type: d.type, title: d.title, description: d.description,
     objectives: d.objectives, instructions: d.instructions, order: d.order, published: d.published !== false, completionRule: d.completionRule,
     passScore: d.passScore, targetId: d.targetId, targetTitle: d.targetTitle, allowRetakes: d.allowRetakes !== false, quizPolicy: d.quizPolicy || 'inherit', quizId: d.quizId || '', availableFrom: d.availableFrom, availableUntil: d.availableUntil,
-    fileName: d.fileName, sourceFileName: d.sourceFileName, documentVersion: documentVersion(d), revision: d.revision, updatedAt: date(d.updatedAt) };
+    fileName: d.fileName, sourceFileName: d.sourceFileName, url: d.type === 'link' ? d.url : '', documentVersion: documentVersion(d), revision: d.revision, updatedAt: date(d.updatedAt) };
 };
 
 function retakesSetting(value, previous = true) {
@@ -34,7 +36,7 @@ function retakesSetting(value, previous = true) {
 }
 
 export function activityCompletion(activity, { viewed = false, started = false, results = [] } = {}) {
-  const requirements = isFile(activity.type) ? [{ label: activity.type === 'presentation' ? 'View the presentation' : 'View the document', done: viewed }] : [
+  const requirements = isResource(activity.type) ? [{ label: activity.type === 'link' ? 'Open the video link' : activity.type === 'presentation' ? 'View the presentation' : 'View the document', done: viewed }] : [
     { label: activity.type === 'simulation' ? 'Complete the assigned simulation' : 'Complete the quiz', done: results.length > 0 },
     ...(activity.completionRule === 'pass' ? [{ label: activity.passScore !== null && activity.passScore !== undefined ? `Achieve at least ${activity.passScore}%` : 'Meet the configured passing requirements', done: results.some(r => activity.passScore !== null && activity.passScore !== undefined ? Number(r['Quiz-score-percentage'] ?? r.score) >= activity.passScore : hasMissionCompletion(r)) }] : [])
   ];
@@ -198,20 +200,25 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     if (existing) { syllabusId = existing.data.syllabusId; moduleId = existing.data.moduleId; checkRevision(existing.data, body.revision); }
     const { parent } = await context(user, syllabusId, moduleId, true);
     const type = body.type;
-    if (!['pdf', 'presentation', 'simulation', 'quiz'].includes(type) || (existing && type !== existing.data.type)) fail(400, 'Choose an activity type. An existing activity cannot change type.');
-    if (!moduleId && !isFile(type)) fail(400, 'Add simulations and quizzes inside a module.');
-    const title = clean(body.title, 180, true), description = clean(body.description || '', 2500), objectives = clean(body.objectives || '', 2500), instructions = clean(body.instructions || '', 5000);
-    const completionRule = isFile(type) ? 'view' : body.completionRule || 'pass';
-    if (!['view', 'complete', 'pass'].includes(completionRule) || (!isFile(type) && completionRule === 'view')) fail(400, 'Choose a valid completion requirement.');
+    if (!['pdf', 'presentation', 'link', 'simulation', 'quiz'].includes(type) || (existing && type !== existing.data.type)) fail(400, 'Choose an activity type. An existing activity cannot change type.');
+    if (!moduleId && !isResource(type)) fail(400, 'Add simulations and quizzes inside a lesson.');
+    const title = clean(body.title || (type === 'link' ? 'Video link' : ''), 180, true), description = clean(body.description || '', 2500), objectives = clean(body.objectives || '', 2500), instructions = clean(body.instructions || '', 5000);
+    const completionRule = isResource(type) ? 'view' : body.completionRule || 'pass';
+    if (!['view', 'complete', 'pass'].includes(completionRule) || (!isResource(type) && completionRule === 'view')) fail(400, 'Choose a valid completion requirement.');
     const passScore = body.passScore === '' || body.passScore == null ? null : Number(body.passScore);
     if (passScore !== null && (!Number.isFinite(passScore) || passScore < 0 || passScore > 100)) fail(400, 'Passing score must be between 0 and 100.');
     const dates = {};
     for (const field of ['availableFrom', 'availableUntil']) { const value = body[field]; if (value && !Number.isFinite(Date.parse(value))) fail(400, 'Choose a valid activity date.'); dates[field] = value ? new Date(value).toISOString() : null; }
     if (dates.availableFrom && dates.availableUntil && dates.availableFrom >= dates.availableUntil) fail(400, 'The closing time must be after the opening time.');
     let targetId = null, targetTitle = '';
+    let url;
+    if (type === 'link') {
+      try { url = normalizeLearningLink(body.url); } catch (error) { fail(400, error.message); }
+      if (file) fail(400, 'Video links do not accept uploaded files.');
+    }
     const quizPolicy = type === 'simulation' ? body.quizPolicy || existing?.data.quizPolicy || 'inherit' : 'none';
     if (!['inherit', 'none', 'assigned'].includes(quizPolicy)) fail(400, 'Choose a valid mission quiz assignment.');
-    if (!isFile(type)) {
+    if (!isResource(type)) {
       const choices = await catalog(user, syllabusId);
       const chosen = (type === 'simulation' ? choices.missions : choices.quizzes).find(item => item.id === body.targetId);
       if (!chosen) fail(400, 'Choose an existing mission or quiz belonging to this course instructor.');
@@ -219,7 +226,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
       targetTitle = chosen.title;
       if (quizPolicy === 'assigned' && !choices.quizzes.some(q => q.id === body.quizId)) fail(400, 'Choose a quiz belonging to this instructor.');
       if (file) fail(400, 'Linked activities do not accept files.');
-    } else if (!existing && !file) fail(400, 'Upload a learning document.');
+    } else if (isFile(type) && !existing && !file) fail(400, 'Upload a learning document.');
     if (type === 'pdf' && file) validatePdf(file);
     const converted = file ? await convert(file) : null;
     const docRef = id ? existing.doc.ref : col('learning_activities').doc();
@@ -242,6 +249,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
         const pending = [...new Set([...(old?.pendingFileDeletes || []), ...(storagePath && old?.storagePath ? [old.storagePath] : [])])];
         if (pending.length > 50) fail(409, 'Retry pending file cleanup before replacing this document.');
         const data = { title, description, objectives, instructions, type, syllabusId, moduleId: moduleId || null, targetId, targetTitle, completionRule, passScore,
+          ...(type === 'link' ? { url } : {}),
           ...(type === 'simulation' ? { allowRetakes: retakesSetting(body.allowRetakes, old?.allowRetakes) } : {}),
           quizPolicy, quizId: quizPolicy === 'assigned' ? body.quizId : '',
           ...dates, published: body.published === true || body.published === 'true', status: 'active', revision: (old?.revision || 0) + 1,
@@ -337,7 +345,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
       if (body.event === 'viewed' && (body.kind ? body.documentVersion !== documentVersion(fresh) : Number(body.revision) !== fresh.revision)) fail(409, 'This document changed. Open the latest version.');
       const state = { ...(previous.exists ? previous.data() : {}), studentId: user.id, activityId,
         syllabusId: body.kind === 'syllabus' ? id : data.syllabusId, activityRevision: fresh.revision, documentVersion: documentVersion(fresh), startedAt: previous.data()?.startedAt || timestamp(),
-        ...((body.kind || isFile(fresh.type)) ? { viewedAt: body.event === 'viewed' ? timestamp() : previous.data()?.documentVersion === documentVersion(fresh) ? previous.data()?.viewedAt || null : null } : {}) };
+        ...((body.kind || isResource(fresh.type)) ? { viewedAt: body.event === 'viewed' ? timestamp() : previous.data()?.documentVersion === documentVersion(fresh) ? previous.data()?.viewedAt || null : null } : {}) };
       if (previous.exists) tx.update(progressRef, state); else tx.create(progressRef, state);
     });
     return { success: true };

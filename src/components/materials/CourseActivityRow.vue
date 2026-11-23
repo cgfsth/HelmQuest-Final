@@ -3,7 +3,7 @@
     <button type="button" class="lc-activity-open" :disabled="!!unavailable" @click="$emit('open', activity)">
       <span class="lc-type-icon" :class="'lc-type-' + activity.type"><component :is="icons[activity.type] || FileText" :size="23" :stroke-width="1.6" /></span>
       <span class="lc-activity-copy"><strong>{{ activity.title }}</strong><span v-if="activity.description" class="lc-activity-description">{{ activity.description }}</span>
-        <span class="lc-activity-meta"><span v-if="activity.sourceFileName || activity.fileName">{{ activity.sourceFileName || activity.fileName }}</span><span v-if="activity.availableFrom"><b>Opens:</b> {{ formatDate(activity.availableFrom) }}</span><span v-if="activity.availableUntil"><b>Closes:</b> {{ formatDate(activity.availableUntil) }}</span><span v-if="unavailable">{{ unavailable }}</span><span v-if="activity.published === false" class="lc-draft">Draft</span></span>
+        <span class="lc-activity-meta"><span v-if="activity.type === 'link'" class="lc-video-url">{{ activity.url }}</span><span v-if="activity.type === 'link'">Video link · Opens in a new tab</span><span v-if="activity.sourceFileName || activity.fileName">{{ activity.sourceFileName || activity.fileName }}</span><span v-if="activity.availableFrom"><b>Opens:</b> {{ formatDate(activity.availableFrom) }}</span><span v-if="activity.availableUntil"><b>Closes:</b> {{ formatDate(activity.availableUntil) }}</span><span v-if="unavailable">{{ unavailable }}</span><span v-if="activity.published === false" class="lc-draft">Draft</span></span>
       </span>
     </button>
     <div class="lc-activity-trailing">
@@ -20,12 +20,12 @@
 </template>
 <script setup>
 import { computed } from 'vue';
-import { ArrowDown, ArrowUp, Check, ChevronDown, Circle, FileText, Pencil, Presentation, Ship, ClipboardList, Trash2 } from '@lucide/vue';
+import { ArrowDown, ArrowUp, Check, ChevronDown, Circle, FileText, Link2, Pencil, Presentation, Ship, ClipboardList, Trash2 } from '@lucide/vue';
 const props = defineProps({ activity: { type: Object, required: true }, progress: Object, simulationAccess: Object, missionAuthoring: Boolean, missionQuizLabel: { type: Function, default: () => 'Create / edit quiz' }, missionQuizzesLoading: Boolean, manager: Boolean, preview: Boolean, busy: Boolean, first: Boolean, last: Boolean });
 defineEmits(['set-retakes', 'edit-mission', 'edit-mission-quiz', 'open', 'edit', 'move', 'remove']);
-const icons = { pdf: FileText, presentation: Presentation, simulation: Ship, quiz: ClipboardList };
+const icons = { pdf: FileText, presentation: Presentation, link: Link2, simulation: Ship, quiz: ClipboardList };
 const state = computed(() => props.progress || { status: 'To do', requirements: [
-  { label: ['pdf', 'presentation'].includes(props.activity.type) ? props.activity.type === 'presentation' ? 'View the presentation' : 'View the document' : props.activity.type === 'simulation' ? 'Complete the assigned simulation' : 'Complete the quiz', done: false },
+  { label: props.activity.type === 'link' ? 'Open the video link' : ['pdf', 'presentation'].includes(props.activity.type) ? props.activity.type === 'presentation' ? 'View the presentation' : 'View the document' : props.activity.type === 'simulation' ? 'Complete the assigned simulation' : 'Complete the quiz', done: false },
   ...(props.activity.completionRule === 'pass' ? [{ label: props.activity.passScore != null ? `Achieve at least ${props.activity.passScore}%` : 'Meet the configured passing requirements', done: false }] : [])
 ] });
 const unavailable = computed(() => {

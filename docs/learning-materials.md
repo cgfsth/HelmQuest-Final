@@ -2,6 +2,8 @@
 
 This feature adds academic PDF documents to the existing portals. Students open **Learning Materials**; instructors and administrators open **Syllabus Management**. All roles use the same library component. It does not use or change simulation `training_modules`, missions, quizzes, scores or onboarding.
 
+In each lesson header, **Add video link** opens a form with only a URL field. Saving publishes the link to the lesson; no title, description or file upload is required. YouTube and other HTTP(S) links open in a new tab. Managers can edit or remove each link. Opening a link records only that it was opened, with no score or XP and no claim that the full video was watched. A changed URL requires opening it again. Links do not replace PDF prerequisites for practical simulations and are removed with the syllabus.
+
 ## Runtime and configuration
 
 Run `npm ci` and `npm run build` at the project root. Run `npm ci` in `backend` and start its existing server. The existing `VITE_API_BASE_URL` must point to that server's `/api/v1` endpoint. Node 22.13+ or Node 24+ is required by the installed PDF.js release.
@@ -96,6 +98,7 @@ All paths below are relative to `/api/v1/learning-materials`; all require the si
 - `npm run test:materials` in `backend`: real Express/multer HTTP requests with isolated fake Firestore/Storage, Supabase REST contract tests, ownership, roles, data validation, concurrency, replacement/deletion failures and cleanup.
 - `npm run verify:materials` at the root: hidden Edge with the actual Vue component, API, upload parser and PDF.js, using local synthetic records/files. Screenshots go outside the repo to `../.tmp/learning-materials-verification`.
 - `npm run verify:syllabus-deletion` at the root: isolated browser checks for card deletion, cancel, stale revisions, custom/official course cleanup, manager/student visibility and desktop/mobile layouts.
+- `npm run verify:lesson-links` at the root: isolated browser checks for the URL-only video form, validation, create/edit/delete, student visibility, new-tab opening and mobile layout.
 - `node --test tests/*.test.mjs` at the root: existing regression tests.
 - `npm run build`: production compilation and local PDF assets.
 

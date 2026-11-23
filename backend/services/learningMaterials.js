@@ -3,7 +3,7 @@ import { OFFICIAL_SYLLABUS, OFFICIAL_SYLLABUS_KEY, officialSection } from '../..
 import { planSyllabusRecords, cleanupSyllabusRecords } from './syllabusRecords.js';
 
 // Opaque content version: adding/reordering activities must not revoke PDF views.
-export const documentVersion = record => createHash('sha256').update(record.storagePath || '').digest('hex');
+export const documentVersion = record => createHash('sha256').update(record.storagePath || record.url || '').digest('hex');
 
 export const PDF_LIMIT = 15 * 1024 * 1024;
 export class MaterialsError extends Error {

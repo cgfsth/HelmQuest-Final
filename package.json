@@ -13,6 +13,7 @@
     "test:materials": "node --test tests/learning-materials.test.mjs",
     "verify:materials": "node scripts/verify-learning-materials.mjs",
     "verify:syllabus-deletion": "node scripts/verify-syllabus-deletion.mjs",
+    "verify:lesson-links": "node scripts/verify-lesson-links.mjs",
     "dev": "vite",
     "build": "vite build",
     "postbuild": "node scripts/verify-built-entrypoints.mjs",

@@ -49,24 +49,25 @@
         </div>
         <div v-else-if="!selected" class="lm-empty"><BookOpen :size="36" /><h3>{{ search || filter ? 'No matching syllabi' : 'No syllabi yet' }}</h3><p>{{ manager ? 'Create a syllabus and upload its PDF to start your course library.' : 'Your instructor’s uploaded course materials will appear here.' }}</p></div>
         <p v-else-if="preview && selected.published === false" class="lm-empty">This course is unpublished. Students will see it after you publish it.</p>
-        <CourseOutline v-else @set-retakes="setRetakes" :simulation-access="simulationAccess" :mission-authoring="role === 'instructor' && !preview" :mission-quiz-label="missionQuizLabel" :mission-quizzes-loading="missionQuizzesLoading" @create-mission="createModuleMission" @edit-mission="editModuleMission" @edit-mission-quiz="item => emit('edit-mission-quiz', { missionId: item.targetId, title: item.title })" :syllabus="selected" :official="official" :focused-lesson-id="lessonId" :modules="modules" :activities="activities" :progress="preview ? {} : courseProgress" :manager="manager && !preview" :preview="preview" :busy="busy" @select-lesson="selectLesson" @open="openActivity" @edit-section="edit" @remove-section="confirmDelete" @add-activity="addActivity" @edit-activity="item => edit('activity', item)" @remove-activity="item => confirmDelete('activity', item)" @move-activity="moveActivity" @move-module="move" />
+        <CourseOutline v-else @set-retakes="setRetakes" :simulation-access="simulationAccess" :mission-authoring="role === 'instructor' && !preview" :mission-quiz-label="missionQuizLabel" :mission-quizzes-loading="missionQuizzesLoading" @create-mission="createModuleMission" @edit-mission="editModuleMission" @edit-mission-quiz="item => emit('edit-mission-quiz', { missionId: item.targetId, title: item.title })" :syllabus="selected" :official="official" :focused-lesson-id="lessonId" :modules="modules" :activities="activities" :progress="preview ? {} : courseProgress" :manager="manager && !preview" :preview="preview" :busy="busy" @select-lesson="selectLesson" @open="openActivity" @edit-section="edit" @remove-section="confirmDelete" @add-activity="addActivity" @add-link="moduleId => edit('activity', { moduleId, type: 'link' })" @edit-activity="item => edit('activity', item)" @remove-activity="item => confirmDelete('activity', item)" @move-activity="moveActivity" @move-module="move" />
       </template>
     </template>
     <Teleport to="body">
       <div v-if="editor || removal" class="lm-modal-backdrop" @click.self="closeModal" @keydown.esc="closeModal">
         <section ref="modal" class="lm lm-modal" role="dialog" aria-modal="true" aria-labelledby="lm-dialog-title" tabindex="-1" @keydown.tab="trapFocus">
           <template v-if="editor">
-            <div class="lm-toolbar"><h2 id="lm-dialog-title">{{ editor.id ? 'Edit' : 'Create' }} {{ editor.kind === 'activity' ? 'learning activity' : editor.kind === 'module' ? 'lesson' : 'syllabus' }}</h2><button type="button" aria-label="Close dialog" :disabled="busy" @click="closeModal"><X :size="20" /></button></div>
+            <div class="lm-toolbar"><h2 id="lm-dialog-title">{{ editor.id ? 'Edit' : 'Create' }} {{ editor.kind === 'activity' ? form.type === 'link' ? 'video link' : 'learning activity' : editor.kind === 'module' ? 'lesson' : 'syllabus' }}</h2><button type="button" aria-label="Close dialog" :disabled="busy" @click="closeModal"><X :size="20" /></button></div>
             <form class="lm-form" @submit.prevent="save">
               <label v-if="editor.kind === 'syllabus'">Course structure<select v-model="form.officialSyllabusKey" data-field="course-structure" :disabled="busy || !!editor.id" @change="setCourseTemplate"><option :value="OFFICIAL_SYLLABUS_KEY">Official FISH ELECT 6 · First Semester 2026–2027</option><option value="">Existing custom course</option></select></label>
               <p v-if="form.officialSyllabusKey || editor.officialSectionId" class="lm-alert">Official academic titles, outcomes and week schedule are preserved. Edit instructor notes and uploaded resources separately.</p>
-              <label>Title<input v-model="form.title" required maxlength="180" :disabled="busy" :readonly="!!form.officialSyllabusKey || !!editor.officialSectionId" autofocus /></label>
-              <label>Description<textarea v-model="form.description" rows="3" maxlength="2500" :disabled="busy" /></label>
-              <label v-if="editor.kind === 'activity'">Activity type<select v-model="form.type" :disabled="busy || !!editor.id"><option value="pdf">PDF learning material</option><option value="presentation">PowerPoint lesson</option><option v-if="form.moduleId" value="simulation">Practical simulation</option><option v-if="editor.id && form.type === 'quiz'" value="quiz">Legacy quiz link (not shown to students)</option></select></label>
-              <label>Learning objectives<textarea v-model="form.objectives" rows="3" maxlength="2500" :disabled="busy" placeholder="What should students learn?" /></label>
+              <label v-if="!linkEditor">Title<input v-model="form.title" required maxlength="180" :disabled="busy" :readonly="!!form.officialSyllabusKey || !!editor.officialSectionId" autofocus /></label>
+              <label v-if="!linkEditor">Description<textarea v-model="form.description" rows="3" maxlength="2500" :disabled="busy" /></label>
+              <label v-if="editor.kind === 'activity' && !linkEditor">Activity type<select v-model="form.type" :disabled="busy || !!editor.id"><option value="pdf">PDF learning material</option><option value="presentation">PowerPoint lesson</option><option value="link">Video link</option><option v-if="form.moduleId" value="simulation">Practical simulation</option><option v-if="editor.id && form.type === 'quiz'" value="quiz">Legacy quiz link (not shown to students)</option></select></label>
+              <label v-if="!linkEditor">Learning objectives<textarea v-model="form.objectives" rows="3" maxlength="2500" :disabled="busy" placeholder="What should students learn?" /></label>
               <label v-if="editor.kind === 'syllabus'">Instructor announcement<textarea v-model="form.announcement" rows="3" maxlength="2500" :disabled="busy" /></label>
               <label v-if="editor.kind === 'syllabus' && role === 'admin'">Assigned instructor<select v-model="form.instructorId" data-field="assigned-instructor" required :disabled="busy"><option value="" disabled>Select an instructor</option><option v-for="item in instructors" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
               <label v-if="editor.kind === 'module'">Lesson number<input v-model.number="form.moduleNumber" type="number" min="1" max="999" required :disabled="busy" :readonly="!!editor.officialSectionId" /></label>
+              <label v-if="editor.kind === 'activity' && form.type === 'link'">Video URL<input v-model="form.url" type="url" required maxlength="2048" placeholder="https://www.youtube.com/watch?v=..." :disabled="busy" /></label>
               <template v-if="editor.kind === 'activity' && ['simulation', 'quiz'].includes(form.type)">
                 <label>{{ form.type === 'simulation' ? 'Assigned mission' : 'Assigned quiz' }}<select v-model="form.targetId" required :disabled="busy"><option value="" disabled>Select an existing {{ form.type === 'simulation' ? 'mission' : 'quiz' }}</option><option v-for="item in form.type === 'simulation' ? catalog.missions : catalog.quizzes" :key="item.id" :value="item.id">{{ item.title }}</option></select></label>
                 <p v-if="!(form.type === 'simulation' ? catalog.missions : catalog.quizzes).length" class="lm-alert">{{ form.type === 'simulation' ? 'Use Create mission in this lesson to make and assign a new mission.' : 'Create a quiz from the module’s mission controls first.' }}</p>
@@ -76,12 +77,12 @@
                 <label v-if="form.type === 'simulation'" class="lc-publish"><input v-model="form.allowRetakes" type="checkbox" :disabled="busy" /> Allow retakes after a failed simulation</label>
                 <label v-if="form.completionRule === 'pass'">Passing score (%)<input v-model="form.passScore" type="number" min="0" max="100" step="0.1" placeholder="Use the mission / quiz passing result" :disabled="busy" /></label>
               </template>
-              <label v-else class="lm-upload"><Upload :size="24" /><strong>{{ editor.id ? 'Replace document (optional)' : editor.kind === 'module' ? 'Lesson PDF (optional)' : form.type === 'presentation' ? 'Upload presentation' : 'Upload PDF' }}</strong><span>{{ file?.name || editor.sourceFileName || editor.fileName || 'Choose a learning document' }}</span><input type="file" :accept="form.type === 'presentation' ? '.ppt,.pptx,.pdf' : 'application/pdf,.pdf'" :required="!editor.id && editor.kind !== 'module'" :disabled="busy" @change="chooseFile" /><small>{{ form.type === 'presentation' ? 'PPT, PPTX or PDF · Slides are converted to a private, read-only PDF preview.' : 'PDF' }} · Maximum 15 MB</small></label>
-              <template v-if="editor.kind === 'activity'"><label>Available from (optional)<input v-model="form.availableFrom" type="datetime-local" :disabled="busy" /></label><label>Available until (optional)<input v-model="form.availableUntil" type="datetime-local" :disabled="busy" /></label></template>
-              <label class="lc-publish"><input v-model="form.published" type="checkbox" :disabled="busy" /> Publish to students</label>
+              <label v-else-if="editor.kind !== 'activity' || form.type !== 'link'" class="lm-upload"><Upload :size="24" /><strong>{{ editor.id ? 'Replace document (optional)' : editor.kind === 'module' ? 'Lesson PDF (optional)' : form.type === 'presentation' ? 'Upload presentation' : 'Upload PDF' }}</strong><span>{{ file?.name || editor.sourceFileName || editor.fileName || 'Choose a learning document' }}</span><input type="file" :accept="form.type === 'presentation' ? '.ppt,.pptx,.pdf' : 'application/pdf,.pdf'" :required="!editor.id && editor.kind !== 'module'" :disabled="busy" @change="chooseFile" /><small>{{ form.type === 'presentation' ? 'PPT, PPTX or PDF · Slides are converted to a private, read-only PDF preview.' : 'PDF' }} · Maximum 15 MB</small></label>
+              <template v-if="editor.kind === 'activity' && !linkEditor"><label>Available from (optional)<input v-model="form.availableFrom" type="datetime-local" :disabled="busy" /></label><label>Available until (optional)<input v-model="form.availableUntil" type="datetime-local" :disabled="busy" /></label></template>
+              <label v-if="!linkEditor" class="lc-publish"><input v-model="form.published" type="checkbox" :disabled="busy" /> Publish to students</label>
               <div v-if="busy" role="status"><label for="lm-progress">{{ progress < 100 ? 'Uploading… ' + progress + '%' : 'Saving document…' }}</label><progress id="lm-progress" :value="progress" max="100" /></div>
               <p v-if="modalError" class="lm-alert lm-error" role="alert">{{ modalError }}</p>
-              <div class="lm-actions lm-form-footer"><button type="button" :disabled="busy" @click="closeModal">Cancel</button><button type="submit" class="lm-primary" :disabled="busy">{{ busy ? 'Saving…' : 'Save document' }}</button></div>
+              <div class="lm-actions lm-form-footer"><button type="button" :disabled="busy" @click="closeModal">Cancel</button><button type="submit" class="lm-primary" :disabled="busy">{{ busy ? 'Saving…' : editor.kind === 'activity' && form.type === 'link' ? 'Save link' : 'Save document' }}</button></div>
             </form>
           </template>
           <template v-else>
@@ -104,6 +105,7 @@ import * as api from '../../api/firebaseApi.js';
 import CourseOutline from './CourseOutline.vue';
 import { OFFICIAL_SYLLABUS, OFFICIAL_SYLLABUS_KEY, PRACTICAL_ALIGNMENT } from '../../../shared/officialSyllabus.js';
 import { simulationAttempt, simulationResultsForActivity } from '../../../shared/simulationAttempts.js';
+import { normalizeLearningLink } from '../../../shared/learningLinks.js';
 import './materials.css';
 import './course.css';
 const PdfDocumentViewer = defineAsyncComponent(() => import('./PdfDocumentViewer.vue'));
@@ -128,6 +130,7 @@ const official = ref(null), lessonId = ref(props.initialLessonId || '');
 const loading = ref(false), busy = ref(false), ready = ref(false), error = ref(''), notice = ref(''), cleanupPending = ref(false);
 const search = ref(''), filter = ref(''), editor = ref(null), removal = ref(null), modal = ref(null), modalError = ref('');
 const form = ref({}), file = ref(null), progress = ref(0);
+const linkEditor = computed(() => editor.value?.kind === 'activity' && form.value.type === 'link');
 const visibleSyllabi = computed(() => syllabi.value.filter(item => (!filter.value || item.instructorId === filter.value) && item.title.toLowerCase().includes(search.value.toLowerCase())));
 let controller, mutation, viewRecording, generation = 0, identity = 0, activityOpenRequest = 0, focusReturn, previousOverflow;
 const size = value => value ? value < 1048576 ? Math.ceil(value / 1024) + ' KB' : (value / 1048576).toFixed(1) + ' MB' : '';
@@ -191,6 +194,19 @@ function editModuleMission(item) {
 async function openActivity(item) {
   error.value = '';
   if (item.moduleId) selectLesson(item.moduleId);
+  if (item.type === 'link') {
+    let url;
+    try { url = normalizeLearningLink(item.url); } catch (err) { error.value = err.message; return; }
+    window.open(url, '_blank', 'noopener,noreferrer');
+    if (props.role === 'student' && !preview.value) {
+      const ticket = identity;
+      try {
+        await api.recordLearningActivity(item.id, { event: 'viewed', revision: item.revision });
+        if (ticket === identity) await refresh();
+      } catch (err) { if (ticket === identity) error.value = 'The video link opened, but its progress could not be saved. Open it again to retry.'; }
+    }
+    return;
+  }
   if (['simulation', 'quiz'].includes(item.type)) {
     activityDetail.value = item; simulationAttemptReady.value = false;
     if (item.type !== 'simulation' || manager.value || preview.value) return;
@@ -233,15 +249,15 @@ async function startActivity() {
   } catch (err) { if (ticket === identity && !operation.signal.aborted) error.value = err.message; }
   finally { if (ticket === identity && mutation === operation) busy.value = false; }
 }
-function beginModal() { focusReturn = window.document.activeElement; previousOverflow = window.document.body.style.overflow; window.document.body.style.overflow = 'hidden'; nextTick(() => (modal.value?.querySelector('input,button') || modal.value)?.focus()); }
+function beginModal() { focusReturn = window.document.activeElement; previousOverflow = window.document.body.style.overflow; window.document.body.style.overflow = 'hidden'; nextTick(() => (modal.value?.querySelector('input[type="url"]') || modal.value?.querySelector('input,button') || modal.value)?.focus()); }
 function edit(kind, item = {}) {
   if (!manager.value) return;
   editor.value = { ...item, kind }; modalError.value = ''; file.value = null; progress.value = 0;
   const localDate = value => { if (!value) return ''; const d = new Date(value); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
   form.value = { title: item.title || '', description: item.description || '', instructorId: item.instructorId || (props.role === 'instructor' ? props.currentUser.id : ''), moduleNumber: item.moduleNumber || Math.max(0, ...modules.value.map(module => module.moduleNumber)) + 1, revision: item.revision,
     ...(kind === 'syllabus' ? { officialSyllabusKey: item.id ? item.officialSyllabusKey || '' : OFFICIAL_SYLLABUS_KEY } : {}),
-    objectives: item.objectives || '', announcement: item.announcement || '', published: item.id ? item.published !== false : kind !== 'activity',
-    ...(kind === 'activity' ? { moduleId: item.moduleId || '', type: item.type || 'pdf', targetId: item.targetId || '', instructions: item.instructions || '', completionRule: item.completionRule || 'pass', passScore: item.passScore ?? '', allowRetakes: item.allowRetakes !== false, quizPolicy: item.quizPolicy || 'inherit', quizId: item.quizId || '', availableFrom: localDate(item.availableFrom), availableUntil: localDate(item.availableUntil) } : {}) };
+    objectives: item.objectives || '', announcement: item.announcement || '', published: item.id ? item.published !== false : kind !== 'activity' || item.type === 'link',
+    ...(kind === 'activity' ? { moduleId: item.moduleId || '', type: item.type || 'pdf', url: item.url || '', targetId: item.targetId || '', instructions: item.instructions || '', completionRule: item.completionRule || 'pass', passScore: item.passScore ?? '', allowRetakes: item.allowRetakes !== false, quizPolicy: item.quizPolicy || 'inherit', quizId: item.quizId || '', availableFrom: localDate(item.availableFrom), availableUntil: localDate(item.availableUntil) } : {}) };
   if (kind === 'syllabus' && !item.id) setCourseTemplate();
   beginModal();
 }
@@ -269,6 +285,9 @@ function chooseFile(event) {
 }
 async function save() {
   if (busy.value || !manager.value) return;
+  if (editor.value.kind === 'activity' && form.value.type === 'link') {
+    try { form.value.url = normalizeLearningLink(form.value.url); } catch (err) { modalError.value = err.message; return; }
+  }
   if (editor.value.kind === 'activity' && form.value.type === 'simulation' && (!editor.value.id || editor.value.targetId !== form.value.targetId) && !simulationAccess.value[form.value.moduleId]?.canCreate) { modalError.value = 'Upload a PDF for this lesson before linking a simulation.'; return; }
   const needsFile = editor.value.kind === 'syllabus' || (editor.value.kind === 'activity' && ['pdf', 'presentation'].includes(form.value.type));
   if (!editor.value.id && needsFile && !file.value) { modalError.value = 'Choose a learning document.'; return; }
@@ -277,7 +296,7 @@ async function save() {
   try {
     const fields = { ...form.value };
     if (current.kind === 'activity') { for (const key of ['availableFrom', 'availableUntil']) fields[key] = fields[key] ? new Date(fields[key]).toISOString() : ''; delete fields.instructorId; delete fields.moduleNumber; delete fields.announcement; }
-    const linked = current.kind === 'activity' && ['simulation', 'quiz'].includes(fields.type);
+    const linked = current.kind === 'activity' && ['simulation', 'quiz', 'link'].includes(fields.type);
     const result = await api.saveLearningMaterial({ ...current, syllabusId: selected.value?.id, fields, file: linked ? null : file.value, signal: operation.signal, onProgress: value => { if (ticket === identity) progress.value = value; } });
     if (ticket !== identity || operation.signal.aborted) return;
     closeModal(true); notice.value = result.cleanupPending ? 'Document saved. Previous file cleanup will be retried.' : 'Document saved.';
@@ -287,7 +306,7 @@ async function save() {
 }
 async function moveActivity(item, delta) {
   if (busy.value || !manager.value) return;
-  const phase = type => type === 'presentation' ? 0 : type === 'pdf' ? 1 : type === 'simulation' ? 2 : 3;
+  const phase = type => type === 'presentation' ? 0 : type === 'pdf' ? 1 : type === 'link' ? 2 : type === 'simulation' ? 3 : 4;
   const group = activities.value.filter(a => a.moduleId === item.moduleId).sort((a, b) => phase(a.type) - phase(b.type) || a.order - b.order);
   const index = group.findIndex(a => a.id === item.id), other = index + delta;
   if (other < 0 || other >= group.length) return;
