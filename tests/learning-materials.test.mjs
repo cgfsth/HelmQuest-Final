@@ -4,7 +4,20 @@ import test from 'node:test';
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc';
 
 const apiSource = readFileSync(new URL('../src/api/firebaseApi.js', import.meta.url), 'utf8');
-const loadApi = () => import(`data:text/javascript;base64,${Buffer.from(apiSource + `\n// ${Math.random()}`).toString('base64')}`);
+const loadApi = () => import(`data:text/javascript;base64,${Buffer.from(apiSource.replaceAll('./loginConnection.js', new URL('../src/api/loginConnection.js', import.meta.url).href) + `\n// ${Math.random()}`).toString('base64')}`);
+test('syllabus deletion sends explicit cascade confirmation with the revision and abort signal', async () => {
+  const original = globalThis.fetch, requests = [];
+  globalThis.fetch = async (url, options) => { requests.push({ url, options }); return { ok: true, json: async () => ({ cleanupPending: false }) }; };
+  try {
+    const api = await loadApi(), controller = new AbortController();
+    await api.deleteLearningMaterial('syllabus', 'course', 4, { cascade: true, signal: controller.signal });
+    assert.match(requests[0].url, /syllabi\/course$/);
+    assert.equal(requests[0].options.method, 'DELETE');
+    assert.deepEqual(JSON.parse(requests[0].options.body), { revision: 4, cascade: true });
+    await api.deleteLearningMaterial('module', 'lesson', 2);
+    assert.deepEqual(JSON.parse(requests[1].options.body), { revision: 2 });
+  } finally { globalThis.fetch = original; }
+});
 test('materials API keeps server authorization in headers for JSON and PDF requests', async () => {
   const original = globalThis.fetch, requests = [];
   globalThis.fetch = async (url, options) => {

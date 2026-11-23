@@ -83,7 +83,7 @@ export const submitLearningMissionQuiz = (id, fields, options = {}) => apiFetch(
 export const reorderLearningActivities = (id, fields, options = {}) => apiFetch(`${materialsPath}/syllabi/${materialId(id)}/activity-order`, { method: 'POST', body: JSON.stringify(fields), timeoutMs: 30000, ...options });
 const materialEndpoint = kind => kind === 'activity' ? 'activities' : kind === 'module' ? 'modules' : 'syllabi';
 export const getMaterialsInstructors = (options = {}) => apiFetch(`${materialsPath}/instructors`, { timeoutMs: 30000, ...options });
-export const deleteLearningMaterial = (kind, id, revision, options = {}) => apiFetch(`${materialsPath}/${materialEndpoint(kind)}/${materialId(id)}`, { method: 'DELETE', body: JSON.stringify({ revision }), timeoutMs: 60000, ...options });
+export const deleteLearningMaterial = (kind, id, revision, { cascade = false, ...options } = {}) => apiFetch(`${materialsPath}/${materialEndpoint(kind)}/${materialId(id)}`, { method: 'DELETE', body: JSON.stringify({ revision, ...(cascade ? { cascade: true } : {}) }), timeoutMs: 60000, ...options });
 export const reorderLearningModules = (id, ids, revision, options = {}) => apiFetch(`${materialsPath}/syllabi/${materialId(id)}/reorder`, { method: 'POST', body: JSON.stringify({ ids, revision }), timeoutMs: 30000, ...options });
 export const retryMaterialsCleanup = (options = {}) => apiFetch(`${materialsPath}/cleanup`, { method: 'POST', body: '{}', timeoutMs: 60000, ...options });
 

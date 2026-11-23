@@ -54,7 +54,7 @@ export function createLearningMaterialsRouter({ service, course, authenticate })
       res.send(buffer);
     }));
     router.put(`/${endpoint}/:id`, manager, bounded, upload, action(req => service.save(req.materialsUser, collection, req.params.id, req.body, req.file)));
-    router.delete(`/${endpoint}/:id`, manager, action(req => service.remove(req.materialsUser, collection, req.params.id, req.body.revision)));
+    router.delete(`/${endpoint}/:id`, manager, action(req => service.remove(req.materialsUser, collection, req.params.id, req.body.revision, { cascade: req.body.cascade === true })));
   }
   router.post('/syllabi', manager, bounded, upload, action(req => service.save(req.materialsUser, 'syllabi', null, req.body, req.file)));
   router.post('/syllabi/:id/modules', manager, bounded, upload, action(req => service.save(req.materialsUser, 'syllabus_modules', null, req.body, req.file, req.params.id)));

@@ -43,7 +43,8 @@
             <div class="lm-card-top"><span class="lm-document-icon"><BookOpen :size="24" /></span><span class="lm-tag">SYLLABUS</span></div>
             <h3>{{ item.title }}</h3><p class="lm-description">{{ item.description || 'Course syllabus and supporting reading.' }}</p>
             <div class="lm-card-meta"><span>{{ item.instructorName }}</span><span><FolderOpen :size="15" /> {{ item.moduleCount }} {{ item.moduleCount === 1 ? 'module' : 'modules' }}</span></div>
-            <button type="button" class="lm-primary" @click="open(item.id)"><Eye :size="17" /> View syllabus <ChevronRight :size="17" /></button>
+            <button type="button" class="lm-primary" :disabled="busy" @click="open(item.id)"><Eye :size="17" /> View syllabus <ChevronRight :size="17" /></button>
+            <button v-if="manager" type="button" class="lm-danger" :disabled="busy" :aria-label="'Delete syllabus ' + item.title" @click="confirmDelete('syllabus', item)"><Trash2 :size="17" /> Delete syllabus</button>
           </article>
         </div>
         <div v-else-if="!selected" class="lm-empty"><BookOpen :size="36" /><h3>{{ search || filter ? 'No matching syllabi' : 'No syllabi yet' }}</h3><p>{{ manager ? 'Create a syllabus and upload its PDF to start your course library.' : 'Your instructor’s uploaded course materials will appear here.' }}</p></div>
@@ -84,7 +85,10 @@
             </form>
           </template>
           <template v-else>
-            <h2 id="lm-dialog-title">Delete {{ removal.kind === 'activity' ? 'activity' : removal.kind === 'module' ? 'module' : 'syllabus' }}?</h2><p>“{{ removal.title }}” will be removed from this course. Linked missions, quizzes and their saved results are retained.</p><p v-if="removal.kind !== 'activity'">Delete this section’s learning activities and modules first.</p>
+            <h2 id="lm-dialog-title">Delete {{ removal.kind === 'activity' ? 'activity' : removal.kind === 'module' ? 'module' : 'syllabus' }}?</h2>
+            <p v-if="removal.kind === 'syllabus'">“{{ removal.title }}” and all its modules, learning activities and uploaded documents will be permanently deleted. This cannot be undone.</p>
+            <p v-else>“{{ removal.title }}” will be removed from this course.</p>
+            <p>Linked missions, quizzes and their saved results are retained.</p><p v-if="removal.kind === 'module'">Delete this section’s learning activities first.</p>
             <p v-if="modalError" class="lm-alert lm-error" role="alert">{{ modalError }}</p><div class="lm-actions lm-form-footer"><button type="button" :disabled="busy" @click="closeModal">Cancel</button><button type="button" class="lm-danger" :disabled="busy" @click="remove">{{ busy ? 'Deleting…' : 'Delete document' }}</button></div>
           </template>
         </section>
@@ -243,7 +247,7 @@ function edit(kind, item = {}) {
 }
 function addActivity(moduleId) { edit('activity', { moduleId }); }
 function setCourseTemplate() { if (editor.value?.id) return; form.value.title = form.value.officialSyllabusKey ? OFFICIAL_SYLLABUS.title : ''; }
-function confirmDelete(kind, item) { if (!manager.value) return; removal.value = { ...item, kind }; modalError.value = ''; beginModal(); }
+function confirmDelete(kind, item) { if (!manager.value || busy.value) return; removal.value = { ...item, kind }; modalError.value = ''; beginModal(); }
 function closeModal(force = false) {
   if (busy.value && force !== true) return;
   editor.value = null; removal.value = null; file.value = null;
@@ -312,10 +316,10 @@ async function remove() {
   busy.value = true; modalError.value = ''; const ticket = identity, operation = mutation = new AbortController();
   const current = { ...removal.value };
   try {
-    const result = await api.deleteLearningMaterial(current.kind, current.id, current.revision, { signal: operation.signal });
+    const result = await api.deleteLearningMaterial(current.kind, current.id, current.revision, { signal: operation.signal, cascade: current.kind === 'syllabus' });
     if (ticket !== identity || operation.signal.aborted) return;
     closeModal(true); notice.value = result.cleanupPending ? 'Document removed from view. File cleanup is pending.' : 'Document deleted.';
-    if (current.kind === 'syllabus') selected.value = null;
+    if (current.kind === 'syllabus') { selected.value = null; lessonId.value = ''; modules.value = []; activities.value = []; preview.value = false; emit('navigate-course', { syllabusId: '', lessonId: '' }); }
     await refresh();
   } catch (err) { if (ticket === identity && !operation.signal.aborted) modalError.value = err.message; }
   finally { if (mutation === operation && ticket === identity) busy.value = false; }
