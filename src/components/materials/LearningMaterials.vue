@@ -31,7 +31,7 @@
       </div>
       <p v-if="error" class="lm-alert lm-error" role="alert">{{ error }} <button type="button" :disabled="loading || busy" @click="refresh">Try again</button></p>
       <p v-if="notice" class="lm-alert" role="status">{{ notice }}</p>
-      <div v-if="manager && cleanupPending" class="lm-alert">Some file cleanup is pending. <button type="button" :disabled="busy" @click="retryCleanup">Retry cleanup</button></div>
+      <div v-if="manager && cleanupPending" class="lm-alert">Some material cleanup is pending. <button type="button" :disabled="busy" @click="retryCleanup">Retry cleanup</button></div>
       <p v-if="loading" class="lm-empty" role="status">Loading learning materials…</p>
       <template v-else-if="ready">
         <form v-if="!selected" class="lm-filters" role="search" @submit.prevent>
@@ -86,9 +86,9 @@
           </template>
           <template v-else>
             <h2 id="lm-dialog-title">Delete {{ removal.kind === 'activity' ? 'activity' : removal.kind === 'module' ? 'module' : 'syllabus' }}?</h2>
-            <p v-if="removal.kind === 'syllabus'">“{{ removal.title }}” and all its modules, learning activities and uploaded documents will be permanently deleted. This cannot be undone.</p>
+            <p v-if="removal.kind === 'syllabus'">“{{ removal.title }}” and all its modules, uploaded documents, course missions, quizzes, student progress and saved results will be permanently deleted. This cannot be undone.</p>
             <p v-else>“{{ removal.title }}” will be removed from this course.</p>
-            <p>Linked missions, quizzes and their saved results are retained.</p><p v-if="removal.kind === 'module'">Delete this section’s learning activities first.</p>
+            <p v-if="removal.kind === 'syllabus'">Resources shared with another course remain available to that course.</p><p v-else>Linked missions, quizzes and their saved results are retained.</p><p v-if="removal.kind === 'module'">Delete this section’s learning activities first.</p>
             <p v-if="modalError" class="lm-alert lm-error" role="alert">{{ modalError }}</p><div class="lm-actions lm-form-footer"><button type="button" :disabled="busy" @click="closeModal">Cancel</button><button type="button" class="lm-danger" :disabled="busy" @click="remove">{{ busy ? 'Deleting…' : 'Delete document' }}</button></div>
           </template>
         </section>
@@ -316,9 +316,9 @@ async function remove() {
   busy.value = true; modalError.value = ''; const ticket = identity, operation = mutation = new AbortController();
   const current = { ...removal.value };
   try {
-    const result = await api.deleteLearningMaterial(current.kind, current.id, current.revision, { signal: operation.signal, cascade: current.kind === 'syllabus' });
+    const result = await api.deleteLearningMaterial(current.kind, current.id, current.revision, { signal: operation.signal, cascade: current.kind === 'syllabus', deleteRecords: current.kind === 'syllabus' });
     if (ticket !== identity || operation.signal.aborted) return;
-    closeModal(true); notice.value = result.cleanupPending ? 'Document removed from view. File cleanup is pending.' : 'Document deleted.';
+    closeModal(true); notice.value = result.cleanupPending ? 'Removed from view. Record or file cleanup is pending; use Retry cleanup to finish.' : current.kind === 'syllabus' ? 'Syllabus and its records deleted.' : 'Document deleted.';
     if (current.kind === 'syllabus') { selected.value = null; lessonId.value = ''; modules.value = []; activities.value = []; preview.value = false; emit('navigate-course', { syllabusId: '', lessonId: '' }); }
     await refresh();
   } catch (err) { if (ticket === identity && !operation.signal.aborted) modalError.value = err.message; }
@@ -334,7 +334,7 @@ async function move(index, delta) {
 }
 async function retryCleanup() {
   if (busy.value) return; busy.value = true; const ticket = identity, operation = mutation = new AbortController();
-  try { const result = await api.retryMaterialsCleanup({ signal: operation.signal }); if (ticket === identity && !operation.signal.aborted) { notice.value = result.cleanupPending ? 'Some cleanup is still pending. Try again later.' : 'File cleanup completed.'; await refresh(); } }
+  try { const result = await api.retryMaterialsCleanup({ signal: operation.signal }); if (ticket === identity && !operation.signal.aborted) { notice.value = result.cleanupPending ? 'Some cleanup is still pending. Try again later.' : 'Cleanup completed.'; await refresh(); } }
   catch (err) { if (ticket === identity && !operation.signal.aborted) error.value = err.message; }
   finally { if (mutation === operation && ticket === identity) busy.value = false; }
 }

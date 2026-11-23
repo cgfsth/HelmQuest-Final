@@ -21,6 +21,12 @@ const owner = { id: 'a', role: 'instructor' }, file = { originalname: 'course.pd
 const { id: customId } = await fixture.service.save(owner, 'syllabi', null, { title: 'Custom Navigation' }, file);
 const { id: moduleId } = await fixture.service.save(owner, 'syllabus_modules', null, { title: 'Navigation lesson', moduleNumber: 1 }, file, customId);
 await fixture.course.save(owner, customId, moduleId, null, { type: 'pdf', title: 'Lesson resource', published: true }, file);
+fixture.records.missions = { owned: { instructorId: 'a', syllabusId: customId } };
+fixture.records.quiz = { owned: { instructorId: 'a', moduleId: 'owned' } };
+fixture.records.mission_score = { result: { missionId: 'CUSTOM-owned', studentId: 'sa' } };
+fixture.records.quiz_score = { result: { quizId: 'owned', studentId: 'sa' } };
+fixture.records.quiz_results = { result: { submissionid: 'result' } };
+fixture.records.learning_activity_progress = { progress: { syllabusId: customId, studentId: 'sa' } };
 const { id: officialId } = await fixture.service.save(owner, 'syllabi', null, { title: OFFICIAL_SYLLABUS.title, officialSyllabusKey: OFFICIAL_SYLLABUS_KEY }, file);
 await fixture.service.save({ id: 'b', role: 'instructor' }, 'syllabi', null, { title: 'Other instructor course' }, file);
 fixture.app.post('/auth/demo-login', (req, res) => {
@@ -54,6 +60,7 @@ try {
   const customDelete = `[...document.querySelectorAll('.lm-card')].find(card=>card.textContent.includes('Custom Navigation')).querySelector('.lm-danger')`;
   await browser.clickExpression(customDelete);await browser.waitFor('document.querySelector(".lm-modal")');
   assert.equal(await browser.evaluate('document.querySelector(".lm-modal").textContent.includes("cannot be undone")'), true);
+  assert.equal(await browser.evaluate('document.querySelector(".lm-modal").textContent.includes("student progress and saved results")'), true);
   await browser.click('Cancel');await browser.waitFor('!document.querySelector(".lm-modal")');
   assert.ok(fixture.records.syllabi[customId]);
   // A stale card must show the server conflict without deleting any content.
@@ -66,6 +73,7 @@ try {
   await browser.waitFor('!document.querySelector(".lm-modal") && document.querySelectorAll(".lm-grid .lm-card").length===1');
   assert.equal(fixture.records.syllabi[customId], undefined);assert.equal(fixture.records.syllabus_modules[moduleId], undefined);
   assert.equal(Object.values(fixture.records.learning_activities).some(item => item.syllabusId === customId), false);
+  for (const name of ['missions', 'quiz', 'mission_score', 'quiz_score', 'quiz_results', 'learning_activity_progress']) assert.deepEqual(fixture.records[name], {});
   await browser.viewport(375);assert.equal(await browser.evaluate('document.documentElement.scrollWidth<=innerWidth'), true);
   await browser.screenshot('instructor-library-delete-mobile');
   await browser.clickExpression('document.querySelector(".lm-card .lm-danger")');await browser.waitFor('document.querySelector(".lm-modal")');

@@ -393,6 +393,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     const threshold = Number(quiz.passScore ?? quiz.pass_score ?? 70);
     if (!saveQuizResult) fail(503, 'Quiz saving is not configured.');
     const saved = await saveQuizResult({ studentId: user.id, studentName: user.name || '', instructorId: user.instructorid || user.instructorId || '', moduleId: data.moduleId,
+      syllabusId: data.syllabusId, lessonId: data.moduleId, activityId: id,
       quizId: quiz.id, quizTitle: quiz.title || data.title, answers, validation, score, 'Quiz-score-percentage': score, 'raw-score': correct,
       correctAnswers: correct, totalQuestions: questions.length, passed: score >= threshold, status: 'graded', completedAt: new Date() });
     if (!saved.data) fail(409, 'This quiz could not be saved. Refresh the course and check its completion status.');
@@ -455,6 +456,7 @@ export function createCourseActivitiesService({ db, bucket, timestamp, materials
     try { grade = gradeMissionQuiz(current.quiz, body.answers); } catch (error) { fail(400, error.message); }
     if (!saveQuizResult) fail(503, 'Quiz saving is not configured.');
     return saveQuizResult({ studentId: user.id, studentName: user.name || '', instructorId: item.syllabus.instructorId,
+      syllabusId: item.data.syllabusId, lessonId: item.data.moduleId, activityId: id,
       missionId: item.data.targetId, moduleId: item.data.targetId, quizId: current.quiz.id, quizTitle: current.quiz.title || 'Quiz',
       ...grade, status: 'graded', completedAt: new Date() }, { allowAfterSimulation: true });
   }

@@ -87,3 +87,107 @@ test('cleanup resumes a cascade after a lost transaction response', async () => 
   expect(f.records.syllabi[id]).toBeUndefined();
   expect(f.files.size).toBe(0);
 });
+
+function seedRelatedRecords(id, moduleId) {
+  const activityId = Object.keys(f.records.learning_activities).find(key => f.records.learning_activities[key].syllabusId === id);
+  f.records.missions = { local: { instructorId: 'a', syllabusId: id }, legacy: { createdBy: 'a' }, unrelated: { instructorId: 'b' } };
+  f.records.learning_activities.sim = { syllabusId: id, moduleId, type: 'simulation', targetId: 'legacy', status: 'active', revision: 1 };
+  f.records.quiz = { localQuiz: { moduleId: ['CUSTOM-local'], instructorId: 'a' }, assignedQuiz: { instructorId: 'a' }, unrelated: { instructorId: 'b' } };
+  f.records.quizzes = { legacyQuiz: { missionId: 'legacy', createdBy: 'a' } };
+  f.records.quiz_assignments = { assignment: { targetType: 'module', targetId: 'CUSTOM-local', quizId: 'assignedQuiz' }, unrelated: { quizId: 'unrelated' } };
+  f.records.quizAssignments = { legacy: { targetType: 'mission', targetId: 'legacy', quizId: 'legacyQuiz' } };
+  f.records.learning_activity_progress = { course: { syllabusId: id }, activity: { activityId }, module: { activityId: `module-${moduleId}` }, unrelated: { syllabusId: 'other' } };
+  f.records.mission_score = { local: { missionId: 'CUSTOM-local' }, legacy: { missionid: 'legacy' }, scoped: { syllabusId: id }, unrelated: { missionId: 'unrelated' } };
+  f.records.quiz_score = { local: { quizId: 'localQuiz' }, assigned: { quizid: 'assignedQuiz' }, unrelated: { quizId: 'unrelated' } };
+  f.records.quiz_scores = { legacy: { moduleId: 'CUSTOM-legacy' } };
+  f.records.quiz_results = { grade: { submissionid: 'local' }, unrelated: { submissionid: 'unrelated' } };
+  f.records.quiz_result = { legacyGrade: { submissionId: 'legacy' } };
+}
+
+test('full-record deletion removes missions, quizzes, assignments, progress, submissions and grades including legacy aliases', async () => {
+  const { id, moduleId } = await course();
+  seedRelatedRecords(id, moduleId);
+  const students = structuredClone(f.records.students);
+  const response = await remove(id, { deleteRecords: true }).expect(200);
+  expect(response.body.cleanupPending).toBe(false);
+  expect(f.records.syllabi[id]).toBeUndefined();
+  for (const name of ['missions', 'quiz', 'quiz_assignments', 'learning_activity_progress', 'mission_score', 'quiz_score', 'quiz_results']) {
+    expect(Object.keys(f.records[name])).toEqual(['unrelated']);
+  }
+  for (const name of ['quizzes', 'quizAssignments', 'quiz_scores', 'quiz_result']) expect(f.records[name]).toEqual({});
+  expect(f.records.students).toEqual(students);
+  expect(f.records.training_modules).toEqual({ untouched: { title: 'Simulation' } });
+});
+
+test('shared and foreign course targets and results survive, while this course progress is deleted', async () => {
+  const { id, moduleId } = await course();
+  seedRelatedRecords(id, moduleId);
+  f.records.learning_activities.external = { syllabusId: 'other', type: 'simulation', targetId: 'CUSTOM-legacy', quizPolicy: 'assigned', quizId: 'assignedQuiz' };
+  f.records.mission_score.foreign = { syllabusId: 'other', missionId: 'local' };
+  f.records.mission_score.thisCourseShared = { syllabusId: id, missionId: 'legacy' };
+  f.records.quiz_score.foreign = { syllabusId: 'other', quizId: 'localQuiz' };
+  f.records.missions.foreign = { instructorId: 'a', syllabusId: 'other' };
+  f.records.learning_activities.foreignLink = { syllabusId: id, type: 'simulation', targetId: 'foreign', status: 'active', revision: 1 };
+  await remove(id, { deleteRecords: true }).expect(200);
+  expect(f.records.missions.legacy).toBeDefined();expect(f.records.missions.foreign).toBeDefined();
+  expect(f.records.mission_score.legacy).toBeDefined();expect(f.records.mission_score.foreign).toBeDefined();
+  expect(f.records.mission_score.thisCourseShared).toBeUndefined();
+  expect(f.records.quiz.assignedQuiz).toBeDefined();expect(f.records.quizzes.legacyQuiz).toBeDefined();
+  expect(f.records.quiz_score.foreign).toBeDefined();
+  expect(f.records.learning_activities.external).toBeDefined();
+  expect(Object.keys(f.records.learning_activity_progress)).toEqual(['unrelated']);
+});
+
+test('record cleanup resumes after a partial batch failure with over 500 results', async () => {
+  const { id, moduleId } = await course();
+  seedRelatedRecords(id, moduleId);
+  for (let index = 0; index < 1000; index++) {
+    f.records.quiz_score[`score-${index}`] = { quizId: 'localQuiz' };
+    f.records.quiz_results[`grade-${index}`] = { submissionid: `score-${index}` };
+  }
+  const runTransaction = f.db.runTransaction;
+  let calls = 0;
+  f.db.runTransaction = callback => ++calls === 3 ? Promise.reject(new Error('Temporary record cleanup failure')) : runTransaction(callback);
+  const result = await remove(id, { deleteRecords: true }).expect(200);
+  expect(result.body.cleanupPending).toBe(true);
+  expect(f.records.syllabi[id].relatedRecordDeletion).toBeDefined();
+  f.db.runTransaction = runTransaction;
+  expect((await f.service.cleanup(owner)).cleanupPending).toBe(false);
+  expect(f.records.syllabi[id]).toBeUndefined();
+  expect(Object.keys(f.records.quiz_score)).toEqual(['unrelated']);
+  expect(Object.keys(f.records.quiz_results)).toEqual(['unrelated']);
+  expect(Object.keys(f.records.missions)).toEqual(['unrelated']);
+});
+
+test('full-record deletion cannot bypass access, revision or whole-course confirmation checks', async () => {
+  const { id, moduleId } = await course();
+  seedRelatedRecords(id, moduleId);
+  const before = structuredClone(f.records);
+  await remove(id, { deleteRecords: true }, headers('b')).expect(404);
+  await remove(id, { deleteRecords: true, revision: 0 }).expect(409);
+  await remove(id, { deleteRecords: true, cascade: false }).expect(400);
+  expect(f.records).toEqual(before);
+});
+
+test('multi-target assignments keep their other course links', async () => {
+  const { id, moduleId } = await course();
+  seedRelatedRecords(id, moduleId);
+  f.records.quiz_assignments.shared = { quizId: 'localQuiz', targetType: 'module', targetId: ['CUSTOM-local', 'other-mission'] };
+  await remove(id, { deleteRecords: true }).expect(200);
+  expect(f.records.quiz.localQuiz).toBeDefined();
+  expect(f.records.quiz_assignments.shared).toEqual({ quizId: 'localQuiz', targetType: 'module', targetId: ['other-mission'] });
+});
+
+test('retry preserves targets reassigned to another instructor after deletion was queued', async () => {
+  const { id, moduleId } = await course();
+  seedRelatedRecords(id, moduleId);
+  f.state.loseCommitAcknowledgement = true;
+  await expect(f.service.remove(owner, 'syllabi', id, f.records.syllabi[id].revision, { cascade: true, deleteRecords: true })).rejects.toThrow();
+  f.records.missions.local = { instructorId: 'b', syllabusId: 'other' };
+  f.records.quiz.localQuiz = { instructorId: 'b', syllabusId: 'other' };
+  expect((await f.service.cleanup(owner)).cleanupPending).toBe(false);
+  expect(f.records.missions.local).toEqual({ instructorId: 'b', syllabusId: 'other' });
+  expect(f.records.quiz.localQuiz).toEqual({ instructorId: 'b', syllabusId: 'other' });
+  expect(f.records.mission_score.local).toBeDefined();expect(f.records.quiz_score.local).toBeDefined();
+  expect(f.records.syllabi[id]).toBeUndefined();
+});

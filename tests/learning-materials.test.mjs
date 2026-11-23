@@ -10,10 +10,10 @@ test('syllabus deletion sends explicit cascade confirmation with the revision an
   globalThis.fetch = async (url, options) => { requests.push({ url, options }); return { ok: true, json: async () => ({ cleanupPending: false }) }; };
   try {
     const api = await loadApi(), controller = new AbortController();
-    await api.deleteLearningMaterial('syllabus', 'course', 4, { cascade: true, signal: controller.signal });
+    await api.deleteLearningMaterial('syllabus', 'course', 4, { cascade: true, deleteRecords: true, signal: controller.signal });
     assert.match(requests[0].url, /syllabi\/course$/);
     assert.equal(requests[0].options.method, 'DELETE');
-    assert.deepEqual(JSON.parse(requests[0].options.body), { revision: 4, cascade: true });
+    assert.deepEqual(JSON.parse(requests[0].options.body), { revision: 4, cascade: true, deleteRecords: true });
     await api.deleteLearningMaterial('module', 'lesson', 2);
     assert.deepEqual(JSON.parse(requests[1].options.body), { revision: 2 });
   } finally { globalThis.fetch = original; }

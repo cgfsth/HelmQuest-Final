@@ -88,7 +88,7 @@ test('completion binds the current student and exact mission while preserving si
   expect(quiz.body.quiz.questions[0]).not.toHaveProperty('correctAnswer');
   expect(quiz.body.quiz.questions[1].options[0]).not.toHaveProperty('isCorrect');
   const submitted = await request(f.app).post(`/learning-materials/activities/${activityId}/mission-quiz`).set(headers()).send({ quizId: 'q', answers: { one: 'False', two: 'Starboard' }, studentId: 'sb', score: 100 }).expect(200);
-  expect(submitted.body.data).toMatchObject({ studentId: 'sa', missionId: 'navigation', score: 50, 'raw-score': 1 }); expect(quizOptions).toEqual({ allowAfterSimulation: true });
+  expect(submitted.body.data).toMatchObject({ studentId: 'sa', missionId: 'navigation', syllabusId, lessonId: moduleId, activityId, score: 50, 'raw-score': 1 }); expect(quizOptions).toEqual({ allowAfterSimulation: true });
   expect(f.records.mission_score.saved.score).toBe(90);
 });
 test('published lessons never expose standalone quiz activities', async () => {

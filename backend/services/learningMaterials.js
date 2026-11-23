@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { OFFICIAL_SYLLABUS, OFFICIAL_SYLLABUS_KEY, officialSection } from '../../shared/officialSyllabus.js';
+import { planSyllabusRecords, cleanupSyllabusRecords } from './syllabusRecords.js';
 
 // Opaque content version: adding/reordering activities must not revoke PDF views.
 export const documentVersion = record => createHash('sha256').update(record.storagePath || '').digest('hex');
@@ -148,6 +149,7 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
       const initial = await docRef.get();
       if (!initial.exists) return true;
       if (name === 'syllabi' && initial.data().status === 'deleting') {
+        if (initial.data().relatedRecordDeletion) await cleanupSyllabusRecords(db, id, initial.data().relatedRecordDeletion);
         // Keep the parent tombstone until every child and its files are gone.
         // This also resumes a cascade interrupted after the atomic hide step.
         let complete = true;
@@ -263,13 +265,15 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
     }
     return { id: docRef.id, cleanupPending: !(await cleanupRecord(name, docRef.id)) };
   }
-  async function remove(user, name, id, expectedRevision, { cascade = false } = {}) {
+  async function remove(user, name, id, expectedRevision, { cascade = false, deleteRecords = false } = {}) {
     managers(user);
+    if (deleteRecords && (name !== 'syllabi' || !cascade)) fail(400, 'Confirm deletion of the entire syllabus and its records.');
     const docRef = ref(name, id);
     await db.runTransaction(async tx => {
       const doc = await tx.get(docRef);
       if (!doc.exists) fail(404, 'Material not found.');
       const data = doc.data();
+      let relatedRecordDeletion;
       if (name === 'syllabi') check(doc, user, true, true);
       if (name === 'syllabi' && data.officialSyllabusKey && !cascade) fail(409, 'Confirm deletion of the entire syllabus to remove this official course.');
       if (name === 'syllabus_modules' && data.officialSectionId) fail(409, 'Official syllabus sections are preserved. Unpublish the section instead.');
@@ -279,6 +283,7 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
         if (data.status !== 'deleting') revision(data, expectedRevision);
         const children = await tx.get(col('syllabus_modules').where('syllabusId', '==', id));
         if (children.size && !cascade) fail(409, 'Delete all modules and finish pending file cleanup before deleting this syllabus.');
+        if (deleteRecords && data.status !== 'deleting') relatedRecordDeletion = await planSyllabusRecords(query => tx.get(query), db, id, data.instructorId, children.docs, activities.docs);
         if (cascade) {
           // Courses are bounded to 200 modules + 150 activities, below the
           // Firestore transaction write limit. All reads precede writes.
@@ -294,7 +299,7 @@ export function createLearningMaterialsService({ db, bucket, timestamp, demos = 
           tx.update(parentRef, { moduleCount: Math.max(0, (parent.moduleCount || 0) - 1), updatedAt: timestamp(), revision: parent.revision + 1 });
         }
       }
-      if (data.status !== 'deleting') tx.update(docRef, deletion(data));
+      if (data.status !== 'deleting') tx.update(docRef, { ...deletion(data), ...(relatedRecordDeletion ? { relatedRecordDeletion } : {}) });
     });
     return { cleanupPending: !(await cleanupRecord(name, id)) };
   }
