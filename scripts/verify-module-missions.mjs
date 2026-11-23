@@ -64,10 +64,10 @@ try {
   await browser.waitFor('document.querySelectorAll(".lc-create-mission").length === 2');
   assert.equal(await browser.evaluate('[...document.querySelectorAll(".lc-create-mission")].every(button=>button.disabled)'), true);
   await browser.screenshot('mission-creation-blocked-without-pdf');
-  await browser.clickExpression(`document.querySelector('[aria-labelledby="lc-title-${secondModule}"] .lc-add-activity')`);
+  await browser.clickExpression(`document.querySelector('[aria-label="Edit lesson 2"]')`);
   await browser.waitFor('document.querySelector(".lm-form")');
   await browser.fill('.lm-form input:not([type])', 'Docking PDF lesson'); await browser.attach(pdfPath);
-  await browser.clickExpression('document.querySelector(".lc-publish input")'); await browser.click('Save document');
+  await browser.click('Save document');
   await browser.waitFor(`!document.querySelector('.lm-modal') && document.querySelector('[aria-labelledby="lc-title-${secondModule}"] .lc-create-mission')?.disabled === false`);
   await browser.clickExpression(`document.querySelector('[aria-labelledby="lc-title-${secondModule}"] .lc-create-mission')`);
   await browser.waitFor('document.querySelector(".mission-editor-card")');
@@ -97,8 +97,8 @@ try {
   const simulationButton = `[...document.querySelectorAll('.lc-activity-open')].find(button=>button.textContent.includes('Revised Docking Mission'))`;
   assert.equal(await browser.evaluate(`(${simulationButton}).disabled`), true);
   await browser.screenshot('simulation-blocked-before-pdf-view');
-  const readingId = Object.keys(fixture.records.learning_activities).find(id => fixture.records.learning_activities[id].type === 'pdf');
-  const readingPath = fixture.records.learning_activities[readingId].storagePath, savedFile = fixture.files.get(readingPath);
+  const readingId = `module-${secondModule}`;
+  const readingPath = fixture.records.syllabus_modules[secondModule].storagePath, savedFile = fixture.files.get(readingPath);
   fixture.files.delete(readingPath);
   await browser.clickExpression(`[...document.querySelectorAll('.lc-activity-open')].find(button=>button.textContent.includes('Docking PDF lesson'))`);
   await browser.waitFor('document.querySelector(".lm-reader .lm-error")');

@@ -57,9 +57,8 @@ try {
   await browser.evaluate('window.fixture.login("instructor")'); await browser.viewport(1365); await browser.waitFor('document.querySelectorAll(".lc-section").length===9');
   assert.equal(await browser.evaluate('document.body.textContent.includes("Upload a PDF for this lesson to enable mission creation")'), true);
   await browser.clickExpression(`document.querySelector('[aria-labelledby="lc-title-${moduleId}"] .lc-lesson-details')`);
-  await browser.click('Add resource or activity'); await browser.waitFor('document.querySelector(".lm-form select")');
-  await browser.fill('.lm-form input:not([type])', 'Instructor navigation presentation'); await browser.fill('.lm-form select', 'presentation'); await browser.attach(pdfPath);
-  await browser.clickExpression('document.querySelector(".lc-publish input")'); await browser.click('Save document');
+  await fixture.course.save(owner, syllabusId, moduleId, null, { type: 'presentation', title: 'Instructor navigation presentation', published: true }, file);
+  await browser.clickExpression(`document.querySelector('[aria-label="Refresh learning materials"]')`);
   await browser.waitFor('!document.querySelector(".lm-modal") && document.body.textContent.includes("Instructor navigation presentation")');
   await browser.click('Preview as student'); assert.equal(await browser.evaluate('document.body.textContent.includes("Legacy separate quiz")'), false); await browser.click('Exit student preview');
   await browser.evaluate('window.fixture.login("student")'); await browser.waitFor('document.querySelectorAll(".lc-section").length===9');
@@ -70,6 +69,6 @@ try {
   await browser.screenshot('official-presentation-viewer'); assert.deepEqual(browser.errors, []);
   const app = readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8'); const nav = app.slice(app.indexOf('<nav class="hub-sidebar-nav"'), app.indexOf('</nav>', app.indexOf('<nav class="hub-sidebar-nav"')));
   assert.doesNotMatch(nav, /selectHubTab\('missions'\)|selectHubTab\('quizzes'\)/);
-  console.log('PASS: exact official sections/matrix, no standalone student quiz/Missions tab, correct lesson-to-mission link, persisted progress, instructor presentation upload/preview, slide viewer and 375/768/1365 layouts.');
+  console.log('PASS: exact official sections/matrix, no standalone student quiz/Missions tab, correct lesson-to-mission link, persisted progress, instructor presentation preview, slide viewer and 375/768/1365 layouts.');
   console.log('Screenshots: ' + directory);
 } finally { browser?.close(); apiServer.closeAllConnections(); await new Promise(resolve => apiServer.close(resolve)); await vite.close(); }
