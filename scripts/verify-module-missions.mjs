@@ -37,6 +37,10 @@ const styles = parse(source).descriptor.styles.map(style => style.scoped ? compi
 const modulePath = resolve(directory, 'fixture.mjs');
 writeFileSync(modulePath, `import * as Vue from 'vue';
 import LearningMaterials from '/src/components/materials/LearningMaterials.vue';
+import MissionBuoyContentEditor from '/src/components/MissionBuoyContentEditor.vue';
+import LessonScoringSetup from '/src/components/LessonScoringSetup.vue';
+import {LESSON_ALIGNMENT_VERSION,lessonOutcomes,alignLessonMission} from '/shared/lessonAlignment.js';
+import {lessonScoringDefinition,defaultChartExercise} from '/shared/lessonScoring.js';
 import * as firebaseApi from '/src/api/firebaseApi.js';
 import {canViewMission,canManageMission,missionOwner} from '/shared/missionAccess.js';
 import {getCourseSettings} from '/src/helpers/courseSettings.js';
@@ -46,7 +50,7 @@ window.firebaseApi=firebaseApi;function saveProgress(){}function showAchievement
 ${functions}
 ${loader}
 const state={missionEditorModal,missionEditorError,missionSaving,addMissionBuoy,removeMissionBuoy,handleMissionBuoyImage,saveMissionEditor};
-const MissionEditor={__scopeId:'data-v-module-preview',render:new Function('Vue',${JSON.stringify(modalCode)})(Vue),setup:()=>state};
+const MissionEditor={__scopeId:'data-v-module-preview',components:{MissionBuoyContentEditor,LessonScoringSetup},render:new Function('Vue',${JSON.stringify(modalCode)})(Vue),setup:()=>state};
 window.fixture={quizzes:[],launches:[],async login(role){missionEditorModal.value=null;await firebaseApi.loginDemo(role+'@local','local');userRole.value=role;currentUser.value={id:role==='student'?'sa':'a',name:role,instructorid:'a'};await loadMissionDatesFromFirestore();}};
 await window.fixture.login('instructor');
 Vue.createApp({setup:()=>()=>Vue.h('main',[
@@ -73,7 +77,7 @@ try {
   await browser.waitFor('document.querySelector(".mission-editor-card")');
   assert.match(await browser.evaluate('document.querySelector(".mission-editor-context").textContent'), /Docking/);
   await browser.fill('input[placeholder^="e.g., Mission"]', 'Module 2 Harbor Docking');
-  await browser.click('+ Add Buoy'); await browser.screenshot('create-mission-in-module');
+  await browser.click('+ Add buoy'); await browser.screenshot('create-mission-in-module');
   fixture.state.failCommit = true;
   await browser.clickExpression('document.querySelector(".quiz-save-btn")');
   await browser.waitFor('document.querySelector(".mission-editor-error")');

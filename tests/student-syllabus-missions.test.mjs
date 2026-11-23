@@ -86,6 +86,22 @@ test('Save Mission uses the originating module API and refreshes that syllabus i
   assert.equal(page.context.missionEditorModal.value, null);
 });
 
+test('Add buoy suggests the next uncovered saved outcome and honors a specific outcome without changing existing content',()=>{
+  const {context}=editorPage(async()=>({}));
+  context.openMissionCreator({objectives:'Different branches of Navigation\nDiscuss different terms used in navigation',moduleTitle:'Lesson 2'});
+  context.addMissionBuoy();context.addMissionBuoy();
+  const buoys=context.missionEditorModal.value.data.buoys;
+  assert.equal(buoys[0].learningOutcome,'Different branches of Navigation');
+  assert.equal(buoys[1].learningOutcome,'Discuss different terms used in navigation');
+  buoys[0].description='Instructor explanation';
+  context.addMissionBuoy(buoys[1].learningOutcome);
+  assert.equal(buoys[2].learningOutcome,buoys[1].learningOutcome);
+  assert.equal(buoys[0].description,'Instructor explanation');
+  context.addMissionBuoy('An unrelated outcome');
+  assert.ok(buoys.every(b=>context.missionEditorModal.value.data.lessonOutcomes.includes(b.learningOutcome)));
+  assert.equal(new Set(buoys.map(b=>b.waypointZone)).size,4);
+});
+
 test('failed module saves keep the editor and mission ID for retry; late saves cannot update another instructor', async () => {
   let fail = true;
   const page = editorPage(async () => { if (fail) throw new Error('Offline'); return { activityId: 'linked', revision: 1 }; });

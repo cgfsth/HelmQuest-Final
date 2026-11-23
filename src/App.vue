@@ -534,58 +534,7 @@
             <label v-if="missionEditorModal.courseContext" class="quiz-field"><span><input type="checkbox" v-model="missionEditorModal.courseContext.published" /> Publish mission to students</span></label>
           </div>
 
-          <!-- Buoy checkpoint content -->
-          <div class="quiz-editor-section">
-            <div class="quiz-section-header">
-              <h3>⚓ Buoy Checkpoint Content</h3>
-              <button class="quiz-add-question-btn" @click="addMissionBuoy()">+ Add Buoy</button>
-            </div>
-            <template v-if="missionEditorModal.data.outcomeAlignmentVersion">
-              <p class="field-hint">Link each buoy’s picture and description to a saved lesson outcome. Buoys contain practical tasks and learning material only. Questions appear in the final quiz after docking.</p>
-              <p class="field-hint">Support every lesson outcome with a buoy, then create and publish a final quiz covering those outcomes before students start. The lesson’s scoring plan below shows which practical or quiz evidence is assessed.</p>
-            </template>
-            <div v-if="missionEditorModal.data.buoys.length === 0" class="quiz-empty-state">
-              No buoy content yet. Add one buoy for each checkpoint students must inspect.
-            </div>
-            <div v-for="(buoy, bIdx) in missionEditorModal.data.buoys" :key="buoy.id" class="question-editor-card mission-buoy-card">
-              <div class="question-header">
-                <span class="question-number">Buoy {{ bIdx + 1 }}</span>
-                <button class="question-remove-btn" @click="removeMissionBuoy(bIdx)">✕</button>
-              </div>
-              <label class="quiz-field">
-                <span>Checkpoint / Waypoint ID</span>
-                <input type="text" v-model="buoy.waypointZone" placeholder="e.g., custom-mission-buoy-1" class="quiz-input" />
-              </label>
-              <label class="quiz-field">
-                <span>Interaction Type (Task)</span>
-                <select v-model="buoy.requireInteraction" class="quiz-select">
-                  <option v-if="!missionEditorModal.data.outcomeAlignmentVersion" value="">None (Just navigate)</option>
-                  <option value="photograph">📷 Photograph - Take picture</option>
-                  <option v-if="!missionEditorModal.data.outcomeAlignmentVersion" value="verify_id">🔍 Verify ID - Enter buoy ID</option>
-                  <option v-if="!missionEditorModal.data.outcomeAlignmentVersion" value="remove_debris">🧹 Clean Debris - Hold to clean</option>
-                  <option value="inspect_buoy">👁️ Inspect - Quick check</option>
-                </select>
-                <span class="field-hint">This determines what students must do at this buoy</span>
-              </label>
-              <label class="quiz-field">
-                <span>Buoy Image</span>
-                <input type="file" accept="image/*" class="quiz-input" @change="handleMissionBuoyImage($event, buoy)" />
-                <img v-if="buoy.imageSrc" :src="buoy.imageSrc" :alt="`Buoy ${bIdx + 1} preview`" class="mission-buoy-preview" />
-              </label>
-              <label class="quiz-field">
-                <span>Buoy Name</span>
-                <input type="text" v-model="buoy.name" placeholder="e.g., Crab Pot #482" class="quiz-input" />
-              </label>
-              <label class="quiz-field">
-                <span>Buoy Description</span>
-                <textarea v-model="buoy.description" rows="5" placeholder="Describe what students should learn or identify at this buoy..." class="quiz-textarea"></textarea>
-              </label>
-              <label v-if="missionEditorModal.data.outcomeAlignmentVersion" class="quiz-field">
-                <span>Learning outcome supported by this buoy</span>
-                <select v-model="buoy.learningOutcome" class="quiz-select"><option value="" disabled>Choose a lesson learning outcome</option><option v-for="outcome in lessonOutcomes(missionEditorModal.courseContext?.objectives || missionEditorModal.data.lessonOutcomes)" :key="outcome" :value="outcome">{{ outcome }}</option></select>
-              </label>
-            </div>
-          </div>
+          <MissionBuoyContentEditor :model="missionEditorModal.data" :saved-outcomes="missionEditorModal.courseContext?.objectives || missionEditorModal.data.lessonOutcomes" :busy="missionSaving" @add="addMissionBuoy" @remove="removeMissionBuoy" @image="({event,buoy})=>handleMissionBuoyImage(event,buoy)" />
         <LessonScoringSetup v-if="missionEditorModal.courseContext" :outcomes="missionEditorModal.courseContext.objectives" :model="missionEditorModal.data" />
         <fieldset class="mission-encounter-editor" :disabled="missionSaving">
           <legend>Navigation rules &amp; vessel safety exercise</legend>
@@ -3460,6 +3409,7 @@ import { LESSON_SCORING_VERSION, INTEGRATED_SIMULATION_VERSIONS, lessonScoringDe
 import LessonAssessmentTools from './components/LessonAssessmentTools.vue';
 import LessonScoringResult from './components/LessonScoringResult.vue';
 import LessonScoringSetup from './components/LessonScoringSetup.vue';
+import MissionBuoyContentEditor from './components/MissionBuoyContentEditor.vue';
 import { createStudentNavigationLights } from './helpers/studentNavigationLights.js';
 import { isBoatAtPort } from './helpers/portDocking.js';
 import { normalizeEncounter } from '../shared/vesselEncounter.js';
@@ -10899,19 +10849,21 @@ async function openCourseMissionEditor(context) {
   }
 }
 
-function addMissionBuoy() {
+function addMissionBuoy(requestedOutcome = '') {
   if (!missionEditorModal.value) return;
   const data = missionEditorModal.value.data;
   let index = data.buoys.length + 1;
   while (data.buoys.some(b => b.id === `${data.id}-buoy-${index}`)) index++;
   const buoyId = `${data.id}-buoy-${index}`;
+  const outcomes=lessonOutcomes(missionEditorModal.value.courseContext?.objectives || data.lessonOutcomes);
+  const outcome=data.outcomeAlignmentVersion ? (outcomes.includes(requestedOutcome)?requestedOutcome:outcomes.find(value=>!data.buoys.some(b=>b.learningOutcome===value)) || outcomes[0] || '') : '';
   data.buoys.push({
     id: buoyId,
     name: `Buoy ${index}`,
     waypointZone: buoyId,
     imageSrc: '',
     description: '',
-    learningOutcome: '',
+    learningOutcome: outcome,
     requireInteraction: data.outcomeAlignmentVersion ? 'inspect_buoy' : 'photograph'
   });
   data.buoyCount = data.buoys.length;
