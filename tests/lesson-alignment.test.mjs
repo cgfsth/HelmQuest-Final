@@ -35,9 +35,10 @@ test('only the final quiz carries questions and it must cover every outcome when
 });
 const source=readFileSync(new URL('../src/App.vue',import.meta.url),'utf8').replace(/\r\n/g,'\n');
 function actual(name){const i=source.indexOf(`function ${name}(`);return source.slice(i,source.indexOf('\n}',i)+2);}
-test('the actual buoy popup contains only picture, outcome, description and Continue',()=>{
+test('the actual buoy popup shows the picture and description, without an outcome block or questions',()=>{
   const template=source.split('<!-- Gear Info Popup (after photographing) -->')[1].split('<!-- Fish caught popup -->')[0];
   assert.doesNotMatch(template,/<input|<textarea|<select|question\.prompt|correctAnswer|Submit answer/);
+  assert.doesNotMatch(template,/Learning outcome|\{\{\s*gearInfoPopup\.learningOutcome\s*\}\}/);
   let completed=0;const context={activeTrainingModule:ref({buoys:[{waypointZone:'buoy-0',name:'Chart',imageSrc:'chart.png',description:'Read the chart.',learningOutcome:outcomes[0]}]}),
     gearInfoPopup:ref(null),activeMiniGame:ref('inspect_buoy'),pendingPopupMinigame:null,GEAR_INFO_DATA:{},cancelMiniGame(){},completeMiniGame(){completed++;}};
   vm.createContext(context);vm.runInContext(actual('showGearInfoPopup')+'\n'+actual('dismissGearInfoPopup'),context);

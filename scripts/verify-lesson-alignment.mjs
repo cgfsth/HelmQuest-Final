@@ -44,9 +44,10 @@ try{
   browser=await headlessBrowser({directory,port:9275});await browser.viewport(1365,900);await browser.navigate('http://127.0.0.1:5324/__lesson-alignment');await browser.waitFor('document.querySelector(".gear-info-popup")');
   assert.equal(await browser.evaluate('document.querySelectorAll(".gear-info-popup input,.gear-info-popup select,.gear-info-popup textarea").length'),0);
   assert.equal(await browser.evaluate('document.querySelectorAll(".quiz-content").length'),0);
-  assert.equal(await browser.evaluate('document.body.innerText.includes("Interpret a chart")'),true);
+  assert.equal(await browser.evaluate('document.querySelector(".gear-info-popup").innerText.includes("Interpret a chart")'),false);
+  assert.equal(await browser.evaluate('document.querySelector(".gear-info-description").innerText.includes("Read the chart and use the compass")'),true);
   assert.equal(await browser.evaluate('!!window.fixture.target.questions'),false);await browser.screenshot('buoy-picture-description-no-questions');
-  await browser.click('Continue Mission →');await browser.waitFor('document.body.innerText.includes("Choose a heading")');await browser.viewport(375,812);
+  await browser.click('Continue Mission →');await browser.waitFor('document.querySelector(".gear-info-title")?.textContent.includes("Navigation checkpoint 2")');await browser.viewport(375,812);
   assert.equal(await browser.evaluate('document.documentElement.scrollWidth<=innerWidth'),true);await browser.screenshot('buoy-picture-description-mobile');
   await browser.click('Continue Mission →');await browser.waitFor('!document.querySelector(".gear-info-popup") && document.body.innerText.includes("Complete safe docking")');
   assert.equal(await browser.evaluate('document.querySelectorAll(".quiz-content").length'),0);assert.equal(f.records.mission_score,undefined);

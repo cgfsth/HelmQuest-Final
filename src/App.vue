@@ -3343,7 +3343,6 @@
               <img :src="gearInfoPopup.imageSrc" :alt="gearInfoPopup.name" class="gear-info-image" :class="{ 'gear-info-image--lesson': !!gearInfoPopup.learningOutcome }" />
               <span class="gear-info-image-label">{{ gearInfoPopup.learningOutcome ? 'Lesson reference image' : 'Real-life reference photo' }}</span>
             </div>
-            <p v-if="gearInfoPopup.learningOutcome" class="gear-info-description"><strong>Learning outcome</strong><br/>{{ gearInfoPopup.learningOutcome }}</p>
             <p class="gear-info-description">{{ gearInfoPopup.description }}</p>
           </div>
           <div class="gear-info-footer">

@@ -7,6 +7,7 @@ import {buildLessonMission,LESSON_MISSION_SPECS} from '../content/lessonMissions
 import {gradeMissionQuiz} from '../../shared/missionQuiz.js';
 import {validateOutcomeQuiz} from '../../shared/lessonAlignment.js';
 import {LIGHT_KEYS} from '../../shared/lessonScoring.js';
+import {lessonDescriptionPatch} from '../services/lessonMissionDescriptions.js';
 const images=Object.fromEntries([...new Set(LESSON_MISSION_SPECS.flatMap(s=>s.buoys.map(b=>b.image)))].map(key=>[key,'data:image/webp;base64,'+readFileSync(new URL(`../../public/lesson-missions/${key}.webp`,import.meta.url)).toString('base64')]));
 const owner={id:'a',role:'instructor'},student={id:'sa',role:'student',instructorid:'a'},file={originalname:'lesson.pdf',mimetype:'application/pdf',buffer:samplePdf()};
 const outcomes=n=>OFFICIAL_SYLLABUS.sections.find(s=>s.id===`lesson-${n}`).outcomes;
@@ -51,4 +52,19 @@ test('all knowledge questions have one unambiguous keyed answer and grade correc
     expect(gradeMissionQuiz(quiz,Object.fromEntries(quiz.questions.map(q=>[q.id,q.options.find(o=>o.isCorrect).text]))).score).toBe(100);
     expect(gradeMissionQuiz(quiz,Object.fromEntries(quiz.questions.map(q=>[q.id,q.options.find(o=>!o.isCorrect).text]))).score).toBe(0);
   }
+});
+
+test.each([1,2,3,4,5,6])('lesson %i description updates preserve every image, outcome tag, practical task and score configuration',n=>{
+  const module={id:'m',moduleNumber:n,objectives:outcomes(n),fileName:`HelmQuest_Lesson_${n}.pdf`};
+  const {mission}=buildLessonMission({syllabusId:'s',module,images});mission.syllabusModuleId='m';
+  const before=structuredClone(mission);mission.checkpoints[0].description='Old outcome explanation';mission.bouy[0].bouy_description='Old outcome explanation';
+  const patch=lessonDescriptionPatch(mission,module),updated={...mission,...patch};
+  expect(updated.lessonScoring).toEqual(before.lessonScoring);expect(updated.steps).toEqual(before.steps);
+  expect(updated.checkpoints.map(b=>({id:b.id,image:b.image,learningOutcome:b.learningOutcome,requireInteraction:b.requireInteraction}))).toEqual(before.checkpoints.map(b=>({id:b.id,image:b.image,learningOutcome:b.learningOutcome,requireInteraction:b.requireInteraction})));
+  expect(updated.checkpoints.every(b=>b.sourcePdf.fileName===module.fileName && b.sourcePdf.pages.every(Number.isInteger))).toBe(true);
+  expect(updated.checkpoints[0].description).toBe(before.checkpoints[0].description);
+  expect(updated.bouy[0].bouy_description).toBe(before.checkpoints[0].description);
+  expect(updated.checkpoints.every(b=>!/quiz|learning outcome|instructor.assess|this buoy supports/i.test(b.description))).toBe(true);
+  expect(()=>lessonDescriptionPatch({...mission,missionPackVersion:'other'},module)).toThrow('reviewed');
+  expect(()=>lessonDescriptionPatch({...mission,checkpoints:mission.checkpoints.slice(1)},module)).toThrow('changed');
 });
