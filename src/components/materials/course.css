@@ -40,6 +40,7 @@
 .lc-type-icon { display:grid; place-items:center; width:28px; min-width:28px; height:29px; color:var(--lm-accent); margin-top:2px; }
 .lc-type-presentation { color:var(--lm-accent); }.lc-type-simulation { color:var(--lm-accent); }.lc-type-quiz { color:var(--lm-accent); }
 .lc-video-url { overflow-wrap:anywhere; word-break:break-word; }
+.lc-lesson-links { margin-bottom:16px; }
 .lc-activity-copy { display:flex; flex-direction:column; gap:5px; min-width:0; }
 .lc-activity-copy>strong { font-weight:600; line-height:1.5; overflow-wrap:anywhere; }
 .lc-activity-description { color:var(--lm-muted); font-size:.81rem; line-height:1.55; white-space:pre-wrap; }

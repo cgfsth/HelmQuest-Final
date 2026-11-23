@@ -15,7 +15,7 @@ const fixture = materialsFixture({ middleware(req, res, next) {
 } });
 const owner = { id: 'a', role: 'instructor' };
 const { id: syllabusId } = await fixture.service.save(owner, 'syllabi', null, { title: 'Navigation course' }, { originalname: 'course.pdf', mimetype: 'application/pdf', buffer: samplePdf() });
-const { id: lessonId } = await fixture.service.save(owner, 'syllabus_modules', null, { title: 'Lesson 1', moduleNumber: 1 }, null, syllabusId);
+const { id: lessonId } = await fixture.service.save(owner, 'syllabus_modules', null, { title: 'Lesson 1', description: 'History, Art and Science of Navigation', moduleNumber: 1 }, { originalname: 'HelmQuest_Lesson_1.pdf', mimetype: 'application/pdf', buffer: samplePdf() }, syllabusId);
 await fixture.service.save(owner, 'syllabus_modules', null, { title: 'Lesson 2', moduleNumber: 2 }, null, syllabusId);
 fixture.records.students.sa.xp = 100;
 fixture.app.post('/auth/demo-login', (req, res) => {
@@ -50,7 +50,7 @@ try {
   await browser.waitFor('!document.querySelector(".lm-modal") && document.querySelector(".lc-type-link")');
   const id = Object.keys(fixture.records.learning_activities)[0];
   assert.equal(fixture.records.learning_activities[id].moduleId, lessonId);assert.equal(fixture.records.learning_activities[id].published, true);
-  assert.equal(fixture.records.learning_activities[id].description, '');assert.equal(fixture.files.size, 1);
+  assert.equal(fixture.records.learning_activities[id].description, '');assert.equal(fixture.files.size, 2);
   await browser.screenshot('lesson-video-link-desktop');
   await browser.viewport(375);assert.equal(await browser.evaluate('document.documentElement.scrollWidth<=innerWidth'), true);
   await browser.clickExpression('document.querySelector(\'[aria-label="Edit activity Video link"]\')');
@@ -60,6 +60,9 @@ try {
   await browser.fill('input[type=url]', updatedUrl);await browser.screenshot('url-only-editor-mobile');await browser.click('Save link');
   await browser.waitFor('!document.querySelector(".lm-modal") && document.body.textContent.includes("new12345678")');
   await browser.evaluate('window.fixture.login("student")');await browser.waitFor('document.querySelector(".lc-type-link") && !document.querySelector(".lc-section-tools")');
+  assert.equal(await browser.evaluate('document.querySelector(".lm-module .lc-section-content").firstElementChild.classList.contains("lc-lesson-links")'), true);
+  assert.equal(await browser.evaluate('document.querySelectorAll(".lm-module .lc-type-link").length'), 1);
+  await browser.viewport(1365);await browser.screenshot('student-lesson-link-above-pdf-desktop');await browser.viewport(375);
   assert.equal(await browser.evaluate('[...document.querySelectorAll("button")].some(button=>button.textContent.includes("Add video link"))'), false);
   await browser.clickExpression('document.querySelector(".lc-type-link").closest(".lc-activity-open")');
   await browser.waitFor('document.querySelector(".lc-type-link")?.closest(".lc-activity").querySelector(".lc-status summary").textContent.includes("Done")');
